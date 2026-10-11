@@ -727,3 +727,116 @@ textarea {
     }
 
 }
+
+/* ==============================
+   ВХОД И РЕГИСТРАЦИЯ
+   ============================== */
+
+.auth-page {
+    min-height: calc(100vh - 70px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 400px;
+    background: white;
+    padding: 30px 20px;
+    border-radius: 24px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    text-align: center;
+}
+
+.auth-logo {
+    font-size: 50px;
+    margin-bottom: 10px;
+}
+
+.auth-card h1 {
+    margin: 0;
+}
+
+.auth-subtitle {
+    color: #777;
+    margin-bottom: 25px;
+}
+
+.auth-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 25px;
+}
+
+.auth-tab {
+    flex: 1;
+    border: none;
+    background: #f1f1f1;
+    padding: 12px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 15px;
+}
+
+.auth-tab.active {
+    background: #333;
+    color: white;
+}
+
+.auth-message {
+    margin-top: 15px;
+    color: #555;
+    font-size: 14px;
+}
+
+/* Исправление авторизации на телефонах */
+.auth-page {
+    width: 100%;
+    min-height: 100vh;
+    height: auto;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 20px 12px 30px;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 400px;
+    padding: 24px 16px;
+    margin: auto 0;
+}
+
+.auth-tabs {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+}
+
+.auth-tab {
+    min-width: 0;
+    padding: 12px 6px;
+    font-size: 14px;
+}
+
+#registerForm input,
+#loginForm input {
+    width: 100%;
+    min-width: 0;
+}
+
+@media (max-width: 480px) {
+    .app {
+        padding: 12px;
+        padding-bottom: 100px;
+    }
+
+    .auth-page {
+        padding: 16px 8px 30px;
+    }
+
+    .auth-card {
+        padding: 22px 14px;
+    }
+}
