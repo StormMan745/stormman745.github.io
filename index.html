@@ -1,796 +1,398 @@
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>PetCare</title>
-
     <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
+<div class="app">
 
-    <div class="app">
+    <!-- ГЛАВНАЯ -->
+    <main id="homePage" style="display: none;">
+        <header class="top-header">
+            <div>
+                <h1>PetCare 🐾</h1>
+                <p>Помощник владельца питомца</p>
+            </div>
+        </header>
 
-        <!-- ГЛАВНАЯ -->
+        <section class="welcome">
+            <h2>Привет! 👋</h2>
+            <p>Заботься о своём питомце и ничего не забывай.</p>
+        </section>
 
-        <main id="homePage">
+        <section class="pet-card">
+            <div class="pet-photo" id="homePetPhoto">🐶</div>
+            <div class="pet-info">
+                <small>Мой питомец</small>
+                <h2 id="homePetName">Барни</h2>
+                <p id="homePetBreed">Золотистый ретривер</p>
+            </div>
+            <button onclick="showPet()">→</button>
+        </section>
 
-            <header class="top-header">
+        <section class="today">
+            <div class="section-heading">
+                <h2>Сегодня</h2>
+                <span id="todayDate"></span>
+            </div>
 
+            <div class="task">
+                <div class="task-icon">🍖</div>
+                <div class="task-info">
+                    <strong>Кормление</strong>
+                    <p>08:00</p>
+                </div>
+                <button onclick="completeTask(this, 'Кормление')">○</button>
+            </div>
+
+            <div class="task">
+                <div class="task-icon">🚶</div>
+                <div class="task-info">
+                    <strong>Прогулка</strong>
+                    <p>18:00</p>
+                </div>
+                <button onclick="completeTask(this, 'Прогулка')">○</button>
+            </div>
+
+            <div class="task">
+                <div class="task-icon">💊</div>
+                <div class="task-info">
+                    <strong>Витамины</strong>
+                    <p>20:00</p>
+                </div>
+                <button onclick="completeTask(this, 'Витамины')">○</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- СТРАНИЦА ПИТОМЦА -->
+    <section class="page" id="petPage">
+        <div class="page-header">
+            <button onclick="showHome()">←</button>
+            <h2>Мой питомец</h2>
+        </div>
+
+        <div class="pet-big-card">
+            <div class="pet-big-photo" id="petPhoto">🐶</div>
+            <h2 id="petName">Барни</h2>
+            <p id="petBreed">Золотистый ретривер</p>
+        </div>
+
+        <div class="pet-data">
+            <div class="data-item">
+                <span>🎂</span>
                 <div>
-                    <h1>PetCare 🐾</h1>
-                    <p>Помощник владельца питомца</p>
+                    <small>Возраст</small>
+                    <strong>3 года</strong>
                 </div>
-
-            </header>
-
-
-            <section class="welcome">
-
-                <h2>Привет! 👋</h2>
-
-                <p>
-                    Заботься о своём питомце
-                    и ничего не забывай.
-                </p>
-
-            </section>
-
-
-            <!-- Карточка питомца -->
-
-            <section class="pet-card">
-
-                <div class="pet-photo" id="homePetPhoto">
-                    🐶
-                </div>
-
-                <div class="pet-info">
-
-                    <small>Мой питомец</small>
-
-                    <h2 id="homePetName">
-                        Барни
-                    </h2>
-
-                    <p id="homePetBreed">
-                        Золотистый ретривер
-                    </p>
-
-                </div>
-
-                <button onclick="showPet()">
-                    →
-                </button>
-
-            </section>
-
-
-            <!-- Сегодня -->
-
-            <section class="today">
-
-                <div class="section-heading">
-
-                    <h2>Сегодня</h2>
-
-                    <span id="todayDate"></span>
-
-                </div>
-
-
-                <div class="task">
-
-                    <div class="task-icon">
-                        🍖
-                    </div>
-
-                    <div class="task-info">
-
-                        <strong>Кормление</strong>
-
-                        <p>
-                            08:00
-                        </p>
-
-                    </div>
-
-                    <button onclick="completeTask(this)">
-                        ○
-                    </button>
-
-                </div>
-
-
-                <div class="task">
-
-                    <div class="task-icon">
-                        🚶
-                    </div>
-
-                    <div class="task-info">
-
-                        <strong>Прогулка</strong>
-
-                        <p>
-                            18:00
-                        </p>
-
-                    </div>
-
-                    <button onclick="completeTask(this)">
-                        ○
-                    </button>
-
-                </div>
-
-
-                <div class="task">
-
-                    <div class="task-icon">
-                        💊
-                    </div>
-
-                    <div class="task-info">
-
-                        <strong>Витамины</strong>
-
-                        <p>
-                            20:00
-                        </p>
-
-                    </div>
-
-                    <button onclick="completeTask(this)">
-                        ○
-                    </button>
-
-                </div>
-
-            </section>
-
-        </main>
-
-
-        <!-- СТРАНИЦА ПИТОМЦА -->
-
-        <section class="page" id="petPage">
-
-            <div class="page-header">
-
-                <button onclick="showHome()">
-                    ←
-                </button>
-
-                <h2>
-                    Мой питомец
-                </h2>
-
             </div>
 
-
-            <div class="pet-big-card">
-
-                <div class="pet-big-photo" id="petPhoto">
-                    🐶
-                </div>
-
-                <h2 id="petName">
-                    Барни
-                </h2>
-
-                <p id="petBreed">
-                    Золотистый ретривер
-                </p>
-
-            </div>
-
-
-            <div class="pet-data">
-
-                <div class="data-item">
-
-                    <span>
-                        🎂
-                    </span>
-
-                    <div>
-
-                        <small>
-                            Возраст
-                        </small>
-
-                        <strong>
-                            3 года
-                        </strong>
-
-                    </div>
-
-                </div>
-
-
-                <div class="data-item">
-
-                    <span>
-                        ⚖️
-                    </span>
-
-                    <div>
-
-                        <small>
-                            Вес
-                        </small>
-
-                        <strong id="petWeight">
-                            28 кг
-                        </strong>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-
-            <button class="primary-button" onclick="openPetForm()">
-                ✏️ Изменить данные
-            </button>
-
-        </section>
-
-
-        <!-- ФОРМА ПИТОМЦА -->
-
-        <section class="page" id="petForm">
-
-            <div class="page-header">
-
-                <button onclick="closePetForm()">
-                    ←
-                </button>
-
-                <h2>
-                    Данные питомца
-                </h2>
-
-            </div>
-
-
-            <label>
-                Имя питомца
-            </label>
-
-            <input
-                type="text"
-                id="nameInput"
-                placeholder="Например, Барни"
-            >
-
-
-            <label>
-                Порода
-            </label>
-
-            <input
-                type="text"
-                id="breedInput"
-                placeholder="Например, корги"
-            >
-
-
-            <label>
-                Вес
-            </label>
-
-            <input
-                type="number"
-                id="weightInput"
-                placeholder="Вес в кг"
-            >
-
-
-            <label>
-                Тип животного
-            </label>
-
-            <select id="animalInput">
-
-                <option value="🐶">
-                    Собака 🐶
-                </option>
-
-                <option value="🐱">
-                    Кошка 🐱
-                </option>
-
-                <option value="🐰">
-                    Кролик 🐰
-                </option>
-
-                <option value="🐹">
-                    Хомяк 🐹
-                </option>
-
-                <option value="🐦">
-                    Птица 🐦
-                </option>
-
-            </select>
-
-
-            <button
-                class="primary-button"
-                onclick="savePet()"
-            >
-                💾 Сохранить
-            </button>
-
-        </section>
-
-
-        <!-- ЗДОРОВЬЕ -->
-
-        <section class="page" id="healthPage">
-
-            <div class="page-header">
-
-                <button onclick="showHome()">
-                    ←
-                </button>
-
-                <h2>
-                    Здоровье ❤️
-                </h2>
-
-            </div>
-
-
-            <div class="health-header">
-
-                <div class="health-icon">
-                    ❤️
-                </div>
-
+            <div class="data-item">
+                <span>⚖️</span>
                 <div>
-
-                    <h2 id="healthPetName">
-                        Барни
-                    </h2>
-
-                    <p>
-                        Здоровье питомца
-                    </p>
-
+                    <small>Вес</small>
+                    <strong id="petWeight">28 кг</strong>
                 </div>
+            </div>
+        </div>
 
+        <button class="primary-button" onclick="openPetForm()">
+            ✏️ Изменить данные
+        </button>
+    </section>
+
+    <!-- ФОРМА ПИТОМЦА -->
+    <section class="page" id="petForm">
+        <div class="page-header">
+            <button onclick="closePetForm()">←</button>
+            <h2>Данные питомца</h2>
+        </div>
+
+        <label for="nameInput">Имя питомца</label>
+        <input type="text" id="nameInput" placeholder="Например, Барни">
+
+        <label for="breedInput">Порода</label>
+        <input type="text" id="breedInput" placeholder="Например, корги">
+
+        <label for="weightInput">Вес</label>
+        <input type="number" id="weightInput" placeholder="Вес в кг">
+
+        <label for="animalInput">Тип животного</label>
+        <select id="animalInput">
+            <option value="🐶">Собака 🐶</option>
+            <option value="🐱">Кошка 🐱</option>
+            <option value="🐰">Кролик 🐰</option>
+            <option value="🐹">Хомяк 🐹</option>
+            <option value="🐦">Птица 🐦</option>
+        </select>
+
+        <button class="primary-button" onclick="savePet()">
+            💾 Сохранить
+        </button>
+    </section>
+     <!-- ЗДОРОВЬЕ -->
+    <section class="page" id="healthPage">
+        <div class="page-header">
+            <button onclick="showHome()">←</button>
+            <h2>Здоровье ❤️</h2>
+        </div>
+
+        <div class="health-header">
+            <div class="health-icon">❤️</div>
+            <div>
+                <h2 id="healthPetName">Барни</h2>
+                <p>Здоровье питомца</p>
+            </div>
+        </div>
+
+        <h3 class="section-title">Медицинские записи</h3>
+
+        <div id="healthRecords">
+            <div class="health-record">
+                <div class="record-icon">💉</div>
+                <div class="record-info">
+                    <h3>Прививка от бешенства</h3>
+                    <p>12 октября 2026</p>
+                    <small>Следующая: 12 октября 2027</small>
+                </div>
             </div>
 
-
-            <h3 class="section-title">
-                Медицинские записи
-            </h3>
-
-
-            <div id="healthRecords">
-
-                <div class="health-record">
-
-                    <div class="record-icon">
-                        💉
-                    </div>
-
-                    <div class="record-info">
-
-                        <h3>
-                            Прививка от бешенства
-                        </h3>
-
-                        <p>
-                            12 октября 2026
-                        </p>
-
-                        <small>
-                            Следующая: 12 октября 2027
-                        </small>
-
-                    </div>
-
+            <div class="health-record">
+                <div class="record-icon">🩺</div>
+                <div class="record-info">
+                    <h3>Посещение ветеринара</h3>
+                    <p>20 сентября 2026</p>
+                    <small>Плановый осмотр</small>
                 </div>
+            </div>
+        </div>
 
+        <button class="primary-button" onclick="openHealthForm()">
+            + Добавить запись
+        </button>
+    </section>
 
-                <div class="health-record">
+    <!-- ФОРМА ЗДОРОВЬЯ -->
+    <section class="page" id="healthForm">
+        <div class="page-header">
+            <button onclick="closeHealthForm()">←</button>
+            <h2>Новая запись</h2>
+        </div>
 
-                    <div class="record-icon">
-                        🩺
-                    </div>
+        <label for="recordType">Тип записи</label>
+        <select id="recordType">
+            <option value="Прививка">Прививка 💉</option>
+            <option value="Лекарство">Лекарство 💊</option>
+            <option value="Ветеринар">Ветеринар 🩺</option>
+            <option value="Уход">Уход 🛁</option>
+        </select>
 
-                    <div class="record-info">
+        <label for="recordName">Название</label>
+        <input type="text" id="recordName" placeholder="Например, прививка">
 
-                        <h3>
-                            Посещение ветеринара
-                        </h3>
+        <label for="recordDate">Дата</label>
+        <input type="date" id="recordDate">
 
-                        <p>
-                            20 сентября 2026
-                        </p>
+        <label for="recordNote">Заметка</label>
+        <textarea id="recordNote" placeholder="Дополнительная информация"></textarea>
 
-                        <small>
-                            Плановый осмотр
-                        </small>
+        <button class="primary-button" onclick="saveHealthRecord()">
+            💾 Сохранить
+        </button>
+    </section>
 
-                    </div>
+    <!-- НАПОМИНАНИЯ -->
+    <section class="page" id="remindersPage">
+        <div class="page-header">
+            <button onclick="showHome()">←</button>
+            <h2>Напоминания 🔔</h2>
+        </div>
 
+        <div id="remindersList">
+            <div class="reminder">
+                <div class="reminder-icon">🍖</div>
+                <div>
+                    <strong>Кормление</strong>
+                    <p>Сегодня, 08:00</p>
                 </div>
-
             </div>
 
+            <div class="reminder">
+                <div class="reminder-icon">🚶</div>
+                <div>
+                    <strong>Прогулка</strong>
+                    <p>Сегодня, 18:00</p>
+                </div>
+            </div>
+        </div>
 
-            <button
-                class="primary-button"
-                onclick="openHealthForm()"
-            >
-                + Добавить запись
-            </button>
+        <button class="primary-button" onclick="openReminderForm()">
+            + Добавить напоминание
+        </button>
+    </section>
 
-        </section>
+    <!-- ФОРМА НАПОМИНАНИЯ -->
+    <section class="page" id="reminderForm">
+        <div class="page-header">
+            <button onclick="closeReminderForm()">←</button>
+            <h2>Новое напоминание</h2>
+        </div>
+
+        <label for="reminderType">Тип</label>
+        <select id="reminderType">
+            <option value="Кормление">Кормление 🍖</option>
+            <option value="Прогулка">Прогулка 🚶</option>
+            <option value="Лекарство">Лекарство 💊</option>
+            <option value="Ветеринар">Ветеринар 🩺</option>
+        </select>
+
+        <label for="reminderName">Название</label>
+        <input type="text" id="reminderName" placeholder="Например, вечерняя прогулка">
+
+        <label for="reminderDate">Дата</label>
+        <input type="date" id="reminderDate">
+
+        <label for="reminderTime">Время</label>
+        <input type="time" id="reminderTime">
+
+        <button class="primary-button" onclick="saveReminder()">
+            🔔 Добавить
+        </button>
+    </section>
+
+    <!-- ПРОФИЛЬ -->
+    <section class="page" id="profilePage">
+        <div class="page-header">
+            <button onclick="showHome()">←</button>
+            <h2>Профиль 👤</h2>
+        </div>
+
+        <div class="profile-card">
+            <div class="profile-avatar">👤</div>
+            <h2>Владелец питомца</h2>
+            <p>Добро пожаловать в PetCare</p>
+            <p id="userEmail"></p>
+        </div>
+
+        <div class="profile-item" onclick="showPet()">🐾 Мой питомец</div>
+        <div class="profile-item" onclick="showHealth()">❤️ Здоровье</div>
+        <div class="profile-item" onclick="showReminders()">🔔 Напоминания</div>
 
 
-        <!-- ФОРМА ЗДОРОВЬЯ -->
+    </section>
+     <!-- ВХОД И РЕГИСТРАЦИЯ -->
+    <section class="page auth-page" id="authPage" style="display: flex;">
+        <div class="auth-card">
+            <div class="auth-logo">🐾</div>
+            <h1>PetCare</h1>
 
-        <section class="page" id="healthForm">
+            <p class="auth-subtitle">
+                Помощник владельца питомца
+            </p>
 
-            <div class="page-header">
-
-                <button onclick="closeHealthForm()">
-                    ←
+            <div class="auth-tabs">
+                <button
+                    id="loginTab"
+                    class="auth-tab active"
+                    onclick="showLoginForm()"
+                >
+                    Войти
                 </button>
 
-                <h2>
-                    Новая запись
-                </h2>
-
-            </div>
-
-
-            <label>
-                Тип записи
-            </label>
-
-            <select id="recordType">
-
-                <option value="💉">
-                    Прививка 💉
-                </option>
-
-                <option value="💊">
-                    Лекарство 💊
-                </option>
-
-                <option value="🩺">
-                    Ветеринар 🩺
-                </option>
-
-                <option value="🛁">
-                    Уход 🛁
-                </option>
-
-            </select>
-
-
-            <label>
-                Название
-            </label>
-
-            <input
-                type="text"
-                id="recordName"
-                placeholder="Например, прививка"
-            >
-
-
-            <label>
-                Дата
-            </label>
-
-            <input
-                type="date"
-                id="recordDate"
-            >
-
-
-            <label>
-                Заметка
-            </label>
-
-            <textarea
-                id="recordNote"
-                placeholder="Дополнительная информация"
-            ></textarea>
-
-
-            <button
-                class="primary-button"
-                onclick="saveHealthRecord()"
-            >
-                💾 Сохранить
-            </button>
-
-        </section>
-
-
-        <!-- НАПОМИНАНИЯ -->
-
-        <section class="page" id="remindersPage">
-
-            <div class="page-header">
-
-                <button onclick="showHome()">
-                    ←
+                <button
+                    id="registerTab"
+                    class="auth-tab"
+                    onclick="showRegisterForm()"
+                >
+                    Регистрация
                 </button>
-
-                <h2>
-                    Напоминания 🔔
-                </h2>
-
             </div>
 
+            <div id="loginForm">
+                <label for="loginEmail">Email</label>
+                <input
+                    type="email"
+                    id="loginEmail"
+                    placeholder="Введите email"
+                >
 
-            <div id="remindersList">
+                <label for="loginPassword">Пароль</label>
+                <input
+                    type="password"
+                    id="loginPassword"
+                    placeholder="Введите пароль"
+                >
 
-                <div class="reminder">
-
-                    <div class="reminder-icon">
-                        🍖
-                    </div>
-
-                    <div>
-
-                        <strong>
-                            Кормление
-                        </strong>
-
-                        <p>
-                            Сегодня, 08:00
-                        </p>
-
-                    </div>
-
-                </div>
-
-
-                <div class="reminder">
-
-                    <div class="reminder-icon">
-                        🚶
-                    </div>
-
-                    <div>
-
-                        <strong>
-                            Прогулка
-                        </strong>
-
-                        <p>
-                            Сегодня, 18:00
-                        </p>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-
-            <button
-                class="primary-button"
-                onclick="openReminderForm()"
-            >
-                + Добавить напоминание
-            </button>
-
-        </section>
-
-
-        <!-- ФОРМА НАПОМИНАНИЯ -->
-
-        <section class="page" id="reminderForm">
-
-            <div class="page-header">
-
-                <button onclick="closeReminderForm()">
-                    ←
+                <button class="primary-button" onclick="loginUser()">
+                    🔐 Войти
                 </button>
-
-                <h2>
-                    Новое напоминание
-                </h2>
-
             </div>
 
+            <div id="registerForm" style="display: none;">
+                <label for="registerEmail">Email</label>
+                <input
+                    type="email"
+                    id="registerEmail"
+                    placeholder="Введите email"
+                >
 
-            <label>
-                Тип
-            </label>
+                <label for="registerPassword">Пароль</label>
+                <input
+                    type="password"
+                    id="registerPassword"
+                    placeholder="Минимум 6 символов"
+                >
 
-            <select id="reminderType">
+                <label for="registerPassword2">Повторите пароль</label>
+                <input
+                    type="password"
+                    id="registerPassword2"
+                    placeholder="Повторите пароль"
+                >
 
-                <option value="🍖">
-                    Кормление 🍖
-                </option>
-
-                <option value="🚶">
-                    Прогулка 🚶
-                </option>
-
-                <option value="💊">
-                    Лекарство 💊
-                </option>
-
-                <option value="🩺">
-                    Ветеринар 🩺
-                </option>
-
-            </select>
-
-
-            <label>
-                Название
-            </label>
-
-            <input
-                type="text"
-                id="reminderName"
-                placeholder="Например, вечерняя прогулка"
-            >
-
-
-            <label>
-                Дата
-            </label>
-
-            <input
-                type="date"
-                id="reminderDate"
-            >
-
-
-            <label>
-                Время
-            </label>
-
-            <input
-                type="time"
-                id="reminderTime"
-            >
-
-
-            <button
-                class="primary-button"
-                onclick="saveReminder()"
-            >
-                🔔 Добавить
-            </button>
-
-        </section>
-
-
-        <!-- ПРОФИЛЬ -->
-
-        <section class="page" id="profilePage">
-
-            <div class="page-header">
-
-                <button onclick="showHome()">
-                    ←
+                <button class="primary-button" onclick="registerUser()">
+                    📝 Зарегистрироваться
                 </button>
-
-                <h2>
-                    Профиль 👤
-                </h2>
-
             </div>
 
+            <p id="authMessage" class="auth-message"></p>
+        </div>
+    </section>
 
-            <div class="profile-card">
+    <!-- НИЖНЕЕ МЕНЮ -->
+    <nav class="bottom-menu" style="display: none;">
+        <a href="#" onclick="showHome(); return false;">
+            <span>🏠</span>
+            Главная
+        </a>
 
-                <div class="profile-avatar">
-                    👤
-                </div>
+        <a href="#" onclick="showPet(); return false;">
+            <span>🐾</span>
+            Питомец
+        </a>
 
-                <h2>
-                    Владелец питомца
-                </h2>
+        <a href="#" onclick="showHealth(); return false;">
+            <span>❤️</span>
+            Здоровье
+        </a>
 
-                <p>
-                    Добро пожаловать в PetCare
-                </p>
+        <a href="#" onclick="showReminders(); return false;">
+            <span>🔔</span>
+            Напоминания
+        </a>
 
-            </div>
+        <a href="#" onclick="showProfile(); return false;">
+            <span>👤</span>
+            Профиль
+        </a>
+    </nav>
 
+</div>
 
-            <div class="profile-item">
-                🐾 Мой питомец
-            </div>
-
-            <div class="profile-item">
-                ❤️ Здоровье
-            </div>
-
-            <div class="profile-item">
-                🔔 Напоминания
-            </div>
-
-        </section>
-
-
-        <!-- НИЖНЕЕ МЕНЮ -->
-
-        <nav class="bottom-menu">
-
-            <a href="#" onclick="showHome(); return false;">
-
-                <span>
-                    🏠
-                </span>
-
-                Главная
-
-            </a>
-
-
-            <a href="#" onclick="showPet(); return false;">
-
-                <span>
-                    🐾
-                </span>
-
-                Питомец
-
-            </a>
-
-
-            <a href="#" onclick="showHealth(); return false;">
-
-                <span>
-                    ❤️
-                </span>
-
-                Здоровье
-
-            </a>
-
-
-            <a href="#" onclick="showReminders(); return false;">
-
-                <span>
-                    🔔
-                </span>
-
-                Напоминания
-
-            </a>
-
-
-            <a href="#" onclick="showProfile(); return false;">
-
-                <span>
-                    👤
-                </span>
-
-                Профиль
-
-            </a>
-
-        </nav>
-
-    </div>
-
-
-    <script src="script.js"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="script.js"></script>
 </body>
-
 </html>
