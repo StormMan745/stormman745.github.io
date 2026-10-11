@@ -1,497 +1,1064 @@
-/* =========================
-   НАВИГАЦИЯ
-========================= */
+// ==============================
+// SUPABASE
+// ==============================
 
+const SUPABASE_URL = "https://qexiyikdmdbdxgusqnee.supabase.co";
+const SUPABASE_KEY = "sb_publishable_HSR87zEuGFNjwEYoa-zrSw_cTWchorw";
+
+const supabaseClient = supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+);
+
+
+// ==============================
+// ЛОКАЛЬНЫЕ ДАННЫЕ
+// ==============================
+
+const STORAGE_KEY = "petcareData";
+
+let appData = {
+    pet: {
+        name: "Барни",
+        breed: "Золотистый ретривер",
+        weight: "28",
+        animal: "🐶",
+        dbId: null
+    },
+    healthRecords: [],
+    reminders: [],
+    completedTasks: []
+};
+
+
+// ==============================
+// СОХРАНЕНИЕ ДАННЫХ
+// ==============================
+
+function saveData() {
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(appData)
+    );
+}
+
+
+// ==============================
+// ЗАГРУЗКА ДАННЫХ
+// ==============================
+
+function loadData() {
+    const savedData = localStorage.getItem(STORAGE_KEY);
+
+    if (!savedData) {
+        return;
+    }
+
+    try {
+        const parsedData = JSON.parse(savedData);
+
+        appData = {
+            ...appData,
+            ...parsedData
+        };
+    } catch (error) {
+        console.error("Ошибка загрузки данных:", error);
+    }
+}
+
+
+// ==============================
+// СКРЫТЬ ВСЕ СТРАНИЦЫ
+// ==============================
 
 function hideAllPages() {
+    const pages = document.querySelectorAll(".page");
 
-    document.getElementById("homePage").style.display = "none";
-
-    document.getElementById("petPage").style.display = "none";
-
-    document.getElementById("petForm").style.display = "none";
-
-    document.getElementById("healthPage").style.display = "none";
-
-    document.getElementById("healthForm").style.display = "none";
-
-    document.getElementById("remindersPage").style.display = "none";
-
-    document.getElementById("reminderForm").style.display = "none";
-
-    document.getElementById("profilePage").style.display = "none";
-
+    pages.forEach(page => {
+        page.style.display = "none";
+    });
 }
 
+
+// ==============================
+// ГЛАВНАЯ
+// ==============================
 
 function showHome() {
-
     hideAllPages();
 
-    document.getElementById("homePage").style.display = "block";
+    const homePage = document.getElementById("homePage");
 
-    document.querySelector(".bottom-menu").style.display = "flex";
+    if (homePage) {
+        homePage.style.display = "block";
+    }
 
+    restoreTasks();
 }
 
+
+// ==============================
+// СТРАНИЦА ПИТОМЦА
+// ==============================
 
 function showPet() {
-
     hideAllPages();
 
-    document.getElementById("petPage").style.display = "block";
+    const petPage = document.getElementById("petPage");
 
-    document.querySelector(".bottom-menu").style.display = "none";
+    if (petPage) {
+        petPage.style.display = "block";
+    }
 
+    updatePetOnScreen();
 }
 
+
+// ==============================
+// ЗДОРОВЬЕ
+// ==============================
 
 function showHealth() {
-
     hideAllPages();
 
-    document.getElementById("healthPage").style.display = "block";
+    const healthPage = document.getElementById("healthPage");
 
-    document.querySelector(".bottom-menu").style.display = "none";
+    if (healthPage) {
+        healthPage.style.display = "block";
+    }
 
+    renderHealthRecords();
 }
 
+
+// ==============================
+// НАПОМИНАНИЯ
+// ==============================
 
 function showReminders() {
-
     hideAllPages();
 
-    document.getElementById("remindersPage").style.display = "block";
+    const remindersPage = document.getElementById("remindersPage");
 
-    document.querySelector(".bottom-menu").style.display = "none";
+    if (remindersPage) {
+        remindersPage.style.display = "block";
+    }
 
+    renderReminders();
 }
 
+
+// ==============================
+// ПРОФИЛЬ
+// ==============================
 
 function showProfile() {
-
     hideAllPages();
 
-    document.getElementById("profilePage").style.display = "block";
+    const profilePage = document.getElementById("profilePage");
 
-    document.querySelector(".bottom-menu").style.display = "none";
+    if (profilePage) {
+        profilePage.style.display = "block";
+    }
 
+    loadUserProfile();
 }
 
 
-/* =========================
-   ПИТОМЕЦ
-========================= */
-
+// ==============================
+// ФОРМА ПИТОМЦА
+// ==============================
 
 function openPetForm() {
+    hideAllPages();
 
-    document.getElementById("petPage").style.display = "none";
+    const petForm = document.getElementById("petForm");
 
-    document.getElementById("petForm").style.display = "block";
+    if (petForm) {
+        petForm.style.display = "block";
+    }
 
+    fillPetForm();
 }
 
 
 function closePetForm() {
-
-    document.getElementById("petForm").style.display = "none";
-
-    document.getElementById("petPage").style.display = "block";
-
+    showPet();
 }
 
 
-function savePet() {
+function fillPetForm() {
+    const nameInput = document.getElementById("nameInput");
+    const breedInput = document.getElementById("breedInput");
+    const weightInput = document.getElementById("weightInput");
+    const animalInput = document.getElementById("animalInput");
 
-    const name =
-        document.getElementById("nameInput").value.trim();
+    if (nameInput) {
+        nameInput.value = appData.pet.name || "";
+    }
 
-    const breed =
-        document.getElementById("breedInput").value.trim();
+    if (breedInput) {
+        breedInput.value = appData.pet.breed || "";
+    }
 
-    const weight =
-        document.getElementById("weightInput").value;
+    if (weightInput) {
+        weightInput.value = appData.pet.weight || "";
+    }
 
-    const animal =
-        document.getElementById("animalInput").value;
+    if (animalInput) {
+        animalInput.value = appData.pet.animal || "🐶";
+    }
+}
 
 
-    if (name === "") {
+// ==============================
+// СОХРАНЕНИЕ ПИТОМЦА
+// ==============================
 
+async function savePet() {
+    const nameInput = document.getElementById("nameInput");
+    const breedInput = document.getElementById("breedInput");
+    const weightInput = document.getElementById("weightInput");
+    const animalInput = document.getElementById("animalInput");
+
+    const name = nameInput ? nameInput.value.trim() : "";
+    const breed = breedInput ? breedInput.value.trim() : "";
+    const weight = weightInput ? weightInput.value : "";
+    const animal = animalInput ? animalInput.value : "🐶";
+
+    if (!name) {
         alert("Введите имя питомца!");
-
         return;
-
     }
 
+    const { data: userData, error: userError } =
+    await supabaseClient.auth.getUser();
 
-    document.getElementById("petName").textContent = name;
-
-    document.getElementById("petBreed").textContent =
-        breed || "Порода не указана";
-
-    document.getElementById("petWeight").textContent =
-        weight ? weight + " кг" : "Не указан";
-
-    document.getElementById("petPhoto").textContent =
-        animal;
-
-
-    document.getElementById("homePetName").textContent =
-        name;
-
-    document.getElementById("homePetBreed").textContent =
-        breed || "Порода не указана";
-
-    document.getElementById("homePetPhoto").textContent =
-        animal;
-
-
-    document.getElementById("healthPetName").textContent =
-        name;
-
-
-    const pet = {
-
-        name: name,
-
-        breed: breed,
-
-        weight: weight,
-
-        animal: animal
-
-    };
-
-
-    localStorage.setItem(
-        "petCarePet",
-        JSON.stringify(pet)
-    );
-
-
-    closePetForm();
-
+if (userError || !userData.user) {
+    alert("Сначала войдите в аккаунт!");
+    return;
 }
 
-
-/* =========================
-   ЗАГРУЗКА ПИТОМЦА
-========================= */
-
-
-function loadPet() {
-
-    const savedPet =
-        localStorage.getItem("petCarePet");
-
-
-    if (!savedPet) {
-
-        return;
-
-    }
-
+const petData = {
+    name,
+    breed,
+    weight: weight ? Number(weight) : null,
+    animal,
+    user_id: userData.user.id
+};
 
     try {
+        let result;
 
-        const pet =
-            JSON.parse(savedPet);
+        if (appData.pet && appData.pet.dbId) {
+            result = await supabaseClient
+                .from("pets")
+                .update(petData)
+                .eq("id", appData.pet.dbId)
+                .select()
+                .maybeSingle();
+        } else {
+            result = await supabaseClient
+                .from("pets")
+                .insert(petData)
+                .select()
+                .maybeSingle();
+        }
 
+        if (result.error) {
+            console.error(
+                "Ошибка сохранения питомца в Supabase:",
+                result.error
+            );
 
-        document.getElementById("petName").textContent =
-            pet.name;
+            appData.pet = {
+                ...(appData.pet || {}),
+                ...petData,
+                dbId: appData.pet ? appData.pet.dbId : null
+            };
 
-        document.getElementById("petBreed").textContent =
-            pet.breed || "Порода не указана";
+            saveData();
+            updatePetOnScreen();
+            closePetForm();
 
-        document.getElementById("petWeight").textContent =
-            pet.weight ? pet.weight + " кг" : "Не указан";
+            alert(
+                "Данные обновлены на этом устройстве, но не сохранены в облаке. Ошибка Supabase: " +
+                result.error.message
+            );
 
-        document.getElementById("petPhoto").textContent =
-            pet.animal;
+            return;
+        }
 
+        if (!result.data) {
+            console.warn(
+                "Supabase не вернул запись после сохранения. Проверьте RLS-политики таблицы pets."
+            );
 
-        document.getElementById("homePetName").textContent =
-            pet.name;
+            appData.pet = {
+                ...(appData.pet || {}),
+                ...petData,
+                dbId: appData.pet ? appData.pet.dbId : null
+            };
 
-        document.getElementById("homePetBreed").textContent =
-            pet.breed || "Порода не указана";
+            saveData();
+            updatePetOnScreen();
+            closePetForm();
 
-        document.getElementById("homePetPhoto").textContent =
-            pet.animal;
+            alert(
+                "Данные обновлены на этом устройстве, но Supabase не вернул запись. Проверьте права доступа (RLS) таблицы pets."
+            );
 
+            return;
+        }
 
-        document.getElementById("healthPetName").textContent =
-            pet.name;
+        appData.pet = {
+            ...petData,
+            dbId: result.data.id
+        };
 
+        saveData();
+        updatePetOnScreen();
+        closePetForm();
+
+        alert("Питомец сохранён! 🐾");
 
     } catch (error) {
+        console.error("Ошибка сохранения питомца:", error);
 
-        console.log(
-            "Не удалось загрузить данные питомца."
+        alert(
+            "Не удалось сохранить данные. Подробности смотри в консоли браузера (F12 → Console)."
         );
-
     }
-
 }
 
 
-/* =========================
-   ЗДОРОВЬЕ
-========================= */
+// ==============================
+// ОБНОВЛЕНИЕ ПИТОМЦА НА ЭКРАНЕ
+// ==============================
 
+function updatePetOnScreen() {
+    const pet = appData.pet || {};
+
+    const name = pet.name || "Барни";
+    const breed = pet.breed || "Порода не указана";
+    const animal = pet.animal || "🐶";
+    const weight = pet.weight;
+
+    const nameElement = document.getElementById("petName");
+    const breedElement = document.getElementById("petBreed");
+    const weightElement = document.getElementById("petWeight");
+    const photoElement = document.getElementById("petPhoto");
+
+    if (nameElement) nameElement.textContent = name;
+    if (breedElement) breedElement.textContent = breed;
+
+    if (weightElement) {
+        weightElement.textContent = weight ? weight + " кг" : "Не указан";
+    }
+
+    if (photoElement) photoElement.textContent = animal;
+
+    const homeName = document.getElementById("homePetName");
+    const homeBreed = document.getElementById("homePetBreed");
+    const homePhoto = document.getElementById("homePetPhoto");
+
+    if (homeName) homeName.textContent = name;
+    if (homeBreed) homeBreed.textContent = breed;
+    if (homePhoto) homePhoto.textContent = animal;
+
+    const healthName = document.getElementById("healthPetName");
+
+    if (healthName) {
+        healthName.textContent = name;
+    }
+}
+
+
+// ==============================
+// ЗАГРУЗКА ПИТОМЦА ИЗ SUPABASE
+// ==============================
+
+async function loadPetFromDatabase() {
+    try {
+        const { data: userData, error: userError } =
+            await supabaseClient.auth.getUser();
+
+        if (userError || !userData.user) {
+            console.error("Пользователь не авторизован.");
+            return;
+        }
+
+        const result = await supabaseClient
+            .from("pets")
+            .select("*")
+            .eq("user_id", userData.user.id)
+            .order("id", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (result.error) {
+            console.error("Ошибка загрузки питомца:", result.error);
+            return;
+        }
+
+        if (result.data) {
+            appData.pet = {
+                name: result.data.name || "Барни",
+                breed: result.data.breed || "",
+                weight: result.data.weight ?? "",
+                animal: result.data.animal || "🐶",
+                dbId: result.data.id
+            };
+
+            saveData();
+            updatePetOnScreen();
+        }
+    } catch (error) {
+        console.error("Ошибка загрузки питомца:", error);
+    }
+}
+
+ 
+
+// ==============================
+// ЗДОРОВЬЕ — ФОРМА
+// ==============================
 
 function openHealthForm() {
+    hideAllPages();
 
-    document.getElementById("healthPage").style.display = "none";
+    const healthForm = document.getElementById("healthForm");
 
-    document.getElementById("healthForm").style.display = "block";
-
+    if (healthForm) {
+        healthForm.style.display = "block";
+    }
 }
-
 
 function closeHealthForm() {
-
-    document.getElementById("healthForm").style.display = "none";
-
-    document.getElementById("healthPage").style.display = "block";
-
+    showHealth();
 }
 
 
+// ==============================
+// СОХРАНЕНИЕ ЗАПИСИ ЗДОРОВЬЯ
+// ==============================
+
 function saveHealthRecord() {
-
-    const type =
-        document.getElementById("recordType").value;
-
-    const name =
-        document.getElementById("recordName").value.trim();
-
-    const date =
-        document.getElementById("recordDate").value;
-
-    const note =
-        document.getElementById("recordNote").value.trim();
-
+    const type = document.getElementById("recordType").value;
+    const name = document.getElementById("recordName").value.trim();
+    const date = document.getElementById("recordDate").value;
+    const note = document.getElementById("recordNote").value.trim();
 
     if (name === "") {
-
         alert("Введите название записи!");
-
         return;
-
     }
 
+    const record = {
+        id: Date.now(),
+        type: type,
+        name: name,
+        date: date,
+        note: note
+    };
 
-    const record =
-        document.createElement("div");
+    appData.healthRecords.push(record);
+
+    saveData();
+    addHealthRecordToScreen(record);
+    closeHealthForm();
+}
 
 
-    record.className =
-        "health-record";
+// ==============================
+// ДОБАВИТЬ ЗАПИСЬ ЗДОРОВЬЯ
+// ==============================
 
+function addHealthRecordToScreen(record) {
+    const container = document.getElementById("healthRecords");
 
-    record.innerHTML = `
+    if (!container) {
+        return;
+    }
 
+    const recordElement = document.createElement("div");
+    recordElement.className = "health-record";
+
+    let icon = "❤️";
+
+    if (record.type === "Прививка") {
+        icon = "💉";
+    }
+
+    if (record.type === "Лекарство") {
+        icon = "💊";
+    }
+
+    if (record.type === "Ветеринар") {
+        icon = "🩺";
+    }
+
+    recordElement.innerHTML = `
         <div class="record-icon">
-            ${type}
+            ${icon}
         </div>
 
         <div class="record-info">
-
-            <h3>
-                ${name}
-            </h3>
-
-            <p>
-                ${date || "Дата не указана"}
-            </p>
+            <strong>${record.name}</strong>
 
             <small>
-                ${note || "Без заметки"}
+                ${record.date || "Дата не указана"}
             </small>
 
+            ${
+                record.note
+                    ? `<small>${record.note}</small>`
+                    : ""
+            }
         </div>
-
     `;
 
-
-    document
-        .getElementById("healthRecords")
-        .appendChild(record);
-
-
-    document.getElementById("recordName").value = "";
-
-    document.getElementById("recordDate").value = "";
-
-    document.getElementById("recordNote").value = "";
-
-
-    closeHealthForm();
-
+    container.appendChild(recordElement);
 }
 
 
-/* =========================
-   НАПОМИНАНИЯ
-========================= */
+// ==============================
+// ПОКАЗАТЬ ВСЕ ЗАПИСИ ЗДОРОВЬЯ
+// ==============================
 
+function renderHealthRecords() {
+    const container = document.getElementById("healthRecords");
 
-function openReminderForm() {
+    if (!container) {
+        return;
+    }
 
-    document.getElementById("remindersPage").style.display = "none";
+    container.innerHTML = "";
 
-    document.getElementById("reminderForm").style.display = "block";
-
-}
-
-
-function closeReminderForm() {
-
-    document.getElementById("reminderForm").style.display = "none";
-
-    document.getElementById("remindersPage").style.display = "block";
-
-}
-
-
-function saveReminder() {
-
-    const type =
-        document.getElementById("reminderType").value;
-
-    const name =
-        document.getElementById("reminderName").value.trim();
-
-    const date =
-        document.getElementById("reminderDate").value;
-
-    const time =
-        document.getElementById("reminderTime").value;
-
-
-    if (name === "") {
-
-        alert("Введите название напоминания!");
+    if (
+        !appData.healthRecords ||
+        appData.healthRecords.length === 0
+    ) {
+        container.innerHTML = `
+            <p style="text-align:center;color:#888;">
+                Пока нет записей
+            </p>
+        `;
 
         return;
-
     }
 
-
-    const reminder =
-        document.createElement("div");
-
-
-    reminder.className =
-        "reminder";
-
-
-    reminder.innerHTML = `
-
-        <div class="reminder-icon">
-            ${type}
-        </div>
-
-        <div>
-
-            <strong>
-                ${name}
-            </strong>
-
-            <p>
-                ${date || "Дата не указана"}
-                ${time ? ", " + time : ""}
-            </p>
-
-        </div>
-
-    `;
-
-
-    document
-        .getElementById("remindersList")
-        .appendChild(reminder);
-
-
-    document.getElementById("reminderName").value = "";
-
-    document.getElementById("reminderDate").value = "";
-
-    document.getElementById("reminderTime").value = "";
-
-
-    closeReminderForm();
-
+    appData.healthRecords.forEach(record => {
+        addHealthRecordToScreen(record);
+    });
 }
 
 
-/* =========================
-   ЗАДАЧИ
-========================= */
+// ==============================
+// НАПОМИНАНИЯ — ФОРМА
+// ==============================
 
+function openReminderForm() {
+    hideAllPages();
 
-function completeTask(button) {
+    const reminderForm = document.getElementById("reminderForm");
 
-    const task =
-        button.closest(".task");
-
-
-    task.classList.toggle("done");
-
-
-    if (task.classList.contains("done")) {
-
-        button.textContent = "✓";
-
-    } else {
-
-        button.textContent = "○";
-
+    if (reminderForm) {
+        reminderForm.style.display = "block";
     }
+}
 
+function closeReminderForm() {
+    showReminders();
 }
 
 
-/* =========================
-   ДАТА
-========================= */
+// ==============================
+// СОХРАНЕНИЕ НАПОМИНАНИЯ
+// ==============================
 
+function saveReminder() {
+    const type = document.getElementById("reminderType").value;
+    const name = document.getElementById("reminderName").value.trim();
+    const date = document.getElementById("reminderDate").value;
+    const time = document.getElementById("reminderTime").value;
 
-function setTodayDate() {
+    if (name === "") {
+        alert("Введите название напоминания!");
+        return;
+    }
 
-    const date =
-        new Date();
-
-
-    const options = {
-
-        day: "numeric",
-
-        month: "long"
-
+    const reminder = {
+        id: Date.now(),
+        type: type,
+        name: name,
+        date: date,
+        time: time
     };
 
+    appData.reminders.push(reminder);
 
-    document.getElementById("todayDate").textContent =
-        date.toLocaleDateString(
-            "ru-RU",
-            options
-        );
-
+    saveData();
+    addReminderToScreen(reminder);
+    closeReminderForm();
 }
 
 
-/* =========================
-   ЗАПУСК
-========================= */
+// ==============================
+// ДОБАВИТЬ НАПОМИНАНИЕ НА ЭКРАН
+// ==============================
+
+function addReminderToScreen(reminder) {
+    const container = document.getElementById("remindersList");
+
+    if (!container) {
+        return;
+    }
+
+    const reminderElement = document.createElement("div");
+    reminderElement.className = "reminder";
+
+    let icon = "🔔";
+
+    if (reminder.type === "Кормление") {
+        icon = "🍖";
+    }
+
+    if (reminder.type === "Прогулка") {
+        icon = "🚶";
+    }
+
+    if (reminder.type === "Лекарство") {
+        icon = "💊";
+    }
+
+    if (reminder.type === "Ветеринар") {
+        icon = "🩺";
+    }
+
+    reminderElement.innerHTML = `
+        <div class="reminder-icon">
+            ${icon}
+        </div>
+
+        <div class="record-info">
+            <strong>${reminder.name}</strong>
+
+            <small>
+                ${reminder.date || ""}
+                ${reminder.time || ""}
+            </small>
+        </div>
+    `;
+
+    container.appendChild(reminderElement);
+}
 
 
-loadPet();
+// ==============================
+// ПОКАЗАТЬ ВСЕ НАПОМИНАНИЯ
+// ==============================
 
-setTodayDate();
+function renderReminders() {
+    const container = document.getElementById("remindersList");
 
-showHome();
+    if (!container) {
+        return;
+    }
+
+    container.innerHTML = "";
+
+    if (
+        !appData.reminders ||
+        appData.reminders.length === 0
+    ) {
+        container.innerHTML = `
+            <p style="text-align:center;color:#888;">
+                Пока нет напоминаний
+            </p>
+        `;
+
+        return;
+    }
+
+    appData.reminders.forEach(reminder => {
+        addReminderToScreen(reminder);
+    });
+}
+
+
+// ==============================
+// ЗАДАЧИ НА ГЛАВНОЙ
+// ==============================
+
+function completeTask(element, taskName) {
+    if (!element) {
+        return;
+    }
+
+    element.classList.toggle("done");
+
+    if (element.classList.contains("done")) {
+        if (!appData.completedTasks.includes(taskName)) {
+            appData.completedTasks.push(taskName);
+        }
+    } else {
+        appData.completedTasks = appData.completedTasks.filter(
+            task => task !== taskName
+        );
+    }
+
+    saveData();
+}
+
+
+// ==============================
+// ВОССТАНОВИТЬ ВЫПОЛНЕННЫЕ ЗАДАЧИ
+// ==============================
+
+function restoreTasks() {
+    const tasks = document.querySelectorAll(".task");
+
+    tasks.forEach(task => {
+        const taskName = task.getAttribute("data-task");
+
+        if (
+            taskName &&
+            appData.completedTasks.includes(taskName)
+        ) {
+            task.classList.add("done");
+        }
+    });
+}
+
+
+// ==============================
+// ТЕКУЩАЯ ДАТА
+// ==============================
+
+function setTodayDate() {
+    const dateElement = document.getElementById("todayDate");
+
+    if (!dateElement) {
+        return;
+    }
+
+    const today = new Date();
+
+    const options = {
+        day: "numeric",
+        month: "long"
+    };
+
+    dateElement.textContent = today.toLocaleDateString(
+        "ru-RU",
+        options
+    );
+}
+// ==============================
+// РЕГИСТРАЦИЯ И ВХОД
+// ==============================
+
+function showLoginForm() {
+    const loginForm = document.getElementById("loginForm");
+    const registerForm = document.getElementById("registerForm");
+    const loginTab = document.getElementById("loginTab");
+    const registerTab = document.getElementById("registerTab");
+    const message = document.getElementById("authMessage");
+
+    if (loginForm) loginForm.style.display = "block";
+    if (registerForm) registerForm.style.display = "none";
+    if (loginTab) loginTab.classList.add("active");
+    if (registerTab) registerTab.classList.remove("active");
+    if (message) message.textContent = "";
+}
+
+
+function showRegisterForm() {
+    const loginForm = document.getElementById("loginForm");
+    const registerForm = document.getElementById("registerForm");
+    const loginTab = document.getElementById("loginTab");
+    const registerTab = document.getElementById("registerTab");
+    const message = document.getElementById("authMessage");
+
+    if (loginForm) loginForm.style.display = "none";
+    if (registerForm) registerForm.style.display = "block";
+    if (loginTab) loginTab.classList.remove("active");
+    if (registerTab) registerTab.classList.add("active");
+    if (message) message.textContent = "";
+}
+
+
+// ==============================
+// РЕГИСТРАЦИЯ ПОЛЬЗОВАТЕЛЯ
+// ==============================
+
+async function registerUser() {
+    const emailInput = document.getElementById("registerEmail");
+    const passwordInput = document.getElementById("registerPassword");
+    const password2Input = document.getElementById("registerPassword2");
+    const message = document.getElementById("authMessage");
+
+    if (!emailInput || !passwordInput || !password2Input || !message) {
+        console.error("Не найдены поля регистрации в index.html");
+        return;
+    }
+
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    const password2 = password2Input.value;
+
+    if (!email || !password || !password2) {
+        message.textContent = "Заполни все поля.";
+        return;
+    }
+
+    if (password.length < 6) {
+        message.textContent = "Пароль должен содержать минимум 6 символов.";
+        return;
+    }
+
+    if (password !== password2) {
+        message.textContent = "Пароли не совпадают.";
+        return;
+    }
+
+    message.textContent = "Регистрация...";
+
+    try {
+        const { data, error } = await supabaseClient.auth.signUp({
+            email: email,
+            password: password,
+            options: {
+                emailRedirectTo: "https://stormman745.github.io/"
+            }
+        });
+
+        if (error) {
+            console.error("Ошибка регистрации:", error);
+            message.textContent = "Ошибка регистрации: " + error.message;
+            return;
+        }
+
+        if (!data.session) {
+            message.textContent =
+                "Регистрация успешна! Проверь почту и подтверди email.";
+            return;
+        }
+
+        message.textContent = "Регистрация успешна! 🐾";
+        openMainAfterLogin();
+
+    } catch (error) {
+        console.error("Ошибка регистрации:", error);
+        message.textContent = "Не удалось выполнить регистрацию.";
+    }
+}
+
+
+// ==============================
+// ВХОД ПОЛЬЗОВАТЕЛЯ
+// ==============================
+
+async function loginUser() {
+    const emailInput = document.getElementById("loginEmail");
+    const passwordInput = document.getElementById("loginPassword");
+    const message = document.getElementById("authMessage");
+
+    if (!emailInput || !passwordInput || !message) {
+        console.error("Не найдены поля входа в index.html");
+        return;
+    }
+
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+
+    if (!email || !password) {
+        message.textContent = "Введите email и пароль.";
+        return;
+    }
+
+    message.textContent = "Выполняется вход...";
+
+    try {
+        const { data, error } =
+            await supabaseClient.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
+
+        if (error) {
+            console.error("Ошибка входа:", error);
+            message.textContent =
+                error.message.toLowerCase().includes("email not confirmed")
+                    ? "Сначала подтверди email через письмо."
+                    : "Ошибка входа: " + error.message;
+            return;
+        }
+
+        if (!data.user) {
+            message.textContent = "Не удалось подтвердить вход.";
+            return;
+        }
+
+        message.textContent = "Вход выполнен! 🐾";
+        await openMainAfterLogin();
+
+    } catch (error) {
+        console.error("Ошибка входа:", error);
+        message.textContent = "Не удалось выполнить вход. Проверь интернет и консоль F12.";
+    }
+}
+
+
+// ==============================
+// ОТКРЫТЬ ГЛАВНУЮ ПОСЛЕ ВХОДА
+// ==============================
+
+async function openMainAfterLogin() {
+    const authPage = document.getElementById("authPage");
+    const homePage = document.getElementById("homePage");
+    const bottomMenu = document.querySelector(".bottom-menu");
+
+    if (authPage) authPage.style.display = "none";
+    if (homePage) homePage.style.display = "block";
+    if (bottomMenu) bottomMenu.style.display = "flex";
+
+    loadData();
+    setTodayDate();
+    updatePetOnScreen();
+    renderHealthRecords();
+    renderReminders();
+    restoreTasks();
+
+    await loadPetFromDatabase();
+    await loadUserProfile();
+
+    showHome();
+}
+
+
+// ==============================
+// ПРОВЕРКА АВТОРИЗАЦИИ
+// ==============================
+
+async function checkAuth() {
+    try {
+        const { data, error } = await supabaseClient.auth.getUser();
+
+        if (error) {
+            console.error("Ошибка проверки входа:", error);
+        }
+
+        const authPage = document.getElementById("authPage");
+        const homePage = document.getElementById("homePage");
+        const bottomMenu = document.querySelector(".bottom-menu");
+
+        if (data && data.user) {
+            await openMainAfterLogin();
+        } else {
+            if (authPage) authPage.style.display = "block";
+            if (homePage) homePage.style.display = "none";
+            if (bottomMenu) bottomMenu.style.display = "none";
+
+            showLoginForm();
+        }
+    } catch (error) {
+        console.error("Ошибка проверки авторизации:", error);
+    }
+}
+
+
+// ==============================
+// ВЫХОД ИЗ АККАУНТА
+// ==============================
+
+async function logoutUser() {
+    try {
+        const { error } = await supabaseClient.auth.signOut();
+
+        if (error) {
+            console.error("Ошибка выхода:", error);
+            alert("Не удалось выйти из аккаунта: " + error.message);
+            return;
+        }
+
+        const authPage = document.getElementById("authPage");
+        const homePage = document.getElementById("homePage");
+        const bottomMenu = document.querySelector(".bottom-menu");
+
+        if (authPage) authPage.style.display = "block";
+        if (homePage) homePage.style.display = "none";
+        if (bottomMenu) bottomMenu.style.display = "none";
+
+        showLoginForm();
+    } catch (error) {
+        console.error("Ошибка выхода:", error);
+        alert("Не удалось выйти из аккаунта.");
+    }
+}
+
+
+// ==============================
+// ДАННЫЕ ПОЛЬЗОВАТЕЛЯ
+// ==============================
+
+async function loadUserProfile() {
+    try {
+        const { data, error } = await supabaseClient.auth.getUser();
+
+        if (error || !data.user) {
+            return;
+        }
+
+        const emailElement = document.getElementById("userEmail");
+
+        if (emailElement) {
+            emailElement.textContent = data.user.email || "";
+        }
+    } catch (error) {
+        console.error("Ошибка загрузки профиля:", error);
+    }
+}
+
+
+// ==============================
+// СЛЕДИМ ЗА ИЗМЕНЕНИЕМ АВТОРИЗАЦИИ
+// ==============================
+
+supabaseClient.auth.onAuthStateChange((event, session) => {
+    console.log("Auth event:", event);
+
+    if (event === "SIGNED_OUT") {
+        const authPage = document.getElementById("authPage");
+        const homePage = document.getElementById("homePage");
+        const bottomMenu = document.querySelector(".bottom-menu");
+
+        if (authPage) authPage.style.display = "block";
+        if (homePage) homePage.style.display = "none";
+        if (bottomMenu) bottomMenu.style.display = "none";
+
+        showLoginForm();
+    }
+});
+
+
+// ==============================
+// ЗАПУСК ПРИЛОЖЕНИЯ
+// ==============================
+
+async function startApp() {
+    const authPage = document.getElementById("authPage");
+    const homePage = document.getElementById("homePage");
+    const bottomMenu = document.querySelector(".bottom-menu");
+
+    if (authPage) authPage.style.display = "block";
+    if (homePage) homePage.style.display = "none";
+    if (bottomMenu) bottomMenu.style.display = "none";
+
+    showLoginForm();
+
+   
+}
+
+startApp();
