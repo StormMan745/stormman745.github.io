@@ -840,3 +840,374 @@ textarea {
         padding: 22px 14px;
     }
 }
+/* ===== PETCARE: MODERN MINT DESIGN ===== */
+
+:root {
+    --green: #286548;
+    --green-dark: #204b37;
+    --mint: #e5f1e7;
+    --mint-soft: #f3f8f3;
+    --page-bg: #f2f6f2;
+    --card: #ffffff;
+    --text: #24352a;
+    --muted: #7b8a7e;
+    --border: #e2ebe3;
+    --shadow: 0 8px 28px rgba(36, 73, 48, 0.07);
+}
+
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: var(--page-bg);
+    color: var(--text);
+    line-height: 1.5;
+}
+
+.app {
+    max-width: 520px;
+    background: var(--mint-soft);
+    padding: 24px 20px 110px;
+    box-shadow: 0 0 50px rgba(36, 73, 48, 0.04);
+}
+
+h1, h2, h3, strong {
+    color: var(--green-dark);
+    letter-spacing: -0.35px;
+}
+
+.top-header {
+    margin-bottom: 24px;
+}
+
+.top-header h1 {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -1px;
+}
+
+.top-header p,
+.welcome p,
+.pet-info p,
+.pet-big-card p,
+.health-header p,
+.profile-card p {
+    color: var(--muted);
+}
+
+.welcome {
+    background: linear-gradient(135deg, #dcefe0, #edf6ee);
+    border: 1px solid #d8e9db;
+    border-radius: 26px;
+    padding: 26px 22px;
+    margin-bottom: 18px;
+}
+
+.welcome h2 {
+    font-size: 24px;
+}
+
+.pet-card,
+.task,
+.health-record,
+.reminder,
+.profile-item,
+.data-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: 0 4px 14px rgba(36, 73, 48, 0.035);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pet-card {
+    padding: 17px;
+    margin-bottom: 28px;
+}
+
+.pet-photo,
+.task-icon,
+.record-icon,
+.reminder-icon,
+.pet-big-photo,
+.profile-avatar,
+.health-icon {
+    background: var(--mint);
+    color: var(--green);
+    border-radius: 18px;
+}
+
+.pet-card button,
+.page-header button {
+    background: var(--mint);
+    color: var(--green);
+    border: none;
+    border-radius: 13px;
+    transition: background 0.2s ease;
+}
+
+.pet-card button {
+    width: 42px;
+    height: 42px;
+}
+
+.section-heading {
+    margin-bottom: 16px;
+}
+
+.section-heading h2,
+.page-header h2 {
+    font-size: 22px;
+    font-weight: 750;
+}
+
+.task {
+    padding: 14px;
+    margin-bottom: 11px;
+}
+
+.task.done {
+    opacity: 0.58;
+}
+
+.page {
+    padding-top: 8px;
+    min-height: 75vh;
+}
+
+.page-header {
+    margin-bottom: 24px;
+}
+
+.page-header button {
+    flex-shrink: 0;
+}
+
+.pet-big-card,
+.profile-card {
+    background: linear-gradient(145deg, #e4f1e6, #f5faf5);
+    border: 1px solid #dceade;
+    border-radius: 26px;
+    padding: 28px 20px;
+    margin-bottom: 18px;
+}
+
+.pet-big-photo {
+    width: 116px;
+    height: 116px;
+    margin-bottom: 18px;
+    font-size: 58px;
+}
+
+.pet-data {
+    gap: 12px;
+}
+
+.data-item {
+    padding: 15px 12px;
+}
+
+.health-header {
+    background: #e9f3eb;
+    border: 1px solid #dceade;
+    border-radius: 23px;
+}
+
+.health-record,
+.reminder {
+    padding: 15px;
+    margin-bottom: 11px;
+}
+
+.record-info strong,
+.reminder strong {
+    overflow-wrap: anywhere;
+}
+
+.profile-card {
+    margin-bottom: 20px;
+}
+
+.profile-avatar {
+    width: 84px;
+    height: 84px;
+}
+
+.profile-item {
+    padding: 17px;
+    margin-bottom: 11px;
+}
+
+.primary-button {
+    background: var(--green);
+    color: white;
+    border: none;
+    border-radius: 15px;
+    padding: 15px 18px;
+    font-size: 15px;
+    font-weight: 700;
+    box-shadow: 0 5px 12px rgba(40, 101, 72, 0.15);
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+input,
+select,
+textarea {
+    background: #fff;
+    color: var(--text);
+    border: 1px solid #dce6dd;
+    border-radius: 14px;
+    padding: 14px;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: #73a985;
+    box-shadow: 0 0 0 3px rgba(91, 151, 108, 0.12);
+}
+
+label {
+    color: var(--green-dark);
+    font-weight: 650;
+}
+
+.auth-page {
+    min-height: 100vh;
+    padding: 24px 12px;
+}
+
+.auth-card {
+    max-width: 410px;
+    padding: 32px 24px;
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    box-shadow: 0 18px 50px rgba(36, 73, 48, 0.10);
+}
+
+.auth-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 76px;
+    height: 76px;
+    border-radius: 24px;
+    background: var(--mint);
+    font-size: 42px;
+}
+
+.auth-card h1 {
+    font-size: 32px;
+    font-weight: 800;
+}
+
+.auth-subtitle {
+    color: var(--muted);
+    margin-top: 5px;
+}
+
+.auth-tabs {
+    gap: 8px;
+    margin-bottom: 22px;
+}
+
+.auth-tab {
+    background: #f0f4f0;
+    color: #526557;
+    border-radius: 13px;
+    font-weight: 650;
+    transition: background 0.2s ease;
+}
+
+.auth-tab.active {
+    background: var(--green);
+    color: #fff;
+}
+
+.auth-message {
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.bottom-menu {
+    max-width: 520px;
+    background: rgba(255, 255, 255, 0.96);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -8px 28px rgba(36, 73, 48, 0.06);
+    padding: 10px 4px calc(10px + env(safe-area-inset-bottom));
+    backdrop-filter: blur(14px);
+}
+
+.bottom-menu a {
+    flex: 1;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    text-align: center;
+    border-radius: 12px;
+    padding: 6px 2px;
+}
+
+.bottom-menu span {
+    font-size: 21px;
+}
+
+button {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible {
+    outline: 3px solid #91c39d;
+    outline-offset: 3px;
+}
+
+@media (hover: hover) {
+    .pet-card:hover,
+    .task:hover,
+    .health-record:hover,
+    .reminder:hover,
+    .profile-item:hover,
+    .data-item:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow);
+    }
+
+    .primary-button:hover {
+        background: var(--green-dark);
+        transform: translateY(-1px);
+    }
+
+    .pet-card button:hover,
+    .page-header button:hover {
+        background: #cfe5d3;
+    }
+}
+
+@media (max-width: 380px) {
+    .app {
+        padding: 17px 14px 105px;
+    }
+
+    .auth-card {
+        padding: 25px 17px;
+    }
+
+    .pet-data {
+        grid-template-columns: 1fr;
+    }
+
+    .bottom-menu a {
+        font-size: 9px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}
