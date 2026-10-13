@@ -1062,3 +1062,12 @@ async function startApp() {
 }
 
 startApp();
+function showAssistant() {
+    const authPage = document.getElementById("authPage");
+    const homePage = document.getElementById("homePage");
+    const assistantPage = document.getElementById("assistantPage");
+
+    if (authPage) authPage.style.display = "none";
+    if (homePage) homePage.style.display = "none";
+    if (assistantPage) assistantPage.style.display = "block";
+}
