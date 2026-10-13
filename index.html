@@ -363,6 +363,32 @@
     </section>
 
     <!-- НИЖНЕЕ МЕНЮ -->
+    <!-- ИИ-АССИСТЕНТ -->
+<section class="page" id="assistantPage" style="display: none;">
+
+    <div class="page-header">
+        <button onclick="showHome()">←</button>
+        <h2>ИИ-помощник 🤖</h2>
+    </div>
+
+    <div id="assistantMessages">
+        <div class="assistant-message">
+            Привет! 🐾 Я PetCare AI.
+            Задай мне вопрос об уходе за своим питомцем!
+        </div>
+    </div>
+
+    <div class="assistant-input">
+        <input
+            type="text"
+            id="assistantQuestion"
+            placeholder="Например: чем кормить собаку?"
+        >
+
+        <button onclick="sendAssistantMessage()">➤</button>
+    </div>
+
+</section>
     <nav class="bottom-menu" style="display: none;">
         <a href="#" onclick="showHome(); return false;">
             <span>🏠</span>
@@ -388,6 +414,11 @@
             <span>👤</span>
             Профиль
         </a>
+
+        <a href="#" onclick="showAssistant(); return false;">
+    <span>🤖</span>
+    ИИ-помощник
+</a>
     </nav>
 
 </div>
