@@ -10,7 +10,7 @@
 <div class="app">
 
     <!-- ГЛАВНАЯ -->
-    <main id="homePage" style="display: none;">
+    <main id="homePage" class="page" style="display: none;">
         <header class="top-header">
             <div>
                 <h1>PetCare 🐾</h1>
@@ -280,7 +280,7 @@
         <div class="profile-item" onclick="showPet()">🐾 Мой питомец</div>
         <div class="profile-item" onclick="showHealth()">❤️ Здоровье</div>
         <div class="profile-item" onclick="showReminders()">🔔 Напоминания</div>
-
+        <button class="logout-button" type="button" onclick="logoutUser()">🚪 Выйти из аккаунта</button>
 
     </section>
      <!-- ВХОД И РЕГИСТРАЦИЯ -->
@@ -371,22 +371,20 @@
         <h2>ИИ-помощник 🤖</h2>
     </div>
 
-    <div id="assistantMessages">
-        <div class="assistant-message">
-            Привет! 🐾 Я PetCare AI.
-            Задай мне вопрос об уходе за своим питомцем!
-        </div>
-    </div>
+    <div id="assistantMessages" aria-live="polite" aria-label="Переписка с помощником"></div>
 
-    <div class="assistant-input">
+    <form class="assistant-input" id="assistantForm">
         <input
             type="text"
             id="assistantQuestion"
+            maxlength="1200"
+            autocomplete="off"
+            aria-label="Ваш вопрос"
             placeholder="Например: чем кормить собаку?"
         >
 
-        <button onclick="sendAssistantMessage()">➤</button>
-    </div>
+        <button type="submit" aria-label="Отправить вопрос">➤</button>
+    </form>
 
 </section>
     <nav class="bottom-menu" style="display: none;">

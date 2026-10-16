@@ -16,6 +16,9 @@ const supabaseClient = supabase.createClient(
 // ==============================
 
 const STORAGE_KEY = "petcareData";
+const CLOUD_TABLE = "petcare_data";
+let activeUserId = null;
+let cloudSaveQueue = Promise.resolve();
 
 let appData = {
     pet: {
@@ -27,7 +30,8 @@ let appData = {
     },
     healthRecords: [],
     reminders: [],
-    completedTasks: []
+    completedTasks: [],
+    assistantConversation: []
 };
 
 
@@ -37,9 +41,32 @@ let appData = {
 
 function saveData() {
     localStorage.setItem(
-        STORAGE_KEY,
+        activeUserId ? `${STORAGE_KEY}:${activeUserId}` : STORAGE_KEY,
         JSON.stringify(appData)
     );
+
+    if (!activeUserId) return Promise.resolve();
+
+    const userId = activeUserId;
+    const snapshot = JSON.parse(JSON.stringify(appData));
+    cloudSaveQueue = cloudSaveQueue
+        .catch(() => {})
+        .then(async () => {
+            const { error } = await supabaseClient
+                .from(CLOUD_TABLE)
+                .upsert({
+                    user_id: userId,
+                    data: snapshot,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: "user_id" });
+
+            if (error) throw error;
+        })
+        .catch(error => {
+            console.error("Не удалось сохранить данные в Supabase. Локальная копия сохранена:", error);
+        });
+
+    return cloudSaveQueue;
 }
 
 
@@ -48,7 +75,9 @@ function saveData() {
 // ==============================
 
 function loadData() {
-    const savedData = localStorage.getItem(STORAGE_KEY);
+    const savedData = localStorage.getItem(
+        activeUserId ? `${STORAGE_KEY}:${activeUserId}` : STORAGE_KEY
+    );
 
     if (!savedData) {
         return;
@@ -64,6 +93,59 @@ function loadData() {
     } catch (error) {
         console.error("Ошибка загрузки данных:", error);
     }
+}
+
+async function loadDataFromDatabase(userId) {
+    activeUserId = userId;
+    const userStorageKey = `${STORAGE_KEY}:${userId}`;
+    const legacyData = localStorage.getItem(userStorageKey)
+        ? null
+        : localStorage.getItem(STORAGE_KEY);
+    const savedData = localStorage.getItem(userStorageKey) || legacyData;
+
+    if (savedData) {
+        try {
+            const parsed = JSON.parse(savedData);
+            appData = {
+                ...appData,
+                ...parsed,
+                pet: { ...appData.pet, ...(parsed.pet || {}) },
+                healthRecords: Array.isArray(parsed.healthRecords) ? parsed.healthRecords : [],
+                reminders: Array.isArray(parsed.reminders) ? parsed.reminders : [],
+                completedTasks: Array.isArray(parsed.completedTasks) ? parsed.completedTasks : [],
+                assistantConversation: Array.isArray(parsed.assistantConversation) ? parsed.assistantConversation : []
+            };
+        } catch (error) {
+            console.error("Не удалось прочитать локальную копию данных:", error);
+        }
+    }
+
+    const { data, error } = await supabaseClient
+        .from(CLOUD_TABLE)
+        .select("data")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+    if (error) {
+        console.error("Не удалось загрузить данные из Supabase; используется локальная копия:", error);
+    } else if (data && data.data) {
+        const cloudData = data.data;
+        appData = {
+            ...appData,
+            ...cloudData,
+            pet: { ...appData.pet, ...(cloudData.pet || {}) },
+            healthRecords: Array.isArray(cloudData.healthRecords) ? cloudData.healthRecords : [],
+            reminders: Array.isArray(cloudData.reminders) ? cloudData.reminders : [],
+            completedTasks: Array.isArray(cloudData.completedTasks) ? cloudData.completedTasks : [],
+            assistantConversation: Array.isArray(cloudData.assistantConversation) ? cloudData.assistantConversation : []
+        };
+    } else if (savedData) {
+        // First sign-in after the upgrade: migrate this browser's saved data to the account.
+        await saveData();
+    }
+
+    localStorage.setItem(userStorageKey, JSON.stringify(appData));
+    if (legacyData) localStorage.removeItem(STORAGE_KEY);
 }
 
 
@@ -255,6 +337,7 @@ const petData = {
                 .from("pets")
                 .update(petData)
                 .eq("id", appData.pet.dbId)
+                .eq("user_id", userData.user.id)
                 .select()
                 .maybeSingle();
         } else {
@@ -443,7 +526,7 @@ function closeHealthForm() {
 // СОХРАНЕНИЕ ЗАПИСИ ЗДОРОВЬЯ
 // ==============================
 
-function saveHealthRecord() {
+async function saveHealthRecord() {
     const type = document.getElementById("recordType").value;
     const name = document.getElementById("recordName").value.trim();
     const date = document.getElementById("recordDate").value;
@@ -464,7 +547,7 @@ function saveHealthRecord() {
 
     appData.healthRecords.push(record);
 
-    saveData();
+    await saveData();
     addHealthRecordToScreen(record);
     closeHealthForm();
 }
@@ -577,7 +660,7 @@ function closeReminderForm() {
 // СОХРАНЕНИЕ НАПОМИНАНИЯ
 // ==============================
 
-function saveReminder() {
+async function saveReminder() {
     const type = document.getElementById("reminderType").value;
     const name = document.getElementById("reminderName").value.trim();
     const date = document.getElementById("reminderDate").value;
@@ -598,7 +681,7 @@ function saveReminder() {
 
     appData.reminders.push(reminder);
 
-    saveData();
+    await saveData();
     addReminderToScreen(reminder);
     closeReminderForm();
 }
@@ -691,7 +774,7 @@ function renderReminders() {
 // ЗАДАЧИ НА ГЛАВНОЙ
 // ==============================
 
-function completeTask(element, taskName) {
+async function completeTask(element, taskName) {
     if (!element) {
         return;
     }
@@ -708,7 +791,7 @@ function completeTask(element, taskName) {
         );
     }
 
-    saveData();
+    await saveData();
 }
 
 
@@ -924,7 +1007,13 @@ async function openMainAfterLogin() {
     if (homePage) homePage.style.display = "block";
     if (bottomMenu) bottomMenu.style.display = "flex";
 
-    loadData();
+    const { data: authData, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !authData.user) {
+        console.error("Не удалось определить пользователя для загрузки данных:", authError);
+        return;
+    }
+
+    await loadDataFromDatabase(authData.user.id);
     setTodayDate();
     updatePetOnScreen();
     renderHealthRecords();
@@ -984,13 +1073,13 @@ async function logoutUser() {
         }
 
         const authPage = document.getElementById("authPage");
-        const homePage = document.getElementById("homePage");
         const bottomMenu = document.querySelector(".bottom-menu");
 
-        if (authPage) authPage.style.display = "block";
-        if (homePage) homePage.style.display = "none";
+        hideAllPages();
+        if (authPage) authPage.style.display = "flex";
         if (bottomMenu) bottomMenu.style.display = "none";
 
+        activeUserId = null;
         showLoginForm();
     } catch (error) {
         console.error("Ошибка выхода:", error);
@@ -1031,13 +1120,13 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
 
     if (event === "SIGNED_OUT") {
         const authPage = document.getElementById("authPage");
-        const homePage = document.getElementById("homePage");
         const bottomMenu = document.querySelector(".bottom-menu");
 
-        if (authPage) authPage.style.display = "block";
-        if (homePage) homePage.style.display = "none";
+        hideAllPages();
+        if (authPage) authPage.style.display = "flex";
         if (bottomMenu) bottomMenu.style.display = "none";
 
+        activeUserId = null;
         showLoginForm();
     }
 });
@@ -1057,17 +1146,119 @@ async function startApp() {
     if (bottomMenu) bottomMenu.style.display = "none";
 
     showLoginForm();
-
-   
+    await checkAuth();
 }
 
 startApp();
 function showAssistant() {
-    const authPage = document.getElementById("authPage");
-    const homePage = document.getElementById("homePage");
+    hideAllPages();
     const assistantPage = document.getElementById("assistantPage");
 
-    if (authPage) authPage.style.display = "none";
-    if (homePage) homePage.style.display = "none";
     if (assistantPage) assistantPage.style.display = "block";
+
+    renderAssistantConversation();
 }
+
+function addAssistantBubble(role, content) {
+    const container = document.getElementById("assistantMessages");
+    if (!container) return null;
+
+    const bubble = document.createElement("div");
+    bubble.className = `assistant-message ${role === "user" ? "user-message" : "bot-message"}`;
+    bubble.textContent = content;
+    container.appendChild(bubble);
+    container.scrollTop = container.scrollHeight;
+    return bubble;
+}
+
+function renderAssistantConversation() {
+    const container = document.getElementById("assistantMessages");
+    if (!container) return;
+
+    container.replaceChildren();
+    const messages = Array.isArray(appData.assistantConversation)
+        ? appData.assistantConversation
+        : [];
+
+    if (messages.length === 0) {
+        addAssistantBubble("assistant", "Привет! 🐾 Я PetCare AI. Спроси меня об уходе за питомцем.");
+        return;
+    }
+
+    messages.forEach(message => {
+        if (message && ["user", "assistant"].includes(message.role) && typeof message.content === "string") {
+            addAssistantBubble(message.role, message.content);
+        }
+    });
+}
+
+async function sendAssistantMessage(event) {
+    event?.preventDefault();
+    const input = document.getElementById("assistantQuestion");
+    const sendButton = document.querySelector("#assistantForm button[type='submit']");
+    const question = input?.value.trim();
+    if (!question || sendButton?.disabled) return;
+
+    const conversation = Array.isArray(appData.assistantConversation)
+        ? appData.assistantConversation
+        : [];
+    appData.assistantConversation = conversation;
+    conversation.push({ role: "user", content: question });
+    appData.assistantConversation = conversation.slice(-30);
+    addAssistantBubble("user", question);
+    input.value = "";
+    if (sendButton) sendButton.disabled = true;
+
+    const typingBubble = addAssistantBubble("assistant", "Думаю над ответом…");
+    saveData();
+
+    try {
+        const pet = appData.pet || {};
+        const { data, error } = await supabaseClient.functions.invoke("petcare-assistant", {
+            body: {
+                messages: appData.assistantConversation.slice(-12),
+                pet: {
+                    name: String(pet.name || "").slice(0, 80),
+                    breed: String(pet.breed || "").slice(0, 100),
+                    animal: String(pet.animal || "").slice(0, 40),
+                    weight: String(pet.weight || "").slice(0, 20)
+                }
+            }
+        });
+
+        if (error) {
+            let detail = error.message || "Не удалось связаться с ИИ-помощником.";
+            if (error.name === "FunctionsFetchError" || detail.includes("Failed to send a request")) {
+                detail = "Supabase не смог достучаться до функции petcare-assistant. Возможно, функция ещё не опубликована или соединение блокирует CORS/сеть.";
+            }
+            try {
+                const response = error.context;
+                if (response && typeof response.json === "function") {
+                    const body = await response.json();
+                    if (body.error) detail = body.error;
+                }
+            } catch (_) {}
+            throw new Error(detail);
+        }
+
+        if (!data || typeof data.answer !== "string" || !data.answer.trim()) {
+            throw new Error("Помощник вернул пустой ответ. Попробуй ещё раз.");
+        }
+
+        appData.assistantConversation.push({ role: "assistant", content: data.answer.trim() });
+        appData.assistantConversation = appData.assistantConversation.slice(-30);
+        renderAssistantConversation();
+        await saveData();
+    } catch (error) {
+        typingBubble?.remove();
+        addAssistantBubble(
+            "assistant",
+            `Не получилось получить ответ: ${error.message} Проверь, что функция PetCare AI опубликована и в Supabase добавлен ключ OpenAI.`
+        )?.classList.add("assistant-error");
+    } finally {
+        if (sendButton) sendButton.disabled = false;
+        input?.focus();
+    }
+}
+
+document.getElementById("assistantForm")?.addEventListener("submit", sendAssistantMessage);
