@@ -75,6 +75,14 @@
             <h2>Мой питомец</h2>
         </div>
 
+        <div class="pet-switcher">
+            <label for="petSwitcher">Профиль питомца</label>
+            <div class="pet-switcher-controls">
+                <select id="petSwitcher" onchange="switchPet(this.value)" aria-label="Выбрать питомца"></select>
+                <button type="button" class="secondary-button" onclick="openPetForm(true)">+ Добавить</button>
+            </div>
+        </div>
+
         <div class="pet-big-card">
             <div class="pet-big-photo" id="petPhoto">🐶</div>
             <h2 id="petName">Барни</h2>
@@ -108,7 +116,17 @@
     <section class="page" id="petForm">
         <div class="page-header">
             <button onclick="closePetForm()">←</button>
-            <h2>Данные питомца</h2>
+            <h2 id="petFormTitle">Данные питомца</h2>
+        </div>
+
+        <div class="pet-photo-editor">
+            <div class="pet-photo-preview" id="petPhotoPreview" aria-label="Предпросмотр фотографии">🐶</div>
+            <div class="pet-photo-actions">
+                <label class="photo-upload-button" for="petPhotoInput">Выбрать фото</label>
+                <input type="file" id="petPhotoInput" accept="image/*" aria-label="Загрузить фотографию питомца">
+                <button type="button" class="text-button" onclick="removePetPhoto()">Удалить фото</button>
+            </div>
+            <small class="field-hint">Фото до 10 МБ. Оно будет уменьшено и сохранено в профиле.</small>
         </div>
 
         <label for="nameInput">Имя питомца</label>
@@ -129,7 +147,7 @@
             <option value="🐦">Птица 🐦</option>
         </select>
 
-        <button class="primary-button" onclick="savePet()">
+        <button class="primary-button" id="savePetButton" onclick="savePet()">
             💾 Сохранить
         </button>
     </section>
@@ -258,6 +276,13 @@
         <label for="reminderTime">Время</label>
         <input type="time" id="reminderTime">
 
+        <label for="reminderRepeat">Повторять</label>
+        <select id="reminderRepeat">
+            <option value="once">Не повторять</option>
+            <option value="daily">Каждый день</option>
+            <option value="weekly">Каждую неделю</option>
+        </select>
+
         <button class="primary-button" onclick="saveReminder()">
             🔔 Добавить
         </button>
@@ -368,9 +393,10 @@
 
     <div class="page-header">
         <button onclick="showHome()">←</button>
-        <h2>ИИ-помощник 🤖</h2>
+        <h2>Помощник PetCare 🐾</h2>
     </div>
 
+    <p class="assistant-disclaimer">Ответы готовит GigaChat. Сообщения и основные данные питомца отправляются в GigaChat. Помощник не заменяет ветеринара.</p>
     <div id="assistantMessages" aria-live="polite" aria-label="Переписка с помощником"></div>
 
     <form class="assistant-input" id="assistantForm">

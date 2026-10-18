@@ -1382,6 +1382,12 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* PetCare AI chat */
+.assistant-disclaimer {
+    margin: -10px 2px 12px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
 #assistantMessages {
     display: flex;
     flex-direction: column;
@@ -1466,4 +1472,152 @@ input:focus, select:focus, textarea:focus {
 .logout-button:hover {
     background: #ffefed;
     transform: translateY(-1px);
+}
+
+.pet-switcher {
+    margin: 0 0 18px;
+    padding: 15px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, .82);
+}
+
+.pet-switcher label {
+    display: block;
+    margin: 0 0 8px;
+}
+
+.pet-switcher-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+}
+
+.pet-switcher-controls select {
+    min-width: 0;
+}
+
+.secondary-button,
+.photo-upload-button {
+    display: inline-flex;
+    min-height: 48px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 14px;
+    border: 1px solid #d6e6da;
+    border-radius: 14px;
+    background: #edf6ef;
+    color: var(--green-dark);
+    font: inherit;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.pet-photo-editor {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px 16px;
+    margin: 0 0 10px;
+    padding: 15px;
+    border: 1px solid var(--border);
+    border-radius: 19px;
+    background: #fff;
+}
+
+.pet-photo-preview {
+    display: grid;
+    width: 88px;
+    height: 88px;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 22px;
+    background: var(--mint);
+    color: var(--green);
+    font-size: 40px;
+}
+
+.pet-photo-preview img,
+.pet-photo img,
+.pet-big-photo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    object-fit: cover;
+}
+
+.pet-photo.has-photo,
+.pet-big-photo.has-photo {
+    overflow: hidden;
+    padding: 0;
+    font-size: 0;
+}
+
+.pet-photo-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px 10px;
+}
+
+.photo-upload-button {
+    min-height: 40px;
+    padding: 0 12px;
+    font-size: 13px;
+}
+
+.pet-photo-actions input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    min-height: 1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+}
+
+.pet-photo-editor:focus-within .photo-upload-button {
+    outline: 3px solid #91c39d;
+    outline-offset: 2px;
+}
+
+.text-button {
+    border: 0;
+    background: transparent;
+    color: #75867a;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.text-button:hover {
+    color: #a33d36;
+}
+
+.field-hint {
+    grid-column: 1 / -1;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+@media (max-width: 380px) {
+    .pet-switcher-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .pet-photo-editor {
+        grid-template-columns: 72px minmax(0, 1fr);
+        gap: 10px;
+    }
+
+    .pet-photo-preview {
+        width: 72px;
+        height: 72px;
+    }
 }

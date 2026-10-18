@@ -1,4 +1,4 @@
-project_id = "your-supabase-project-ref"
+project_id = "qexiyikdmdbdxgusqnee"
 
 [functions.petcare-assistant]
 verify_jwt = true

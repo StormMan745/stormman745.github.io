@@ -22,17 +22,85 @@ let cloudSaveQueue = Promise.resolve();
 
 let appData = {
     pet: {
+        id: "legacy-default",
         name: "Барни",
         breed: "Золотистый ретривер",
         weight: "28",
         animal: "🐶",
         dbId: null
     },
+    pets: [],
+    activePetId: null,
     healthRecords: [],
     reminders: [],
     completedTasks: [],
     assistantConversation: []
 };
+
+function getPetKey(pet) {
+    return String(pet?.dbId ?? pet?.id ?? "legacy-default");
+}
+
+function getActivePetKey() {
+    return getPetKey(appData.pet);
+}
+
+function normalizeAppData() {
+    const previousPet = appData.pet && typeof appData.pet === "object"
+        ? { ...appData.pet }
+        : null;
+    const petsById = new Map();
+
+    (Array.isArray(appData.pets) ? appData.pets : []).forEach(pet => {
+        if (!pet || typeof pet !== "object") return;
+        const normalizedPet = { ...pet };
+        if (!normalizedPet.id) normalizedPet.id = normalizedPet.dbId ?? `pet-${Date.now()}`;
+        petsById.set(getPetKey(normalizedPet), normalizedPet);
+    });
+
+    if (previousPet) {
+        const previousKey = getPetKey(previousPet);
+        const existing = petsById.get(previousKey);
+        petsById.set(previousKey, { ...(existing || {}), ...previousPet, id: previousPet.id || previousPet.dbId || previousKey });
+    }
+
+    if (!petsById.size) {
+        const fallbackPet = previousPet || {
+            id: "legacy-default",
+            name: "Барни",
+            breed: "Золотистый ретривер",
+            weight: "28",
+            animal: "🐶",
+            dbId: null
+        };
+        petsById.set(getPetKey(fallbackPet), fallbackPet);
+    }
+
+    const pets = [...petsById.values()];
+    const desiredId = appData.activePetId == null
+        ? (previousPet ? getPetKey(previousPet) : getPetKey(pets[0]))
+        : String(appData.activePetId);
+    const activePet = pets.find(pet => getPetKey(pet) === desiredId) || pets[0];
+
+    appData.pets = pets;
+    appData.pet = activePet;
+    appData.activePetId = getPetKey(activePet);
+    appData.healthRecords = Array.isArray(appData.healthRecords) ? appData.healthRecords : [];
+    appData.reminders = Array.isArray(appData.reminders) ? appData.reminders : [];
+    appData.completedTasks = Array.isArray(appData.completedTasks) ? appData.completedTasks : [];
+    appData.assistantConversation = Array.isArray(appData.assistantConversation) ? appData.assistantConversation : [];
+
+    const legacyPetId = previousPet ? getPetKey(previousPet) : getPetKey(activePet);
+    appData.healthRecords = appData.healthRecords.map(record => ({
+        ...record,
+        petId: record.petId == null ? legacyPetId : String(record.petId)
+    }));
+    appData.reminders = appData.reminders.map(reminder => ({
+        ...reminder,
+        petId: reminder.petId == null ? legacyPetId : String(reminder.petId),
+        repeat: reminder.repeat || "once"
+    }));
+}
 
 
 // ==============================
@@ -40,15 +108,22 @@ let appData = {
 // ==============================
 
 function saveData() {
+    const snapshot = JSON.parse(JSON.stringify(appData));
+    const activePhotoRecord = snapshot.pets?.find(pet =>
+        getPetKey(pet) === getPetKey(snapshot.pet)
+    );
+    if (activePhotoRecord?.photoData && snapshot.pet) {
+        delete snapshot.pet.photoData;
+    }
+
     localStorage.setItem(
         activeUserId ? `${STORAGE_KEY}:${activeUserId}` : STORAGE_KEY,
-        JSON.stringify(appData)
+        JSON.stringify(snapshot)
     );
 
     if (!activeUserId) return Promise.resolve();
 
     const userId = activeUserId;
-    const snapshot = JSON.parse(JSON.stringify(appData));
     cloudSaveQueue = cloudSaveQueue
         .catch(() => {})
         .then(async () => {
@@ -90,6 +165,7 @@ function loadData() {
             ...appData,
             ...parsedData
         };
+        normalizeAppData();
     } catch (error) {
         console.error("Ошибка загрузки данных:", error);
     }
@@ -115,6 +191,7 @@ async function loadDataFromDatabase(userId) {
                 completedTasks: Array.isArray(parsed.completedTasks) ? parsed.completedTasks : [],
                 assistantConversation: Array.isArray(parsed.assistantConversation) ? parsed.assistantConversation : []
             };
+            normalizeAppData();
         } catch (error) {
             console.error("Не удалось прочитать локальную копию данных:", error);
         }
@@ -141,9 +218,11 @@ async function loadDataFromDatabase(userId) {
         };
     } else if (savedData) {
         // First sign-in after the upgrade: migrate this browser's saved data to the account.
+        normalizeAppData();
         await saveData();
     }
 
+    normalizeAppData();
     localStorage.setItem(userStorageKey, JSON.stringify(appData));
     if (legacyData) localStorage.removeItem(STORAGE_KEY);
 }
@@ -251,7 +330,94 @@ function showProfile() {
 // ФОРМА ПИТОМЦА
 // ==============================
 
-function openPetForm() {
+let petFormMode = "edit";
+let pendingPetPhoto;
+
+function renderPetAvatar(element, pet) {
+    if (!element) return;
+    element.replaceChildren();
+    element.classList.toggle("has-photo", Boolean(pet?.photoData));
+
+    if (pet?.photoData) {
+        const image = document.createElement("img");
+        image.src = pet.photoData;
+        image.alt = pet.name ? `Фото питомца ${pet.name}` : "Фото питомца";
+        element.appendChild(image);
+        return;
+    }
+
+    element.textContent = pet?.animal || "🐾";
+}
+
+
+function compressPetPhoto(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Не удалось прочитать файл фотографии."));
+        reader.onload = () => {
+            const image = new Image();
+            image.onerror = () => reject(new Error("Не удалось открыть изображение."));
+            image.onload = () => {
+                const scale = Math.min(1, 720 / Math.max(image.naturalWidth, image.naturalHeight));
+                const canvas = document.createElement("canvas");
+                canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+                canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+                const context = canvas.getContext("2d");
+                if (!context) {
+                    reject(new Error("Не удалось обработать изображение."));
+                    return;
+                }
+                context.fillStyle = "#ffffff";
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                context.drawImage(image, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL("image/jpeg", 0.78));
+            };
+            image.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+
+async function handlePetPhotoSelection(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+        alert("Выберите файл изображения.");
+        event.target.value = "";
+        return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+        alert("Размер исходного фото должен быть не больше 10 МБ.");
+        event.target.value = "";
+        return;
+    }
+
+    try {
+        pendingPetPhoto = await compressPetPhoto(file);
+        renderPetAvatar(document.getElementById("petPhotoPreview"), {
+            name: document.getElementById("nameInput")?.value.trim(),
+            photoData: pendingPetPhoto
+        });
+    } catch (error) {
+        console.error("Ошибка обработки фото питомца:", error);
+        alert("Не удалось подготовить фотографию. Попробуйте выбрать другой файл.");
+        event.target.value = "";
+    }
+}
+
+
+function removePetPhoto() {
+    pendingPetPhoto = null;
+    const photoInput = document.getElementById("petPhotoInput");
+    if (photoInput) photoInput.value = "";
+    renderPetAvatar(document.getElementById("petPhotoPreview"), {
+        animal: document.getElementById("animalInput")?.value || "🐶"
+    });
+}
+
+function openPetForm(createNew = false) {
+    petFormMode = createNew ? "create" : "edit";
     hideAllPages();
 
     const petForm = document.getElementById("petForm");
@@ -274,22 +440,33 @@ function fillPetForm() {
     const breedInput = document.getElementById("breedInput");
     const weightInput = document.getElementById("weightInput");
     const animalInput = document.getElementById("animalInput");
+    const formTitle = document.getElementById("petFormTitle");
+    const saveButton = document.getElementById("savePetButton");
+    const photoInput = document.getElementById("petPhotoInput");
+    const formPet = petFormMode === "create" ? null : appData.pet;
+
+    pendingPetPhoto = undefined;
+    if (photoInput) photoInput.value = "";
+    if (formTitle) formTitle.textContent = petFormMode === "create" ? "Новый питомец" : "Данные питомца";
+    if (saveButton) saveButton.textContent = petFormMode === "create" ? "💾 Добавить питомца" : "💾 Сохранить";
 
     if (nameInput) {
-        nameInput.value = appData.pet.name || "";
+        nameInput.value = formPet?.name || "";
     }
 
     if (breedInput) {
-        breedInput.value = appData.pet.breed || "";
+        breedInput.value = formPet?.breed || "";
     }
 
     if (weightInput) {
-        weightInput.value = appData.pet.weight || "";
+        weightInput.value = formPet?.weight || "";
     }
 
     if (animalInput) {
-        animalInput.value = appData.pet.animal || "🐶";
+        animalInput.value = formPet?.animal || "🐶";
     }
+
+    renderPetAvatar(document.getElementById("petPhotoPreview"), formPet || { animal: animalInput?.value || "🐶" });
 }
 
 
@@ -303,6 +480,8 @@ async function savePet() {
     const weightInput = document.getElementById("weightInput");
     const animalInput = document.getElementById("animalInput");
 
+    const isCreating = petFormMode === "create";
+    const previousPet = isCreating ? null : appData.pet;
     const name = nameInput ? nameInput.value.trim() : "";
     const breed = breedInput ? breedInput.value.trim() : "";
     const weight = weightInput ? weightInput.value : "";
@@ -313,105 +492,89 @@ async function savePet() {
         return;
     }
 
-    const { data: userData, error: userError } =
-    await supabaseClient.auth.getUser();
+    const { data: userData, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !userData.user) {
+        alert("Сначала войдите в аккаунт!");
+        return;
+    }
 
-if (userError || !userData.user) {
-    alert("Сначала войдите в аккаунт!");
-    return;
-}
-
-const petData = {
-    name,
-    breed,
-    weight: weight ? Number(weight) : null,
-    animal,
-    user_id: userData.user.id
-};
+    const pet = {
+        ...(previousPet || {}),
+        id: previousPet ? getPetKey(previousPet) : `pet-${Date.now()}`,
+        name,
+        breed,
+        weight: weight ? Number(weight) : null,
+        animal,
+        photoData: pendingPetPhoto === undefined ? (previousPet?.photoData || null) : pendingPetPhoto,
+        dbId: previousPet?.dbId || null
+    };
+    const databasePet = {
+        name,
+        breed,
+        weight: weight ? Number(weight) : null,
+        animal,
+        user_id: userData.user.id
+    };
+    let databaseWarning = null;
 
     try {
-        let result;
-
-        if (appData.pet && appData.pet.dbId) {
-            result = await supabaseClient
+        const result = pet.dbId
+            ? await supabaseClient
                 .from("pets")
-                .update(petData)
-                .eq("id", appData.pet.dbId)
+                .update(databasePet)
+                .eq("id", pet.dbId)
                 .eq("user_id", userData.user.id)
                 .select()
-                .maybeSingle();
-        } else {
-            result = await supabaseClient
+                .maybeSingle()
+            : await supabaseClient
                 .from("pets")
-                .insert(petData)
+                .insert(databasePet)
                 .select()
                 .maybeSingle();
-        }
 
         if (result.error) {
-            console.error(
-                "Ошибка сохранения питомца в Supabase:",
-                result.error
-            );
-
-            appData.pet = {
-                ...(appData.pet || {}),
-                ...petData,
-                dbId: appData.pet ? appData.pet.dbId : null
-            };
-
-            saveData();
-            updatePetOnScreen();
-            closePetForm();
-
-            alert(
-                "Данные обновлены на этом устройстве, но не сохранены в облаке. Ошибка Supabase: " +
-                result.error.message
-            );
-
-            return;
+            databaseWarning = result.error;
+        } else if (result.data?.id) {
+            pet.dbId = result.data.id;
+            pet.id = String(result.data.id);
         }
-
-        if (!result.data) {
-            console.warn(
-                "Supabase не вернул запись после сохранения. Проверьте RLS-политики таблицы pets."
-            );
-
-            appData.pet = {
-                ...(appData.pet || {}),
-                ...petData,
-                dbId: appData.pet ? appData.pet.dbId : null
-            };
-
-            saveData();
-            updatePetOnScreen();
-            closePetForm();
-
-            alert(
-                "Данные обновлены на этом устройстве, но Supabase не вернул запись. Проверьте права доступа (RLS) таблицы pets."
-            );
-
-            return;
-        }
-
-        appData.pet = {
-            ...petData,
-            dbId: result.data.id
-        };
-
-        saveData();
-        updatePetOnScreen();
-        closePetForm();
-
-        alert("Питомец сохранён! 🐾");
-
     } catch (error) {
-        console.error("Ошибка сохранения питомца:", error);
+        databaseWarning = error;
+    }
 
-        alert(
-            "Не удалось сохранить данные. Подробности смотри в консоли браузера (F12 → Console)."
+    if (databaseWarning) {
+        console.warn("Не удалось обновить отдельную запись в таблице pets; профиль сохранится в данных PetCare:", databaseWarning);
+    }
+
+    const previousKey = previousPet ? getPetKey(previousPet) : null;
+    const newPetKey = getPetKey(pet);
+    if (!isCreating && previousKey !== newPetKey) {
+        appData.healthRecords = appData.healthRecords.map(record =>
+            String(record.petId) === previousKey ? { ...record, petId: newPetKey } : record
+        );
+        appData.reminders = appData.reminders.map(reminder =>
+            String(reminder.petId) === previousKey ? { ...reminder, petId: newPetKey } : reminder
         );
     }
+
+    if (isCreating) {
+        appData.pets.push(pet);
+    } else {
+        const petIndex = appData.pets.findIndex(existing => getPetKey(existing) === previousKey);
+        if (petIndex >= 0) appData.pets[petIndex] = pet;
+        else appData.pets.push(pet);
+    }
+
+    appData.pet = pet;
+    appData.activePetId = getPetKey(pet);
+    normalizeAppData();
+    await saveData();
+    updatePetOnScreen();
+    closePetForm();
+
+    alert(databaseWarning
+        ? "Профиль питомца сохранён. Данные останутся в аккаунте PetCare."
+        : "Питомец сохранён! 🐾");
 }
 
 
@@ -424,7 +587,6 @@ function updatePetOnScreen() {
 
     const name = pet.name || "Барни";
     const breed = pet.breed || "Порода не указана";
-    const animal = pet.animal || "🐶";
     const weight = pet.weight;
 
     const nameElement = document.getElementById("petName");
@@ -439,7 +601,7 @@ function updatePetOnScreen() {
         weightElement.textContent = weight ? weight + " кг" : "Не указан";
     }
 
-    if (photoElement) photoElement.textContent = animal;
+    renderPetAvatar(photoElement, pet);
 
     const homeName = document.getElementById("homePetName");
     const homeBreed = document.getElementById("homePetBreed");
@@ -447,13 +609,44 @@ function updatePetOnScreen() {
 
     if (homeName) homeName.textContent = name;
     if (homeBreed) homeBreed.textContent = breed;
-    if (homePhoto) homePhoto.textContent = animal;
+    renderPetAvatar(homePhoto, pet);
 
     const healthName = document.getElementById("healthPetName");
 
     if (healthName) {
         healthName.textContent = name;
     }
+
+    renderPetSwitcher();
+}
+
+
+function renderPetSwitcher() {
+    const switcher = document.getElementById("petSwitcher");
+    if (!switcher) return;
+
+    switcher.replaceChildren();
+    appData.pets.forEach(pet => {
+        const option = document.createElement("option");
+        option.value = getPetKey(pet);
+        option.textContent = pet.name || "Питомец без имени";
+        switcher.appendChild(option);
+    });
+    switcher.value = getActivePetKey();
+}
+
+
+async function switchPet(petId) {
+    const selectedPet = appData.pets.find(pet => getPetKey(pet) === String(petId));
+    if (!selectedPet) return;
+
+    appData.pet = selectedPet;
+    appData.activePetId = getPetKey(selectedPet);
+    normalizeAppData();
+    updatePetOnScreen();
+    renderHealthRecords();
+    renderReminders();
+    await saveData();
 }
 
 
@@ -475,27 +668,64 @@ async function loadPetFromDatabase() {
             .from("pets")
             .select("*")
             .eq("user_id", userData.user.id)
-            .order("id", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+            .order("id", { ascending: false });
 
         if (result.error) {
             console.error("Ошибка загрузки питомца:", result.error);
             return;
         }
 
-        if (result.data) {
-            appData.pet = {
-                name: result.data.name || "Барни",
-                breed: result.data.breed || "",
-                weight: result.data.weight ?? "",
-                animal: result.data.animal || "🐶",
-                dbId: result.data.id
-            };
+        const databasePets = Array.isArray(result.data) ? result.data : [];
+        if (!databasePets.length) return;
 
-            saveData();
-            updatePetOnScreen();
+        const savedPetsById = new Map(appData.pets
+            .filter(pet => pet.dbId != null)
+            .map(pet => [String(pet.dbId), pet]));
+        const isDefaultPlaceholder = pet => getPetKey(pet) === "legacy-default"
+            && pet.name === "Барни"
+            && pet.breed === "Золотистый ретривер"
+            && String(pet.weight) === "28"
+            && !pet.photoData;
+        const loadedPets = databasePets.map(row => {
+            const savedPet = savedPetsById.get(String(row.id)) || {};
+            return {
+                ...savedPet,
+                id: String(row.id),
+                dbId: row.id,
+                name: row.name || savedPet.name || "Барни",
+                breed: row.breed ?? savedPet.breed ?? "",
+                weight: row.weight ?? savedPet.weight ?? "",
+                animal: row.animal || savedPet.animal || "🐶",
+                photoData: savedPet.photoData || null
+            };
+        });
+        const databaseIds = new Set(loadedPets.map(pet => String(pet.dbId)));
+        const localOnlyPets = appData.pets.filter(pet => {
+            return pet.dbId == null && !databaseIds.has(getPetKey(pet)) && !isDefaultPlaceholder(pet);
+        });
+        appData.pets = [...loadedPets, ...localOnlyPets];
+
+        const selectedPet = appData.pets.find(pet => getPetKey(pet) === String(appData.activePetId))
+            || loadedPets[0]
+            || appData.pets[0];
+        const defaultPlaceholderWasRemoved = appData.pets.every(pet => !isDefaultPlaceholder(pet));
+        if (defaultPlaceholderWasRemoved) {
+            appData.healthRecords = appData.healthRecords.map(record =>
+                String(record.petId) === "legacy-default"
+                    ? { ...record, petId: getPetKey(selectedPet) }
+                    : record
+            );
+            appData.reminders = appData.reminders.map(reminder =>
+                String(reminder.petId) === "legacy-default"
+                    ? { ...reminder, petId: getPetKey(selectedPet) }
+                    : reminder
+            );
         }
+        appData.activePetId = getPetKey(selectedPet);
+        appData.pet = selectedPet;
+        normalizeAppData();
+        await saveData();
+        updatePetOnScreen();
     } catch (error) {
         console.error("Ошибка загрузки питомца:", error);
     }
@@ -542,7 +772,8 @@ async function saveHealthRecord() {
         type: type,
         name: name,
         date: date,
-        note: note
+        note: note,
+        petId: getActivePetKey()
     };
 
     appData.healthRecords.push(record);
@@ -581,25 +812,23 @@ function addHealthRecordToScreen(record) {
         icon = "🩺";
     }
 
-    recordElement.innerHTML = `
-        <div class="record-icon">
-            ${icon}
-        </div>
+    const iconElement = document.createElement("div");
+    iconElement.className = "record-icon";
+    iconElement.textContent = icon;
 
-        <div class="record-info">
-            <strong>${record.name}</strong>
-
-            <small>
-                ${record.date || "Дата не указана"}
-            </small>
-
-            ${
-                record.note
-                    ? `<small>${record.note}</small>`
-                    : ""
-            }
-        </div>
-    `;
+    const info = document.createElement("div");
+    info.className = "record-info";
+    const title = document.createElement("strong");
+    title.textContent = record.name;
+    const date = document.createElement("small");
+    date.textContent = record.date || "Дата не указана";
+    info.append(title, date);
+    if (record.note) {
+        const note = document.createElement("small");
+        note.textContent = record.note;
+        info.appendChild(note);
+    }
+    recordElement.append(iconElement, info);
 
     container.appendChild(recordElement);
 }
@@ -618,10 +847,11 @@ function renderHealthRecords() {
 
     container.innerHTML = "";
 
-    if (
-        !appData.healthRecords ||
-        appData.healthRecords.length === 0
-    ) {
+    const records = appData.healthRecords.filter(record =>
+        String(record.petId ?? getActivePetKey()) === getActivePetKey()
+    );
+
+    if (records.length === 0) {
         container.innerHTML = `
             <p style="text-align:center;color:#888;">
                 Пока нет записей
@@ -631,7 +861,7 @@ function renderHealthRecords() {
         return;
     }
 
-    appData.healthRecords.forEach(record => {
+    records.forEach(record => {
         addHealthRecordToScreen(record);
     });
 }
@@ -645,6 +875,14 @@ function openReminderForm() {
     hideAllPages();
 
     const reminderForm = document.getElementById("reminderForm");
+    const dateInput = document.getElementById("reminderDate");
+    const repeatInput = document.getElementById("reminderRepeat");
+    const nameInput = document.getElementById("reminderName");
+    const timeInput = document.getElementById("reminderTime");
+    if (dateInput) dateInput.value = getLocalDateInputValue();
+    if (nameInput) nameInput.value = "";
+    if (timeInput) timeInput.value = "";
+    if (repeatInput) repeatInput.value = "once";
 
     if (reminderForm) {
         reminderForm.style.display = "block";
@@ -665,6 +903,7 @@ async function saveReminder() {
     const name = document.getElementById("reminderName").value.trim();
     const date = document.getElementById("reminderDate").value;
     const time = document.getElementById("reminderTime").value;
+    const repeat = document.getElementById("reminderRepeat").value;
 
     if (name === "") {
         alert("Введите название напоминания!");
@@ -675,8 +914,10 @@ async function saveReminder() {
         id: Date.now(),
         type: type,
         name: name,
-        date: date,
-        time: time
+        date: date || getLocalDateInputValue(),
+        time: time,
+        repeat,
+        petId: getActivePetKey()
     };
 
     appData.reminders.push(reminder);
@@ -719,22 +960,72 @@ function addReminderToScreen(reminder) {
         icon = "🩺";
     }
 
-    reminderElement.innerHTML = `
-        <div class="reminder-icon">
-            ${icon}
-        </div>
+    const iconElement = document.createElement("div");
+    iconElement.className = "reminder-icon";
+    iconElement.textContent = icon;
 
-        <div class="record-info">
-            <strong>${reminder.name}</strong>
-
-            <small>
-                ${reminder.date || ""}
-                ${reminder.time || ""}
-            </small>
-        </div>
-    `;
+    const info = document.createElement("div");
+    info.className = "record-info";
+    const title = document.createElement("strong");
+    title.textContent = reminder.name;
+    const detail = document.createElement("small");
+    const nextDate = getNextReminderDate(reminder);
+    const repeatLabels = { daily: "Каждый день", weekly: "Каждую неделю" };
+    const dateLabel = nextDate ? formatReminderDate(nextDate) : "Дата не указана";
+    detail.textContent = [repeatLabels[reminder.repeat], dateLabel, reminder.time]
+        .filter(Boolean)
+        .join(" · ");
+    info.append(title, detail);
+    reminderElement.append(iconElement, info);
 
     container.appendChild(reminderElement);
+}
+
+
+function parseReminderDate(value) {
+    if (!value) return null;
+    const [year, month, day] = value.split("-").map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day);
+}
+
+
+function getLocalDateInputValue(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+
+function getNextReminderDate(reminder) {
+    const startDate = parseReminderDate(reminder.date);
+    if (!startDate) return null;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    startDate.setHours(0, 0, 0, 0);
+
+    if (reminder.repeat === "daily" && startDate < today) return today;
+    if (reminder.repeat === "weekly" && startDate < today) {
+        const daysSinceStart = Math.floor((today - startDate) / 86400000);
+        startDate.setDate(startDate.getDate() + Math.ceil(daysSinceStart / 7) * 7);
+    }
+    return startDate;
+}
+
+
+function formatReminderDate(date) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const day = new Date(date);
+    day.setHours(0, 0, 0, 0);
+
+    if (day.getTime() === today.getTime()) return "Сегодня";
+    if (day.getTime() === tomorrow.getTime()) return "Завтра";
+    return day.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
 }
 
 
@@ -751,10 +1042,11 @@ function renderReminders() {
 
     container.innerHTML = "";
 
-    if (
-        !appData.reminders ||
-        appData.reminders.length === 0
-    ) {
+    const reminders = appData.reminders.filter(reminder =>
+        String(reminder.petId ?? getActivePetKey()) === getActivePetKey()
+    );
+
+    if (reminders.length === 0) {
         container.innerHTML = `
             <p style="text-align:center;color:#888;">
                 Пока нет напоминаний
@@ -764,7 +1056,7 @@ function renderReminders() {
         return;
     }
 
-    appData.reminders.forEach(reminder => {
+    reminders.forEach(reminder => {
         addReminderToScreen(reminder);
     });
 }
@@ -1149,6 +1441,16 @@ async function startApp() {
     await checkAuth();
 }
 
+document.getElementById("petPhotoInput")?.addEventListener("change", handlePetPhotoSelection);
+document.getElementById("animalInput")?.addEventListener("change", event => {
+    const currentPhoto = pendingPetPhoto !== undefined
+        ? pendingPetPhoto
+        : (petFormMode === "create" ? null : appData.pet?.photoData);
+    if (!currentPhoto) {
+        renderPetAvatar(document.getElementById("petPhotoPreview"), { animal: event.target.value });
+    }
+});
+
 startApp();
 function showAssistant() {
     hideAllPages();
@@ -1181,7 +1483,7 @@ function renderAssistantConversation() {
         : [];
 
     if (messages.length === 0) {
-        addAssistantBubble("assistant", "Привет! 🐾 Я PetCare AI. Спроси меня об уходе за питомцем.");
+        addAssistantBubble("assistant", "Привет! 🐾 Я бесплатный помощник PetCare. Спроси меня о кормлении, уходе, прогулках или здоровье питомца.");
         return;
     }
 
@@ -1190,6 +1492,16 @@ function renderAssistantConversation() {
             addAssistantBubble(message.role, message.content);
         }
     });
+}
+
+async function getAssistantErrorMessage(error) {
+    const response = error?.context;
+    if (response instanceof Response) {
+        const payload = await response.clone().json().catch(() => null);
+        if (typeof payload?.error === "string") return payload.error;
+    }
+
+    return "Не удалось получить ответ GigaChat. Проверьте настройки функции и доступность модели в Supabase.";
 }
 
 async function sendAssistantMessage(event) {
@@ -1209,52 +1521,35 @@ async function sendAssistantMessage(event) {
     input.value = "";
     if (sendButton) sendButton.disabled = true;
 
-    const typingBubble = addAssistantBubble("assistant", "Думаю над ответом…");
-    saveData();
+    const typingBubble = addAssistantBubble("assistant", "GigaChat готовит ответ…");
 
     try {
-        const pet = appData.pet || {};
+        const activePet = appData.pet || {};
         const { data, error } = await supabaseClient.functions.invoke("petcare-assistant", {
             body: {
                 messages: appData.assistantConversation.slice(-12),
                 pet: {
-                    name: String(pet.name || "").slice(0, 80),
-                    breed: String(pet.breed || "").slice(0, 100),
-                    animal: String(pet.animal || "").slice(0, 40),
-                    weight: String(pet.weight || "").slice(0, 20)
+                    name: activePet.name,
+                    breed: activePet.breed,
+                    animal: activePet.animal,
+                    weight: activePet.weight
                 }
             }
         });
 
-        if (error) {
-            let detail = error.message || "Не удалось связаться с ИИ-помощником.";
-            if (error.name === "FunctionsFetchError" || detail.includes("Failed to send a request")) {
-                detail = "Supabase не смог достучаться до функции petcare-assistant. Возможно, функция ещё не опубликована или соединение блокирует CORS/сеть.";
-            }
-            try {
-                const response = error.context;
-                if (response && typeof response.json === "function") {
-                    const body = await response.json();
-                    if (body.error) detail = body.error;
-                }
-            } catch (_) {}
-            throw new Error(detail);
-        }
+        if (error) throw error;
+        const answer = typeof data?.answer === "string" ? data.answer.trim() : "";
+        if (!answer) throw new Error("GigaChat вернул пустой ответ.");
 
-        if (!data || typeof data.answer !== "string" || !data.answer.trim()) {
-            throw new Error("Помощник вернул пустой ответ. Попробуй ещё раз.");
-        }
-
-        appData.assistantConversation.push({ role: "assistant", content: data.answer.trim() });
+        typingBubble?.remove();
+        appData.assistantConversation.push({ role: "assistant", content: answer });
         appData.assistantConversation = appData.assistantConversation.slice(-30);
         renderAssistantConversation();
         await saveData();
     } catch (error) {
         typingBubble?.remove();
-        addAssistantBubble(
-            "assistant",
-            `Не получилось получить ответ: ${error.message} Проверь, что функция PetCare AI опубликована и в Supabase добавлен ключ OpenAI.`
-        )?.classList.add("assistant-error");
+        appData.assistantConversation.pop();
+        addAssistantBubble("assistant", await getAssistantErrorMessage(error))?.classList.add("assistant-error");
     } finally {
         if (sendButton) sendButton.disabled = false;
         input?.focus();
