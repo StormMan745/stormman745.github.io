@@ -19,8 +19,19 @@
         </header>
 
         <section class="welcome">
-            <h2>Привет! 👋</h2>
-            <p>Заботься о своём питомце и ничего не забывай.</p>
+            <div class="welcome-copy">
+                <span class="welcome-tag">ЗАБОТА КАЖДЫЙ ДЕНЬ</span>
+                <h2>Привет! 👋</h2>
+                <p>Заботься о своём питомце и ничего не забывай.</p>
+            </div>
+            <div class="hero-3d" aria-hidden="true">
+                <span class="hero-orbit hero-orbit-back"></span>
+                <span class="hero-orbit hero-orbit-front"></span>
+                <span class="hero-star hero-star-one">✦</span>
+                <span class="hero-star hero-star-two">✧</span>
+                <div class="hero-platform"></div>
+                <div class="hero-heart">♥</div>
+            </div>
         </section>
 
         <section class="pet-card">
@@ -39,32 +50,40 @@
                 <span id="todayDate"></span>
             </div>
 
-            <div class="task">
+            <div class="task" data-task="feeding">
                 <div class="task-icon">🍖</div>
                 <div class="task-info">
                     <strong>Кормление</strong>
                     <p>08:00</p>
                 </div>
-                <button onclick="completeTask(this, 'Кормление')">○</button>
+                <button type="button" class="task-complete" onclick="completeTask(this, 'feeding')" aria-label="Отметить выполненным" aria-pressed="false">○</button>
             </div>
 
-            <div class="task">
+            <div class="task" data-task="walk">
                 <div class="task-icon">🚶</div>
                 <div class="task-info">
                     <strong>Прогулка</strong>
                     <p>18:00</p>
                 </div>
-                <button onclick="completeTask(this, 'Прогулка')">○</button>
+                <button type="button" class="task-complete" onclick="completeTask(this, 'walk')" aria-label="Отметить выполненным" aria-pressed="false">○</button>
             </div>
 
-            <div class="task">
+            <div class="task" data-task="vitamins">
                 <div class="task-icon">💊</div>
                 <div class="task-info">
                     <strong>Витамины</strong>
                     <p>20:00</p>
                 </div>
-                <button onclick="completeTask(this, 'Витамины')">○</button>
+                <button type="button" class="task-complete" onclick="completeTask(this, 'vitamins')" aria-label="Отметить выполненным" aria-pressed="false">○</button>
             </div>
+        </section>
+
+        <section class="home-reminders" aria-labelledby="homeRemindersTitle">
+            <div class="section-heading">
+                <h2 id="homeRemindersTitle">Напоминания</h2>
+                <button type="button" class="home-reminders-link" onclick="showReminders()">Все</button>
+            </div>
+            <div id="homeRemindersList" class="home-reminders-list" aria-live="polite"></div>
         </section>
     </main>
 
@@ -78,7 +97,7 @@
         <div class="pet-switcher">
             <label for="petSwitcher">Профиль питомца</label>
             <div class="pet-switcher-controls">
-                <select id="petSwitcher" onchange="switchPet(this.value)" aria-label="Выбрать питомца"></select>
+                <select id="petSwitcher" class="pet-switcher-select" onchange="switchPet(this.value)" aria-label="Выбрать питомца"></select>
                 <button type="button" class="secondary-button" onclick="openPetForm(true)">+ Добавить</button>
             </div>
         </div>
@@ -94,7 +113,7 @@
                 <span>🎂</span>
                 <div>
                     <small>Возраст</small>
-                    <strong>3 года</strong>
+                    <strong id="petAge">Возраст не указан</strong>
                 </div>
             </div>
 
@@ -138,6 +157,21 @@
         <label for="weightInput">Вес</label>
         <input type="number" id="weightInput" placeholder="Вес в кг">
 
+        <label for="birthDateInput">Дата рождения</label>
+        <input type="date" id="birthDateInput">
+
+        <label for="allergiesInput">Аллергии</label>
+        <textarea id="allergiesInput" placeholder="Например, реакция на курицу"></textarea>
+
+        <label for="medicationsInput">Постоянные лекарства</label>
+        <textarea id="medicationsInput" placeholder="Название и дозировка"></textarea>
+
+        <label for="vetClinicInput">Ветеринарная клиника</label>
+        <input type="text" id="vetClinicInput" placeholder="Название клиники">
+
+        <label for="vetPhoneInput">Телефон ветеринара</label>
+        <input type="tel" id="vetPhoneInput" placeholder="+7…">
+
         <label for="animalInput">Тип животного</label>
         <select id="animalInput">
             <option value="🐶">Собака 🐶</option>
@@ -166,6 +200,39 @@
             </div>
         </div>
 
+        <div class="pet-switcher compact-pet-switcher">
+            <label for="healthPetSwitcher">Питомец</label>
+            <select id="healthPetSwitcher" class="pet-switcher-select" onchange="switchPet(this.value)" aria-label="Выбрать питомца для здоровья"></select>
+        </div>
+
+        <section class="health-passport">
+            <div class="section-heading">
+                <h3>Медицинская карточка</h3>
+                <button type="button" class="home-reminders-link" onclick="openPetForm(false, 'healthPage')">Изменить</button>
+            </div>
+            <div class="passport-grid">
+                <div><small>Аллергии</small><strong id="healthAllergies">Не указаны</strong></div>
+                <div><small>Постоянные лекарства</small><strong id="healthMedications">Не указаны</strong></div>
+                <div><small>Клиника</small><strong id="healthVetClinic">Не указана</strong></div>
+                <div><small>Телефон</small><strong id="healthVetPhone">Не указан</strong></div>
+            </div>
+            <button type="button" class="secondary-button export-button" onclick="exportPetHealthPdf()">📄 Скачать карточку в PDF</button>
+        </section>
+
+        <section class="weight-section">
+            <div class="section-heading"><h3>Вес в динамике</h3><span id="weightLatest"></span></div>
+            <div id="weightChart" class="weight-chart" aria-label="График изменения веса"></div>
+            <div id="weightHistoryList" class="weight-history-list"></div>
+            <div class="weight-entry">
+                <label for="weightLogValue">Записать вес, кг</label>
+                <div class="weight-entry-row">
+                    <input type="number" id="weightLogValue" min="0.01" step="0.01" placeholder="Например, 8.5">
+                    <input type="date" id="weightLogDate" aria-label="Дата взвешивания">
+                </div>
+                <button type="button" class="secondary-button" onclick="savePetWeight()">Добавить взвешивание</button>
+            </div>
+        </section>
+
         <h3 class="section-title">Медицинские записи</h3>
 
         <div id="healthRecords">
@@ -191,6 +258,23 @@
         <button class="primary-button" onclick="openHealthForm()">
             + Добавить запись
         </button>
+
+        <section class="history-section">
+            <div class="section-heading"><h3>История событий</h3></div>
+            <div class="history-filters">
+                <input type="search" id="historySearch" placeholder="Найти событие…" oninput="renderEventHistory()">
+                <select id="historyTypeFilter" onchange="renderEventHistory()" aria-label="Фильтр истории">
+                    <option value="all">Все события</option>
+                    <option value="health">Здоровье</option>
+                    <option value="weight">Вес</option>
+                    <option value="reminder">Напоминания</option>
+                    <option value="task">Задачи</option>
+                </select>
+                <input type="date" id="historyFromDate" aria-label="История с даты" onchange="renderEventHistory()">
+                <input type="date" id="historyToDate" aria-label="История по дату" onchange="renderEventHistory()">
+            </div>
+            <div id="eventHistory" class="event-history"></div>
+        </section>
     </section>
 
     <!-- ФОРМА ЗДОРОВЬЯ -->
@@ -214,8 +298,18 @@
         <label for="recordDate">Дата</label>
         <input type="date" id="recordDate">
 
+        <label for="recordNextDate">Дата следующего визита или процедуры (необязательно)</label>
+        <input type="date" id="recordNextDate">
+
         <label for="recordNote">Заметка</label>
         <textarea id="recordNote" placeholder="Дополнительная информация"></textarea>
+
+        <div class="photo-attachment-field">
+            <input class="photo-file-input" type="file" id="recordPhotoInput" accept="image/*" multiple>
+            <label class="photo-upload-button" for="recordPhotoInput">📷 Добавить фото</label>
+            <div class="photo-preview" id="recordPhotoPreview"></div>
+            <small class="field-hint">Можно выбрать несколько фото до 10 МБ каждое. Они уменьшатся и сохранятся вместе с записью.</small>
+        </div>
 
         <button class="primary-button" onclick="saveHealthRecord()">
             💾 Сохранить
@@ -229,6 +323,23 @@
             <h2>Напоминания 🔔</h2>
         </div>
 
+        <div class="pet-switcher compact-pet-switcher">
+            <label for="reminderPetSwitcher">Питомец</label>
+            <select id="reminderPetSwitcher" class="pet-switcher-select" onchange="switchPet(this.value)" aria-label="Выбрать питомца для напоминаний"></select>
+        </div>
+
+        <section class="calendar-card" aria-label="Календарь ухода">
+            <div class="calendar-heading">
+                <button type="button" onclick="changeCalendarMonth(-1)" aria-label="Предыдущий месяц">‹</button>
+                <h3 id="calendarMonthLabel"></h3>
+                <button type="button" onclick="changeCalendarMonth(1)" aria-label="Следующий месяц">›</button>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
+            <div id="calendarGrid" class="calendar-grid"></div>
+            <div id="calendarDayEvents" class="calendar-day-events" aria-live="polite"></div>
+        </section>
+
+        <h3 class="section-title">Все напоминания</h3>
         <div id="remindersList">
             <div class="reminder">
                 <div class="reminder-icon">🍖</div>
@@ -282,6 +393,13 @@
             <option value="daily">Каждый день</option>
             <option value="weekly">Каждую неделю</option>
         </select>
+
+        <div class="photo-attachment-field">
+            <input class="photo-file-input" type="file" id="reminderPhotoInput" accept="image/*" multiple>
+            <label class="photo-upload-button" for="reminderPhotoInput">📷 Добавить фото</label>
+            <div class="photo-preview" id="reminderPhotoPreview"></div>
+            <small class="field-hint">Можно выбрать несколько фото до 10 МБ каждое. Они уменьшатся и сохранятся вместе с напоминанием.</small>
+        </div>
 
         <button class="primary-button" onclick="saveReminder()">
             🔔 Добавить
@@ -451,3 +569,4 @@
 <script src="script.js"></script>
 </body>
 </html>
+
