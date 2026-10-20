@@ -3186,7 +3186,24 @@ function showAssistant() {
     renderAssistantConversation();
 }
 
-function addAssistantBubble(role, content) {
+function scrollAssistantToBottom(instant = false) {
+    const container = document.getElementById("assistantMessages");
+    if (!container) return;
+
+    if (instant) {
+        const previousBehavior = container.style.scrollBehavior;
+        container.style.scrollBehavior = "auto";
+        container.scrollTop = container.scrollHeight;
+        requestAnimationFrame(() => {
+            container.style.scrollBehavior = previousBehavior;
+        });
+        return;
+    }
+
+    container.scrollTop = container.scrollHeight;
+}
+
+function addAssistantBubble(role, content, scroll = true) {
     const container = document.getElementById("assistantMessages");
     if (!container) return null;
 
@@ -3194,7 +3211,7 @@ function addAssistantBubble(role, content) {
     bubble.className = `assistant-message ${role === "user" ? "user-message" : "bot-message"}`;
     bubble.textContent = content;
     container.appendChild(bubble);
-    container.scrollTop = container.scrollHeight;
+    if (scroll) scrollAssistantToBottom();
     return bubble;
 }
 
@@ -3208,15 +3225,17 @@ function renderAssistantConversation() {
         : [];
 
     if (messages.length === 0) {
-        addAssistantBubble("assistant", "Привет! 🐾 Я бесплатный помощник PetCare. Спроси меня о кормлении, уходе, прогулках или здоровье питомца.");
+        addAssistantBubble("assistant", "Привет! 🐾 Я бесплатный помощник PetCare. Спроси меня о кормлении, уходе, прогулках или здоровье питомца.", false);
+        scrollAssistantToBottom(true);
         return;
     }
 
     messages.forEach(message => {
         if (message && ["user", "assistant"].includes(message.role) && typeof message.content === "string") {
-            addAssistantBubble(message.role, message.content);
+            addAssistantBubble(message.role, message.content, false);
         }
     });
+    scrollAssistantToBottom(true);
 }
 
 async function getAssistantErrorMessage(error) {
