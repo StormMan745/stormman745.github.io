@@ -3298,9 +3298,9 @@ function isAppleMobileDevice() {
         || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
-function hideInstallButtons() {
+function showInstallButtons() {
     document.querySelectorAll(".install-app-button").forEach(button => {
-        button.hidden = true;
+        button.hidden = false;
     });
 }
 
@@ -3310,7 +3310,10 @@ function openInstallHelp(platform) {
     const steps = document.getElementById("installHelpSteps");
     if (!dialog || !text || !steps) return;
 
-    if (platform === "ios") {
+    if (platform === "installed") {
+        text.textContent = "PetCare уже установлен на этом устройстве. Откройте его с главного экрана или из списка приложений.";
+        steps.replaceChildren();
+    } else if (platform === "ios") {
         text.textContent = "Добавьте PetCare на главный экран, чтобы открывать его как обычное приложение.";
         steps.replaceChildren();
         [
@@ -3348,6 +3351,11 @@ function closeInstallHelp() {
 }
 
 async function installPetCareApp() {
+    if (isPetCareInstalled()) {
+        openInstallHelp("installed");
+        return;
+    }
+
     if (deferredInstallPrompt) {
         deferredInstallPrompt.prompt();
         await deferredInstallPrompt.userChoice;
@@ -3365,11 +3373,11 @@ window.addEventListener("beforeinstallprompt", event => {
 
 window.addEventListener("appinstalled", () => {
     deferredInstallPrompt = null;
-    hideInstallButtons();
+    showInstallButtons();
 });
 
 if (isPetCareInstalled()) {
-    hideInstallButtons();
+    showInstallButtons();
 }
 
 if ("serviceWorker" in navigator && window.location.protocol === "https:") {
