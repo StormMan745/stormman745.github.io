@@ -353,6 +353,19 @@
             <div id="calendarDayEvents" class="calendar-day-events" aria-live="polite"></div>
         </section>
 
+        <section class="push-settings-card" id="pushSettingsCard" aria-labelledby="pushSettingsTitle">
+            <div class="push-settings-copy">
+                <span class="push-settings-icon" aria-hidden="true">🔔</span>
+                <div>
+                    <h3 id="pushSettingsTitle">Напоминания на телефоне</h3>
+                    <p id="pushSettingsStatus" aria-live="polite">Проверяю настройки…</p>
+                </div>
+            </div>
+            <button class="secondary-button" type="button" id="pushEnableButton" data-pc-click="push-enable">Включить push</button>
+            <button class="push-disable-button" type="button" id="pushDisableButton" data-pc-click="push-disable" hidden>Отключить уведомления</button>
+            <small>В назначенное время придёт текст напоминания. Звук зависит от настроек уведомлений телефона.</small>
+        </section>
+
         <h3 class="section-title">Все напоминания</h3>
         <div id="remindersList">
             <div class="reminder">
@@ -392,8 +405,9 @@
             <option value="Ветеринар">Ветеринар 🩺</option>
         </select>
 
-        <label for="reminderName">Название</label>
+        <label for="reminderName">Текст напоминания</label>
         <input type="text" id="reminderName" placeholder="Например, вечерняя прогулка">
+        <small class="field-hint reminder-text-hint">Этот текст появится в push-уведомлении.</small>
 
         <label for="reminderDate">Дата</label>
         <input type="date" id="reminderDate">

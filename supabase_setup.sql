@@ -127,3 +127,210 @@ create policy "PetCare story files: delete own"
         and (storage.foldername(name))[1] = (select auth.uid()::text)
     );
 
+-- Push reminder schema and scheduler. See the matching Supabase migration below.
+-- Secure, account-scoped web push subscriptions and scheduled reminder delivery.
+create extension if not exists pg_net;
+create extension if not exists pg_cron;
+
+create table if not exists public.petcare_push_subscriptions (
+    endpoint text primary key,
+    user_id uuid not null references auth.users (id) on delete cascade,
+    subscription jsonb not null,
+    timezone_name text not null default 'UTC',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create index if not exists petcare_push_subscriptions_user_id_idx
+    on public.petcare_push_subscriptions (user_id);
+
+alter table public.petcare_push_subscriptions enable row level security;
+revoke all privileges on table public.petcare_push_subscriptions from public, anon, authenticated;
+grant select, insert, update, delete on table public.petcare_push_subscriptions to service_role;
+
+create table if not exists public.petcare_push_delivery_log (
+    endpoint_hash text not null,
+    notification_key text not null,
+    user_id uuid not null references auth.users (id) on delete cascade,
+    reminder_id text not null,
+    due_date date not null,
+    status text not null default 'sending'
+        check (status in ('sending', 'sent', 'failed', 'gone')),
+    attempt_count smallint not null default 0,
+    last_attempt_at timestamptz not null default now(),
+    delivered_at timestamptz,
+    last_error text,
+    created_at timestamptz not null default now(),
+    primary key (endpoint_hash, notification_key)
+);
+
+create index if not exists petcare_push_delivery_log_created_at_idx
+    on public.petcare_push_delivery_log (created_at);
+
+alter table public.petcare_push_delivery_log enable row level security;
+revoke all privileges on table public.petcare_push_delivery_log from public, anon, authenticated;
+grant select, insert, update, delete on table public.petcare_push_delivery_log to service_role;
+
+create or replace function public.petcare_register_push_subscription(
+    p_subscription jsonb,
+    p_timezone_name text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_user_id uuid := auth.uid();
+    v_endpoint text := p_subscription ->> 'endpoint';
+    v_timezone text := coalesce(nullif(p_timezone_name, ''), 'UTC');
+begin
+    if v_user_id is null then
+        raise exception 'Authentication required';
+    end if;
+    if jsonb_typeof(p_subscription) <> 'object'
+       or v_endpoint is null
+       or length(v_endpoint) > 2048
+       or v_endpoint !~ '^https://'
+       or jsonb_typeof(p_subscription -> 'keys') <> 'object'
+       or coalesce(p_subscription #>> '{keys,p256dh}', '') = ''
+       or coalesce(p_subscription #>> '{keys,auth}', '') = '' then
+        raise exception 'Invalid push subscription';
+    end if;
+    if not exists (select 1 from pg_timezone_names where name = v_timezone) then
+        v_timezone := 'UTC';
+    end if;
+
+    -- A browser has one push endpoint per service worker. Reassign it to the
+    -- account that explicitly enabled notifications on this device.
+    delete from public.petcare_push_subscriptions where endpoint = v_endpoint;
+    insert into public.petcare_push_subscriptions (endpoint, user_id, subscription, timezone_name, updated_at)
+    values (v_endpoint, v_user_id, p_subscription, v_timezone, now());
+end;
+$$;
+
+create or replace function public.petcare_has_push_subscription(p_endpoint text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+    select exists (
+        select 1
+        from public.petcare_push_subscriptions s
+        where s.endpoint = p_endpoint
+          and s.user_id = auth.uid()
+    );
+$$;
+
+create or replace function public.petcare_unregister_push_subscription(p_endpoint text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if auth.uid() is null then
+        raise exception 'Authentication required';
+    end if;
+    -- The endpoint is only available in the current browser's PushSubscription.
+    delete from public.petcare_push_subscriptions where endpoint = p_endpoint;
+end;
+$$;
+
+create or replace function public.petcare_get_push_reminder_data()
+returns table (user_id uuid, reminders jsonb, pets jsonb, pet jsonb)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+    select d.user_id, d.data -> 'reminders', d.data -> 'pets', d.data -> 'pet'
+    from public.petcare_data d
+    where jsonb_typeof(d.data -> 'reminders') = 'array';
+$$;
+
+create or replace function public.petcare_get_push_runtime_secrets()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public, vault
+as $$
+    select jsonb_build_object(
+        'cronToken', (
+            select s.decrypted_secret
+            from vault.decrypted_secrets s
+            where s.name = 'petcare_push_cron_token'
+        ),
+        'vapid', (
+            select s.decrypted_secret::jsonb
+            from vault.decrypted_secrets s
+            where s.name = 'petcare_push_vapid_json'
+        )
+    );
+$$;
+
+revoke all privileges on function public.petcare_register_push_subscription(jsonb, text) from public, anon;
+grant execute on function public.petcare_register_push_subscription(jsonb, text) to authenticated;
+revoke all privileges on function public.petcare_has_push_subscription(text) from public, anon;
+grant execute on function public.petcare_has_push_subscription(text) to authenticated;
+revoke all privileges on function public.petcare_unregister_push_subscription(text) from public, anon;
+grant execute on function public.petcare_unregister_push_subscription(text) to authenticated;
+revoke all privileges on function public.petcare_get_push_reminder_data() from public, anon, authenticated;
+grant execute on function public.petcare_get_push_reminder_data() to service_role;
+revoke all privileges on function public.petcare_get_push_runtime_secrets() from public, anon, authenticated;
+grant execute on function public.petcare_get_push_runtime_secrets() to service_role;
+
+-- VAPID private key and dispatcher token are stored separately in Supabase Vault.
+-- Never place either value in this SQL file or in the public site repository.
+
+do $$
+declare
+    existing_job record;
+begin
+    for existing_job in select jobid from cron.job where jobname = 'petcare-push-reminders' loop
+        perform cron.unschedule(existing_job.jobid);
+    end loop;
+end;
+$$;
+
+select cron.schedule(
+    'petcare-push-reminders',
+    '* * * * *',
+    $$
+        select net.http_post(
+            url := 'https://qexiyikdmdbdxgusqnee.supabase.co/functions/v1/petcare-push-reminders',
+            headers := jsonb_build_object(
+                'Content-Type', 'application/json',
+                'apikey', 'sb_publishable_HSR87zEuGFNjwEYoa-zrSw_cTWchorw',
+                'x-petcare-cron-token', (
+                    select decrypted_secret
+                    from vault.decrypted_secrets
+                    where name = 'petcare_push_cron_token'
+                )
+            ),
+            body := '{}'::jsonb,
+            timeout_milliseconds := 10000
+        );
+    $$
+);
+
+do $$
+declare
+    existing_job record;
+begin
+    for existing_job in select jobid from cron.job where jobname = 'petcare-push-log-cleanup' loop
+        perform cron.unschedule(existing_job.jobid);
+    end loop;
+end;
+$$;
+
+select cron.schedule(
+    'petcare-push-log-cleanup',
+    '20 4 * * *',
+    $$delete from public.petcare_push_delivery_log where created_at < now() - interval '90 days'$$
+);
+
+

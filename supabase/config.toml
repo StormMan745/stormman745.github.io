@@ -2,3 +2,7 @@ project_id = "qexiyikdmdbdxgusqnee"
 
 [functions.petcare-assistant]
 verify_jwt = true
+
+[functions.petcare-push-reminders]
+verify_jwt = false
+

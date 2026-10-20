@@ -1,4 +1,4 @@
-const CACHE_NAME = "petcare-shell-v3";
+const CACHE_NAME = "petcare-shell-v4";
 const SHELL_FILES = [
     "/",
     "/index.html",
@@ -60,5 +60,54 @@ self.addEventListener("fetch", event => {
             })
             .catch(async () => (await caches.match(request)) || (await caches.match(url.pathname)))
     );
+});
+
+self.addEventListener("push", event => {
+    let payload = {};
+    try {
+        payload = event.data ? event.data.json() : {};
+    } catch {
+        payload = { body: event.data?.text() || "У вас есть напоминание." };
+    }
+
+    const title = typeof payload.title === "string" && payload.title.trim()
+        ? payload.title.trim().slice(0, 100)
+        : "Напоминание PetCare";
+    const body = typeof payload.body === "string" && payload.body.trim()
+        ? payload.body.trim().slice(0, 240)
+        : "Проверьте напоминания о питомце.";
+
+    event.waitUntil(self.registration.showNotification(title, {
+        body,
+        icon: "/assets/petcare-192.png",
+        badge: "/assets/petcare-192.png",
+        tag: String(payload.tag || "petcare-reminder").slice(0, 80),
+        timestamp: Number(payload.timestamp) || Date.now(),
+        data: { url: typeof payload.url === "string" ? payload.url : "/?page=reminders" },
+        renotify: false,
+        silent: false,
+        vibrate: [180, 100, 180]
+    }));
+});
+
+self.addEventListener("notificationclick", event => {
+    event.notification.close();
+    event.waitUntil((async () => {
+        let targetUrl = new URL("/?page=reminders", self.location.origin);
+        try {
+            const requestedUrl = new URL(event.notification.data?.url || "/?page=reminders", self.location.origin);
+            if (requestedUrl.origin === self.location.origin) targetUrl = requestedUrl;
+        } catch {
+            // Keep the same-origin reminders page as the safe fallback.
+        }
+
+        const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        const existing = windows.find(client => new URL(client.url).origin === self.location.origin);
+        if (existing) {
+            await existing.navigate(targetUrl.href);
+            return existing.focus();
+        }
+        return self.clients.openWindow(targetUrl.href);
+    })());
 });
 

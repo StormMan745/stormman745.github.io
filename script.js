@@ -5,6 +5,7 @@
 const SUPABASE_URL = "https://qexiyikdmdbdxgusqnee.supabase.co";
 const SUPABASE_KEY = "sb_publishable_HSR87zEuGFNjwEYoa-zrSw_cTWchorw";
 const STORY_STORAGE_BUCKET = "petcare-stories";
+const PUSH_VAPID_PUBLIC_KEY = "BNYHRT4U9ZG-jFDEBAR2MVz0Z-4-4W3BWaCNpR-tMqnlXZ2OHH3DavEBOyyC1Ph5VLbsakWuewhUpwCiZwciKd8";
 
 const supabaseClient = supabase.createClient(
     SUPABASE_URL,
@@ -385,6 +386,7 @@ function showReminders() {
 
     renderReminders();
     renderCalendar();
+    renderPushSettings();
 }
 
 function showStories() {
@@ -1562,12 +1564,13 @@ async function saveReminder() {
 
     appData.reminders.push(reminder);
 
-    await saveData();
+    const synced = await saveData();
     renderReminders();
     renderHomeReminders();
     renderCalendar();
     clearReminderPhotos();
     closeReminderForm();
+    if (!synced) alert("Напоминание сохранено на устройстве, но не синхронизировано с сервером. Push-уведомление придёт после восстановления соединения и синхронизации.");
 }
 
 
@@ -1927,6 +1930,163 @@ function renderReminders() {
     reminders.forEach(reminder => {
         addReminderToScreen(reminder);
     });
+}
+
+function pushBase64UrlToBytes(base64Url) {
+    const normalized = String(base64Url || "").replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+    return Uint8Array.from(atob(padded), character => character.charCodeAt(0));
+}
+
+function getPushTimezone() {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    } catch {
+        return "UTC";
+    }
+}
+
+async function savePushSubscription(subscription, expectedUserId = activeUserId) {
+    if (!expectedUserId || expectedUserId !== activeUserId) {
+        throw new Error("Войдите в свой аккаунт и повторите попытку.");
+    }
+    const { error } = await supabaseClient.rpc("petcare_register_push_subscription", {
+        p_subscription: subscription.toJSON(),
+        p_timezone_name: getPushTimezone()
+    });
+    if (error) throw error;
+}
+
+async function renderPushSettings() {
+    const status = document.getElementById("pushSettingsStatus");
+    const enableButton = document.getElementById("pushEnableButton");
+    const disableButton = document.getElementById("pushDisableButton");
+    if (!status || !enableButton || !disableButton) return;
+
+    const userId = activeUserId;
+    enableButton.hidden = false;
+    enableButton.disabled = false;
+    disableButton.hidden = true;
+
+    if (!userId) {
+        status.textContent = "Войдите в аккаунт, чтобы настроить уведомления.";
+        enableButton.disabled = true;
+        return;
+    }
+    if (!isPetCareInstalled()) {
+        status.textContent = "Установите PetCare на главный экран, чтобы получать push-уведомления.";
+        enableButton.textContent = "Как установить";
+        return;
+    }
+    enableButton.textContent = "Включить push";
+    if (!window.isSecureContext || !("Notification" in window) || !("serviceWorker" in navigator)) {
+        status.textContent = "Этот браузер не поддерживает push-уведомления PetCare.";
+        enableButton.disabled = true;
+        return;
+    }
+    if (Notification.permission === "denied") {
+        status.textContent = "Уведомления запрещены в настройках телефона или браузера.";
+        enableButton.textContent = "Как разрешить";
+        return;
+    }
+
+    status.textContent = "Проверяю подключение…";
+    try {
+        const registration = await navigator.serviceWorker.getRegistration("/");
+        const subscription = await registration?.pushManager?.getSubscription();
+        if (activeUserId !== userId) return;
+        if (!subscription || Notification.permission !== "granted") {
+            status.textContent = "Push выключен на этом устройстве.";
+            return;
+        }
+
+        const { data: linked, error } = await supabaseClient.rpc("petcare_has_push_subscription", {
+            p_endpoint: subscription.endpoint
+        });
+        if (error) throw error;
+        if (activeUserId !== userId) return;
+        if (linked) {
+            await savePushSubscription(subscription, userId);
+            if (activeUserId !== userId) return;
+            status.textContent = "Включено для этого аккаунта. Напоминания проверяются каждую минуту.";
+            enableButton.hidden = true;
+            disableButton.hidden = false;
+        } else {
+            status.textContent = "Разрешение на телефоне есть. Подключите push к этому аккаунту.";
+            enableButton.textContent = "Подключить push";
+        }
+    } catch (error) {
+        console.error("Не удалось проверить push-подписку:", error);
+        status.textContent = "Не удалось проверить статус. Попробуйте обновить страницу.";
+    }
+}
+
+async function enablePushNotifications() {
+    if (!activeUserId) {
+        alert("Сначала войдите в аккаунт PetCare.");
+        return;
+    }
+    if (!isPetCareInstalled()) {
+        openInstallHelp(isAppleMobileDevice() ? "ios" : "android");
+        return;
+    }
+    if (!window.isSecureContext || !("Notification" in window) || !("serviceWorker" in navigator)) {
+        alert("Push-уведомления недоступны в этом браузере. Откройте установленный PetCare в актуальном Safari или Chrome.");
+        return;
+    }
+
+    try {
+        const permission = Notification.permission === "default"
+            ? await Notification.requestPermission()
+            : Notification.permission;
+        if (permission !== "granted") {
+            alert(permission === "denied"
+                ? "Разрешите уведомления PetCare в настройках телефона или браузера, затем попробуйте снова."
+                : "Для push-напоминаний нужно разрешить уведомления.");
+            await renderPushSettings();
+            return;
+        }
+
+        const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        await navigator.serviceWorker.ready;
+        let subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+            subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: pushBase64UrlToBytes(PUSH_VAPID_PUBLIC_KEY)
+            });
+        }
+        const userId = activeUserId;
+        await savePushSubscription(subscription, userId);
+        if (activeUserId !== userId) return;
+        const status = document.getElementById("pushSettingsStatus");
+        if (status) status.textContent = "Готово! Напоминания будут приходить на это устройство.";
+        await renderPushSettings();
+    } catch (error) {
+        console.error("Не удалось включить push-уведомления:", error);
+        alert("Не удалось включить push-уведомления. Проверьте интернет и разрешение на уведомления, затем попробуйте снова.");
+        await renderPushSettings();
+    }
+}
+
+async function disablePushNotifications(options = {}) {
+    const silent = Boolean(options.silent);
+    if (!activeUserId) return;
+    try {
+        const registration = await navigator.serviceWorker?.getRegistration("/");
+        const subscription = await registration?.pushManager?.getSubscription();
+        if (subscription) {
+            const { error } = await supabaseClient.rpc("petcare_unregister_push_subscription", {
+                p_endpoint: subscription.endpoint
+            });
+            if (error) throw error;
+            await subscription.unsubscribe();
+        }
+        if (!silent) await renderPushSettings();
+    } catch (error) {
+        console.error("Не удалось отключить push-уведомления:", error);
+        if (!silent) alert("Не удалось отключить уведомления на сервере. Попробуйте ещё раз.");
+    }
 }
 
 // ==============================
@@ -2871,7 +3031,12 @@ async function openMainAfterLogin() {
 
     if (authPage) authPage.style.display = "none";
     if (bottomMenu) bottomMenu.style.display = "flex";
-    showHome();
+    if (new URLSearchParams(window.location.search).get("page") === "reminders") {
+        showReminders();
+        window.history.replaceState({}, "", window.location.pathname);
+    } else {
+        showHome();
+    }
 }
 
 
@@ -2913,6 +3078,7 @@ async function checkAuth() {
 
 async function logoutUser() {
     try {
+        await disablePushNotifications({ silent: true });
         const { error } = await supabaseClient.auth.signOut();
 
         if (error) {
@@ -3253,6 +3419,8 @@ const petCareClickActions = {
     "nav-health": () => showHealth(),
     "nav-reminders": () => showReminders(),
     "nav-stories": () => showStories(),
+    "push-enable": () => enablePushNotifications(),
+    "push-disable": () => disablePushNotifications(),
     "story-add": () => openStorySetup(),
     "story-close": () => document.getElementById("storySetupDialog")?.close(),
     "story-create": () => createStoryPlan(),
