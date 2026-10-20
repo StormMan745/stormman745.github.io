@@ -2040,6 +2040,24 @@ body {
 
 .primary-button:hover { filter: brightness(1.04); transform: translateY(-2px); box-shadow: 0 7px 0 #174e3a, 0 15px 24px rgba(28, 96, 66, .22); }
 
+.danger-button {
+    display: block;
+    width: 100%;
+    min-height: 48px;
+    margin: 12px 0 0;
+    padding: 0 18px;
+    border: 1px solid #f1d0ca;
+    border-radius: 15px;
+    background: linear-gradient(145deg, #fff8f6, #fbe9e5);
+    box-shadow: 0 4px 0 #ead2cd, 0 8px 14px rgba(140, 55, 43, .07), inset 0 1px rgba(255,255,255,.95);
+    color: #9b3c32;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.danger-button:hover { background: #f8e1dc; }
+
 input, select, textarea {
     border-color: #dfe9e0;
     box-shadow: 0 3px 0 rgba(221, 232, 221, .75), inset 0 1px 2px rgba(35, 62, 41, .025);
@@ -2584,3 +2602,4 @@ input, select, textarea {
         height: 35px;
     }
 }
+

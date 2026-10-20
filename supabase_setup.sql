@@ -22,7 +22,7 @@ create index if not exists pets_user_id_idx on public.pets (user_id);
 
 revoke all privileges on table public.petcare_data, public.pets from anon, authenticated, public;
 grant select, insert, update on public.petcare_data to authenticated;
-grant select, insert, update on public.pets to authenticated;
+grant select, insert, update, delete on public.pets to authenticated;
 
 alter table public.petcare_data enable row level security;
 alter table public.pets enable row level security;
@@ -48,7 +48,6 @@ create policy "Users can update their own PetCare data"
 
 drop policy if exists "allow select pets" on public.pets;
 drop policy if exists "allow inserts pets" on public.pets;
-drop policy if exists "Users can delete their own pets" on public.pets;
 drop policy if exists "Users can view their own pets" on public.pets;
 create policy "Users can view their own pets"
     on public.pets for select
@@ -67,3 +66,10 @@ create policy "Users can update their own pets"
     to authenticated
     using ((select auth.uid()) = user_id)
     with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can delete their own pets" on public.pets;
+create policy "Users can delete their own pets"
+    on public.pets for delete
+    to authenticated
+    using ((select auth.uid()) = user_id);
+

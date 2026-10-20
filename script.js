@@ -189,9 +189,11 @@ function saveData() {
                 }, { onConflict: "user_id" });
 
             if (error) throw error;
+            return true;
         })
         .catch(error => {
             console.error("Не удалось сохранить данные в Supabase. Локальная копия сохранена:", error);
+            return false;
         });
 
     return cloudSaveQueue;
@@ -730,6 +732,7 @@ async function savePet() {
         vetPhone: vetPhoneInput?.value.trim() || "",
         photoData: pendingPetPhoto === undefined ? (previousPet?.photoData || null) : pendingPetPhoto,
         dbId: previousPet?.dbId || null,
+        isPlaceholder: false,
         weightHistory: Array.isArray(previousPet?.weightHistory) ? [...previousPet.weightHistory] : []
     };
     if (!pet.weightHistory.length && Number(previousPet?.weight) > 0) {
@@ -808,6 +811,78 @@ async function savePet() {
 }
 
 
+async function deletePet() {
+    const pet = appData.pet;
+    if (!pet || pet.isPlaceholder) {
+        alert("Сначала добавьте питомца в профиль.");
+        return;
+    }
+
+    const petName = pet.name || "этого питомца";
+    const confirmed = window.confirm(
+        `Удалить ${petName}? Вместе с карточкой будут удалены его записи о здоровье, напоминания и история. Это действие нельзя отменить.`
+    );
+    if (!confirmed) return;
+
+    const { data: userData, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !userData.user || userData.user.id !== activeUserId) {
+        alert("Сначала войдите в аккаунт.");
+        return;
+    }
+
+    if (pet.dbId != null) {
+        const { error } = await supabaseClient
+            .from("pets")
+            .delete()
+            .eq("id", pet.dbId)
+            .eq("user_id", userData.user.id);
+
+        if (error) {
+            console.error("Не удалось удалить питомца из Supabase:", error);
+            alert("Не удалось удалить питомца. Проверьте подключение и попробуйте ещё раз.");
+            return;
+        }
+    }
+
+    const deletedPetId = getPetKey(pet);
+    const remainingPets = appData.pets.filter(item => getPetKey(item) !== deletedPetId);
+    appData.healthRecords = appData.healthRecords.filter(record => String(record.petId ?? deletedPetId) !== deletedPetId);
+    appData.reminders = appData.reminders.filter(reminder => String(reminder.petId ?? deletedPetId) !== deletedPetId);
+    appData.completedTasks = appData.completedTasks.filter(task => String(task.petId) !== deletedPetId);
+    appData.activityHistory = appData.activityHistory.filter(event => String(event.petId) !== deletedPetId);
+
+    const nextPet = remainingPets[0] || {
+        id: `empty-${Date.now()}`,
+        name: "",
+        breed: "",
+        weight: null,
+        animal: "🐾",
+        dbId: null,
+        isPlaceholder: true,
+        weightHistory: []
+    };
+    appData.pets = remainingPets.length ? remainingPets : [nextPet];
+    appData.pet = nextPet;
+    appData.activePetId = getPetKey(nextPet);
+    normalizeAppData();
+    let synced = await saveData();
+    if (!synced) synced = await saveData();
+    updatePetOnScreen();
+    renderHealthRecords();
+    renderReminders();
+    renderHomeReminders();
+    renderCalendar();
+
+    if (!synced) {
+        alert("Питомец удалён на этом устройстве, но не удалось сохранить изменения в облаке. Проверьте интернет и повторите действие позже.");
+    } else {
+        alert(remainingPets.length
+            ? `${petName} удалён из профиля.`
+            : `${petName} удалён. Добавьте питомца, чтобы продолжить работу с карточкой.`);
+    }
+}
+
+
 // ==============================
 // ОБНОВЛЕНИЕ ПИТОМЦА НА ЭКРАНЕ
 // ==============================
@@ -815,8 +890,8 @@ async function savePet() {
 function updatePetOnScreen() {
     const pet = appData.pet || {};
 
-    const name = pet.name || "Барни";
-    const breed = pet.breed || "Порода не указана";
+    const name = pet.name || (pet.isPlaceholder ? "Добавьте питомца" : "Барни");
+    const breed = pet.breed || (pet.isPlaceholder ? "Создайте карточку, чтобы начать" : "Порода не указана");
     const weight = pet.weight;
 
     const nameElement = document.getElementById("petName");
@@ -2447,6 +2522,7 @@ const petCareClickActions = {
     "reminders": () => showReminders(),
     "pet-add": () => openPetForm(true),
     "pet-edit": () => openPetForm(),
+    "pet-delete": () => deletePet(),
     "pet-edit-health": () => openPetForm(false, "healthPage"),
     "pet-close": () => closePetForm(),
     "pet-photo-remove": () => removePetPhoto(),
@@ -2510,3 +2586,4 @@ function bindPetCareActions() {
 }
 
 bindPetCareActions();
+
