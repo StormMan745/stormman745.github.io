@@ -2,6 +2,8 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>PetCare</title>
     <meta name="theme-color" content="#174f3b">
@@ -11,6 +13,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="PetCare">
+    <script src="/frameguard.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -23,7 +26,7 @@
                 <h1>PetCare 🐾</h1>
                 <p>Помощник владельца питомца</p>
             </div>
-            <button type="button" class="install-app-button" id="installAppButton" onclick="installPetCareApp()">⬇ Установить</button>
+            <button type="button" class="install-app-button" id="installAppButton" data-pc-click="install">⬇ Установить</button>
         </header>
 
         <section class="welcome">
@@ -49,7 +52,7 @@
                 <h2 id="homePetName">Барни</h2>
                 <p id="homePetBreed">Золотистый ретривер</p>
             </div>
-            <button onclick="showPet()">→</button>
+            <button data-pc-click="pet">→</button>
         </section>
 
         <section class="today">
@@ -64,7 +67,7 @@
                     <strong>Кормление</strong>
                     <p>08:00</p>
                 </div>
-                <button type="button" class="task-complete" onclick="completeTask(this, 'feeding')" aria-label="Отметить выполненным" aria-pressed="false">○</button>
+                <button type="button" class="task-complete" data-pc-click="task-feeding" aria-label="Отметить выполненным" aria-pressed="false">○</button>
             </div>
 
             <div class="task" data-task="walk">
@@ -73,7 +76,7 @@
                     <strong>Прогулка</strong>
                     <p>18:00</p>
                 </div>
-                <button type="button" class="task-complete" onclick="completeTask(this, 'walk')" aria-label="Отметить выполненным" aria-pressed="false">○</button>
+                <button type="button" class="task-complete" data-pc-click="task-walk" aria-label="Отметить выполненным" aria-pressed="false">○</button>
             </div>
 
             <div class="task" data-task="vitamins">
@@ -82,14 +85,14 @@
                     <strong>Витамины</strong>
                     <p>20:00</p>
                 </div>
-                <button type="button" class="task-complete" onclick="completeTask(this, 'vitamins')" aria-label="Отметить выполненным" aria-pressed="false">○</button>
+                <button type="button" class="task-complete" data-pc-click="task-vitamins" aria-label="Отметить выполненным" aria-pressed="false">○</button>
             </div>
         </section>
 
         <section class="home-reminders" aria-labelledby="homeRemindersTitle">
             <div class="section-heading">
                 <h2 id="homeRemindersTitle">Напоминания</h2>
-                <button type="button" class="home-reminders-link" onclick="showReminders()">Все</button>
+                <button type="button" class="home-reminders-link" data-pc-click="reminders">Все</button>
             </div>
             <div id="homeRemindersList" class="home-reminders-list" aria-live="polite"></div>
         </section>
@@ -98,15 +101,15 @@
     <!-- СТРАНИЦА ПИТОМЦА -->
     <section class="page" id="petPage">
         <div class="page-header">
-            <button onclick="showHome()">←</button>
+            <button data-pc-click="home">←</button>
             <h2>Мой питомец</h2>
         </div>
 
         <div class="pet-switcher">
             <label for="petSwitcher">Профиль питомца</label>
             <div class="pet-switcher-controls">
-                <select id="petSwitcher" class="pet-switcher-select" onchange="switchPet(this.value)" aria-label="Выбрать питомца"></select>
-                <button type="button" class="secondary-button" onclick="openPetForm(true)">+ Добавить</button>
+                <select id="petSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца"></select>
+                <button type="button" class="secondary-button" data-pc-click="pet-add">+ Добавить</button>
             </div>
         </div>
 
@@ -134,7 +137,7 @@
             </div>
         </div>
 
-        <button class="primary-button" onclick="openPetForm()">
+        <button class="primary-button" data-pc-click="pet-edit">
             ✏️ Изменить данные
         </button>
     </section>
@@ -142,7 +145,7 @@
     <!-- ФОРМА ПИТОМЦА -->
     <section class="page" id="petForm">
         <div class="page-header">
-            <button onclick="closePetForm()">←</button>
+            <button data-pc-click="pet-close">←</button>
             <h2 id="petFormTitle">Данные питомца</h2>
         </div>
 
@@ -151,7 +154,7 @@
             <div class="pet-photo-actions">
                 <label class="photo-upload-button" for="petPhotoInput">Выбрать фото</label>
                 <input type="file" id="petPhotoInput" accept="image/*" aria-label="Загрузить фотографию питомца">
-                <button type="button" class="text-button" onclick="removePetPhoto()">Удалить фото</button>
+                <button type="button" class="text-button" data-pc-click="pet-photo-remove">Удалить фото</button>
             </div>
             <small class="field-hint">Фото до 10 МБ. Оно будет уменьшено и сохранено в профиле.</small>
         </div>
@@ -189,14 +192,14 @@
             <option value="🐦">Птица 🐦</option>
         </select>
 
-        <button class="primary-button" id="savePetButton" onclick="savePet()">
+        <button class="primary-button" id="savePetButton" data-pc-click="pet-save">
             💾 Сохранить
         </button>
     </section>
      <!-- ЗДОРОВЬЕ -->
     <section class="page" id="healthPage">
         <div class="page-header">
-            <button onclick="showHome()">←</button>
+            <button data-pc-click="home">←</button>
             <h2>Здоровье ❤️</h2>
         </div>
 
@@ -210,13 +213,13 @@
 
         <div class="pet-switcher compact-pet-switcher">
             <label for="healthPetSwitcher">Питомец</label>
-            <select id="healthPetSwitcher" class="pet-switcher-select" onchange="switchPet(this.value)" aria-label="Выбрать питомца для здоровья"></select>
+            <select id="healthPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для здоровья"></select>
         </div>
 
         <section class="health-passport">
             <div class="section-heading">
                 <h3>Медицинская карточка</h3>
-                <button type="button" class="home-reminders-link" onclick="openPetForm(false, 'healthPage')">Изменить</button>
+                <button type="button" class="home-reminders-link" data-pc-click="pet-edit-health">Изменить</button>
             </div>
             <div class="passport-grid">
                 <div><small>Аллергии</small><strong id="healthAllergies">Не указаны</strong></div>
@@ -224,7 +227,7 @@
                 <div><small>Клиника</small><strong id="healthVetClinic">Не указана</strong></div>
                 <div><small>Телефон</small><strong id="healthVetPhone">Не указан</strong></div>
             </div>
-            <button type="button" class="secondary-button export-button" onclick="exportPetHealthPdf()">📄 Скачать карточку в PDF</button>
+            <button type="button" class="secondary-button export-button" data-pc-click="health-export">📄 Скачать карточку в PDF</button>
         </section>
 
         <section class="weight-section">
@@ -237,7 +240,7 @@
                     <input type="number" id="weightLogValue" min="0.01" step="0.01" placeholder="Например, 8.5">
                     <input type="date" id="weightLogDate" aria-label="Дата взвешивания">
                 </div>
-                <button type="button" class="secondary-button" onclick="savePetWeight()">Добавить взвешивание</button>
+                <button type="button" class="secondary-button" data-pc-click="pet-weight-save">Добавить взвешивание</button>
             </div>
         </section>
 
@@ -263,23 +266,23 @@
             </div>
         </div>
 
-        <button class="primary-button" onclick="openHealthForm()">
+        <button class="primary-button" data-pc-click="health-add">
             + Добавить запись
         </button>
 
         <section class="history-section">
             <div class="section-heading"><h3>История событий</h3></div>
             <div class="history-filters">
-                <input type="search" id="historySearch" placeholder="Найти событие…" oninput="renderEventHistory()">
-                <select id="historyTypeFilter" onchange="renderEventHistory()" aria-label="Фильтр истории">
+                <input type="search" id="historySearch" placeholder="Найти событие…" data-pc-input="history-filter">
+                <select id="historyTypeFilter" data-pc-change="history-filter" aria-label="Фильтр истории">
                     <option value="all">Все события</option>
                     <option value="health">Здоровье</option>
                     <option value="weight">Вес</option>
                     <option value="reminder">Напоминания</option>
                     <option value="task">Задачи</option>
                 </select>
-                <input type="date" id="historyFromDate" aria-label="История с даты" onchange="renderEventHistory()">
-                <input type="date" id="historyToDate" aria-label="История по дату" onchange="renderEventHistory()">
+                <input type="date" id="historyFromDate" aria-label="История с даты" data-pc-change="history-filter">
+                <input type="date" id="historyToDate" aria-label="История по дату" data-pc-change="history-filter">
             </div>
             <div id="eventHistory" class="event-history"></div>
         </section>
@@ -288,7 +291,7 @@
     <!-- ФОРМА ЗДОРОВЬЯ -->
     <section class="page" id="healthForm">
         <div class="page-header">
-            <button onclick="closeHealthForm()">←</button>
+            <button data-pc-click="health-close">←</button>
             <h2>Новая запись</h2>
         </div>
 
@@ -319,7 +322,7 @@
             <small class="field-hint">Можно выбрать несколько фото до 10 МБ каждое. Они уменьшатся и сохранятся вместе с записью.</small>
         </div>
 
-        <button class="primary-button" onclick="saveHealthRecord()">
+        <button class="primary-button" data-pc-click="health-save">
             💾 Сохранить
         </button>
     </section>
@@ -327,20 +330,20 @@
     <!-- НАПОМИНАНИЯ -->
     <section class="page" id="remindersPage">
         <div class="page-header">
-            <button onclick="showHome()">←</button>
+            <button data-pc-click="home">←</button>
             <h2>Напоминания 🔔</h2>
         </div>
 
         <div class="pet-switcher compact-pet-switcher">
             <label for="reminderPetSwitcher">Питомец</label>
-            <select id="reminderPetSwitcher" class="pet-switcher-select" onchange="switchPet(this.value)" aria-label="Выбрать питомца для напоминаний"></select>
+            <select id="reminderPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для напоминаний"></select>
         </div>
 
         <section class="calendar-card" aria-label="Календарь ухода">
             <div class="calendar-heading">
-                <button type="button" onclick="changeCalendarMonth(-1)" aria-label="Предыдущий месяц">‹</button>
+                <button type="button" data-pc-click="calendar-previous" aria-label="Предыдущий месяц">‹</button>
                 <h3 id="calendarMonthLabel"></h3>
-                <button type="button" onclick="changeCalendarMonth(1)" aria-label="Следующий месяц">›</button>
+                <button type="button" data-pc-click="calendar-next" aria-label="Следующий месяц">›</button>
             </div>
             <div class="calendar-weekdays" aria-hidden="true"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
             <div id="calendarGrid" class="calendar-grid"></div>
@@ -366,7 +369,7 @@
             </div>
         </div>
 
-        <button class="primary-button" onclick="openReminderForm()">
+        <button class="primary-button" data-pc-click="reminder-add">
             + Добавить напоминание
         </button>
     </section>
@@ -374,7 +377,7 @@
     <!-- ФОРМА НАПОМИНАНИЯ -->
     <section class="page" id="reminderForm">
         <div class="page-header">
-            <button onclick="closeReminderForm()">←</button>
+            <button data-pc-click="reminder-close">←</button>
             <h2>Новое напоминание</h2>
         </div>
 
@@ -409,7 +412,7 @@
             <small class="field-hint">Можно выбрать несколько фото до 10 МБ каждое. Они уменьшатся и сохранятся вместе с напоминанием.</small>
         </div>
 
-        <button class="primary-button" onclick="saveReminder()">
+        <button class="primary-button" data-pc-click="reminder-save">
             🔔 Добавить
         </button>
     </section>
@@ -417,7 +420,7 @@
     <!-- ПРОФИЛЬ -->
     <section class="page" id="profilePage">
         <div class="page-header">
-            <button onclick="showHome()">←</button>
+            <button data-pc-click="home">←</button>
             <h2>Профиль 👤</h2>
         </div>
 
@@ -428,10 +431,10 @@
             <p id="userEmail"></p>
         </div>
 
-        <div class="profile-item" onclick="showPet()">🐾 Мой питомец</div>
-        <div class="profile-item" onclick="showHealth()">❤️ Здоровье</div>
-        <div class="profile-item" onclick="showReminders()">🔔 Напоминания</div>
-        <button class="logout-button" type="button" onclick="logoutUser()">🚪 Выйти из аккаунта</button>
+        <div class="profile-item" data-pc-click="pet">🐾 Мой питомец</div>
+        <div class="profile-item" data-pc-click="health">❤️ Здоровье</div>
+        <div class="profile-item" data-pc-click="reminders">🔔 Напоминания</div>
+        <button class="logout-button" type="button" data-pc-click="logout">🚪 Выйти из аккаунта</button>
 
     </section>
      <!-- ВХОД И РЕГИСТРАЦИЯ -->
@@ -444,13 +447,13 @@
                 Помощник владельца питомца
             </p>
 
-            <button type="button" class="install-app-button auth-install-button" id="authInstallAppButton" onclick="installPetCareApp()">⬇ Установить приложение</button>
+            <button type="button" class="install-app-button auth-install-button" id="authInstallAppButton" data-pc-click="install">⬇ Установить приложение</button>
 
             <div class="auth-tabs">
                 <button
                     id="loginTab"
                     class="auth-tab active"
-                    onclick="showLoginForm()"
+                    data-pc-click="auth-login"
                 >
                     Войти
                 </button>
@@ -458,7 +461,7 @@
                 <button
                     id="registerTab"
                     class="auth-tab"
-                    onclick="showRegisterForm()"
+                    data-pc-click="auth-register"
                 >
                     Регистрация
                 </button>
@@ -479,7 +482,7 @@
                     placeholder="Введите пароль"
                 >
 
-                <button class="primary-button" onclick="loginUser()">
+                <button class="primary-button" data-pc-click="login">
                     🔐 Войти
                 </button>
             </div>
@@ -506,7 +509,7 @@
                     placeholder="Повторите пароль"
                 >
 
-                <button class="primary-button" onclick="registerUser()">
+                <button class="primary-button" data-pc-click="register">
                     📝 Зарегистрироваться
                 </button>
             </div>
@@ -520,7 +523,7 @@
 <section class="page" id="assistantPage" style="display: none;">
 
     <div class="page-header">
-        <button onclick="showHome()">←</button>
+        <button data-pc-click="home">←</button>
         <h2>Помощник PetCare 🐾</h2>
     </div>
 
@@ -542,32 +545,32 @@
 
 </section>
     <nav class="bottom-menu" style="display: none;">
-        <a href="#" onclick="showHome(); return false;">
+        <a href="#" data-pc-click="nav-home">
             <span>🏠</span>
             Главная
         </a>
 
-        <a href="#" onclick="showPet(); return false;">
+        <a href="#" data-pc-click="nav-pet">
             <span>🐾</span>
             Питомец
         </a>
 
-        <a href="#" onclick="showHealth(); return false;">
+        <a href="#" data-pc-click="nav-health">
             <span>❤️</span>
             Здоровье
         </a>
 
-        <a href="#" onclick="showReminders(); return false;">
+        <a href="#" data-pc-click="nav-reminders">
             <span>🔔</span>
             Напоминания
         </a>
 
-        <a href="#" onclick="showProfile(); return false;">
+        <a href="#" data-pc-click="nav-profile">
             <span>👤</span>
             Профиль
         </a>
 
-        <a href="#" onclick="showAssistant(); return false;">
+        <a href="#" data-pc-click="nav-assistant">
     <span>🤖</span>
     ИИ-помощник
 </a>
@@ -578,12 +581,12 @@
         <h2 id="installHelpTitle">Установить PetCare</h2>
         <p id="installHelpText"></p>
         <ol id="installHelpSteps"></ol>
-        <button type="button" class="primary-button" onclick="closeInstallHelp()">Понятно</button>
+        <button type="button" class="primary-button" data-pc-click="install-close">Понятно</button>
     </dialog>
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
 <script src="script.js"></script>
 </body>
 </html>

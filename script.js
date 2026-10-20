@@ -2435,3 +2435,78 @@ if ("serviceWorker" in navigator && window.location.protocol === "https:") {
         });
     }, { once: true });
 }
+
+// Keep event behavior in this file so the page can use a strict script CSP.
+const petCareClickActions = {
+    "install": () => installPetCareApp(),
+    "home": () => showHome(),
+    "pet": () => showPet(),
+    "task-feeding": element => completeTask(element, "feeding"),
+    "task-walk": element => completeTask(element, "walk"),
+    "task-vitamins": element => completeTask(element, "vitamins"),
+    "reminders": () => showReminders(),
+    "pet-add": () => openPetForm(true),
+    "pet-edit": () => openPetForm(),
+    "pet-edit-health": () => openPetForm(false, "healthPage"),
+    "pet-close": () => closePetForm(),
+    "pet-photo-remove": () => removePetPhoto(),
+    "pet-save": () => savePet(),
+    "health-close": () => closeHealthForm(),
+    "health-export": () => exportPetHealthPdf(),
+    "pet-weight-save": () => savePetWeight(),
+    "health-add": () => openHealthForm(),
+    "health-save": () => saveHealthRecord(),
+    "history-filter": () => renderEventHistory(),
+    "calendar-previous": () => changeCalendarMonth(-1),
+    "calendar-next": () => changeCalendarMonth(1),
+    "reminder-add": () => openReminderForm(),
+    "reminder-close": () => closeReminderForm(),
+    "reminder-save": () => saveReminder(),
+    "install-close": () => closeInstallHelp(),
+    "logout": () => logoutUser(),
+    "auth-login": () => showLoginForm(),
+    "auth-register": () => showRegisterForm(),
+    "login": () => loginUser(),
+    "register": () => registerUser(),
+    "nav-home": () => showHome(),
+    "nav-pet": () => showPet(),
+    "health": () => showHealth(),
+    "nav-health": () => showHealth(),
+    "nav-reminders": () => showReminders(),
+    "nav-profile": () => showProfile(),
+    "nav-assistant": () => showAssistant()
+};
+
+function bindPetCareActions() {
+    document.addEventListener("click", event => {
+        const element = event.target instanceof Element
+            ? event.target.closest("[data-pc-click]")
+            : null;
+        if (!element) return;
+
+        const action = petCareClickActions[element.dataset.pcClick];
+        if (!action) return;
+        if (element instanceof HTMLAnchorElement) event.preventDefault();
+        action(element, event);
+    });
+
+    document.addEventListener("change", event => {
+        const element = event.target;
+        if (!(element instanceof Element)) return;
+
+        if (element.dataset.pcChange === "pet-switch") {
+            switchPet(element.value);
+        } else if (element.dataset.pcChange === "history-filter") {
+            renderEventHistory();
+        }
+    });
+
+    document.addEventListener("input", event => {
+        const element = event.target;
+        if (element instanceof Element && element.dataset.pcInput === "history-filter") {
+            renderEventHistory();
+        }
+    });
+}
+
+bindPetCareActions();

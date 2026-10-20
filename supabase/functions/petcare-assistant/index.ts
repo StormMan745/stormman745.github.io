@@ -1,12 +1,58 @@
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Content-Type": "application/json; charset=utf-8",
-};
+const allowedOrigins = new Set(["https://stormman745.github.io"]);
 
-function jsonResponse(body: Record<string, unknown>, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: corsHeaders });
+function corsHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  const headers = new Headers({
+    "Vary": "Origin",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "600",
+    "Content-Type": "application/json; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "no-store",
+  });
+
+  if (origin && allowedOrigins.has(origin)) {
+    headers.set("Access-Control-Allow-Origin", origin);
+  }
+
+  return headers;
+}
+
+function jsonResponse(request: Request, body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeaders(request) });
+}
+
+const MAX_REQUEST_BYTES = 64 * 1024;
+
+async function readJsonBody(request: Request) {
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (declaredLength > MAX_REQUEST_BYTES) throw new RangeError("Request body too large");
+
+  const reader = request.body?.getReader();
+  if (!reader) throw new SyntaxError("Empty request body");
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_REQUEST_BYTES) {
+      await reader.cancel();
+      throw new RangeError("Request body too large");
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return JSON.parse(new TextDecoder().decode(bytes));
 }
 
 function cleanText(value: unknown, maxLength: number) {
@@ -14,24 +60,36 @@ function cleanText(value: unknown, maxLength: number) {
 }
 
 Deno.serve(async (request) => {
+  const origin = request.headers.get("origin");
+  if (origin && !allowedOrigins.has(origin)) {
+    return new Response("Forbidden origin", { status: 403, headers: corsHeaders(request) });
+  }
+
   if (request.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders(request) });
   }
 
   if (request.method !== "POST") {
-    return jsonResponse({ error: "Разрешены только POST-запросы." }, 405);
+    return jsonResponse(request, { error: "Разрешены только POST-запросы." }, 405);
   }
 
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) {
-    return jsonResponse({ error: "На сервере не настроен ключ OpenAI (OPENAI_API_KEY)." }, 503);
+    return jsonResponse(request, { error: "На сервере не настроен ключ OpenAI (OPENAI_API_KEY)." }, 503);
   }
 
   let body: { messages?: unknown; pet?: Record<string, unknown> };
   try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: "Не удалось прочитать вопрос." }, 400);
+    const parsed = await readJsonBody(request);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new SyntaxError("Invalid JSON object");
+    }
+    body = parsed as { messages?: unknown; pet?: Record<string, unknown> };
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return jsonResponse(request, { error: "Слишком большой запрос." }, 413);
+    }
+    return jsonResponse(request, { error: "Не удалось прочитать вопрос." }, 400);
   }
 
   const messages = Array.isArray(body.messages)
@@ -46,7 +104,7 @@ Deno.serve(async (request) => {
     : [];
 
   if (!messages.length || messages[messages.length - 1].role !== "user") {
-    return jsonResponse({ error: "Напиши вопрос, чтобы начать разговор." }, 400);
+    return jsonResponse(request, { error: "Напиши вопрос, чтобы начать разговор." }, 400);
   }
 
   const pet = body.pet && typeof body.pet === "object" ? body.pet : {};
@@ -87,12 +145,12 @@ Deno.serve(async (request) => {
       const status = openAiResponse.status;
       console.error("OpenAI request failed with status:", status);
       if (status === 401 || status === 403) {
-        return jsonResponse({ error: "Ключ OpenAI не принят. Проверь секрет OPENAI_API_KEY в Supabase." }, 502);
+        return jsonResponse(request, { error: "Ключ OpenAI не принят. Проверь секрет OPENAI_API_KEY в Supabase." }, 502);
       }
       if (status === 429) {
-        return jsonResponse({ error: "Сейчас исчерпан лимит запросов OpenAI. Попробуй немного позже." }, 503);
+        return jsonResponse(request, { error: "Сейчас исчерпан лимит запросов OpenAI. Попробуй немного позже." }, 503);
       }
-      return jsonResponse({ error: "OpenAI временно не смог ответить. Попробуй ещё раз." }, 502);
+      return jsonResponse(request, { error: "OpenAI временно не смог ответить. Попробуй ещё раз." }, 502);
     }
 
     const result = await openAiResponse.json();
@@ -106,12 +164,12 @@ Deno.serve(async (request) => {
       : "";
 
     if (!answer) {
-      return jsonResponse({ error: "Модель не вернула текстовый ответ. Попробуй задать вопрос иначе." }, 502);
+      return jsonResponse(request, { error: "Модель не вернула текстовый ответ. Попробуй задать вопрос иначе." }, 502);
     }
 
-    return jsonResponse({ answer });
+    return jsonResponse(request, { answer });
   } catch (error) {
     console.error("PetCare assistant request failed:", error instanceof Error ? error.name : "UnknownError");
-    return jsonResponse({ error: "Не удалось связаться с ИИ. Проверь интернет и попробуй ещё раз." }, 502);
+    return jsonResponse(request, { error: "Не удалось связаться с ИИ. Проверь интернет и попробуй ещё раз." }, 502);
   }
 });
