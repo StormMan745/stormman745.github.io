@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://qexiyikdmdbdxgusqnee.supabase.co; media-src 'self' blob: https://qexiyikdmdbdxgusqnee.supabase.co; connect-src 'self' https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>PetCare</title>
@@ -420,6 +420,33 @@
         </button>
     </section>
 
+    <!-- ИСТОРИИ -->
+    <section class="page" id="storiesPage">
+        <div class="page-header">
+            <button type="button" data-pc-click="home">←</button>
+            <h2>Истории питомца ✨</h2>
+        </div>
+
+        <section class="stories-intro">
+            <span class="stories-intro-icon">🎞️</span>
+            <div>
+                <span class="welcome-tag">ОДИН МЕСЯЦ В ЧЕТЫРЁХ КАДРАХ</span>
+                <h3>Как растёт ваш питомец</h3>
+                <p>Снимайте по одному фото в неделю. Через месяц соберём их в видео с мягкой мелодией.</p>
+            </div>
+        </section>
+
+        <div class="pet-switcher compact-pet-switcher">
+            <label for="storyPetSwitcher">Питомец</label>
+            <select id="storyPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для истории"></select>
+        </div>
+
+        <button class="primary-button" type="button" data-pc-click="story-add">＋ Начать историю месяца</button>
+        <p class="stories-storage-note">Фото и готовые истории хранятся в вашем аккаунте.</p>
+        <div id="storiesList" class="stories-list" aria-live="polite"></div>
+        <input id="storyPhotoInput" type="file" accept="image/*" capture="environment" aria-label="Сделать фото для истории">
+    </section>
+
     <!-- ПРОФИЛЬ -->
     <section class="page" id="profilePage">
         <div class="page-header">
@@ -568,6 +595,11 @@
             Напоминания
         </a>
 
+        <a href="#" data-pc-click="nav-stories">
+            <span>🎞️</span>
+            Истории
+        </a>
+
         <a href="#" data-pc-click="nav-profile">
             <span>👤</span>
             Профиль
@@ -585,6 +617,20 @@
         <p id="installHelpText"></p>
         <ol id="installHelpSteps"></ol>
         <button type="button" class="primary-button" data-pc-click="install-close">Понятно</button>
+    </dialog>
+
+    <dialog class="story-setup-dialog" id="storySetupDialog" aria-labelledby="storySetupTitle">
+        <div class="install-help-mark">📸</div>
+        <h2 id="storySetupTitle">Новая история месяца</h2>
+        <p>Выберите месяц и день первого фото. PetCare напомнит о следующих трёх снимках каждую неделю.</p>
+        <label for="storyMonthInput">Месяц истории</label>
+        <input id="storyMonthInput" type="month">
+        <label for="storyStartDateInput">Первое фото</label>
+        <input id="storyStartDateInput" type="date">
+        <label for="storyReminderTimeInput">Время напоминания</label>
+        <input id="storyReminderTimeInput" type="time" value="09:00">
+        <button type="button" class="primary-button" data-pc-click="story-create">Создать план съёмки</button>
+        <button type="button" class="story-dialog-cancel" data-pc-click="story-close">Отмена</button>
     </dialog>
 
 </div>

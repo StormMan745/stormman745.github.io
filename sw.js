@@ -1,4 +1,4 @@
-const CACHE_NAME = "petcare-shell-v2";
+const CACHE_NAME = "petcare-shell-v3";
 const SHELL_FILES = [
     "/",
     "/index.html",
@@ -61,3 +61,4 @@ self.addEventListener("fetch", event => {
             .catch(async () => (await caches.match(request)) || (await caches.match(url.pathname)))
     );
 });
+

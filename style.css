@@ -2058,6 +2058,166 @@ body {
 
 .danger-button:hover { background: #f8e1dc; }
 
+.stories-intro {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin: 4px 0 17px;
+    padding: 19px;
+    border: 1px solid #d8e9db;
+    border-radius: 22px;
+    background: linear-gradient(145deg, #eff8ee, #e4f1e5 65%, #f7f7ec);
+    box-shadow: 0 6px 0 #d6e6d7, 0 13px 23px rgba(48, 83, 54, .07), inset 0 1px #fff;
+}
+
+.stories-intro-icon {
+    display: grid;
+    flex: 0 0 52px;
+    width: 52px;
+    height: 52px;
+    place-items: center;
+    border: 1px solid #fff;
+    border-radius: 17px;
+    background: linear-gradient(145deg, #fff, #dcefe0);
+    box-shadow: 0 4px 0 #c8dfcd, inset 0 1px #fff;
+    font-size: 25px;
+}
+
+.stories-intro h3 {
+    margin: 5px 0 6px;
+    color: var(--green-dark);
+    font-size: 19px;
+}
+
+.stories-intro p,
+.stories-storage-note {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.stories-intro p { margin: 0; }
+.stories-storage-note { margin: 9px 4px 15px; }
+.stories-list { display: grid; gap: 17px; margin-top: 16px; }
+
+.story-card {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid #dce9dc;
+    border-radius: 22px;
+    background: linear-gradient(150deg, #fff, #f8fbf6);
+    box-shadow: 0 6px 0 rgba(214, 229, 215, .9), 0 12px 22px rgba(42, 77, 49, .06), inset 0 1px #fff;
+}
+
+.story-card-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 12px;
+}
+
+.story-card-heading h3 { margin: 0; color: var(--green-dark); font-size: 18px; }
+.story-card-heading small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+
+.story-progress-track {
+    height: 8px;
+    margin: 0 0 13px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e8efe8;
+}
+
+.story-progress-value {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #5ba67a, #2d7656);
+    transition: width .25s ease;
+}
+
+.story-week-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+
+.story-week {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #e3ece3;
+    border-radius: 16px;
+    background: linear-gradient(145deg, #f8fbf7, #edf5ed);
+}
+
+.story-week-image-wrap {
+    position: relative;
+    display: grid;
+    aspect-ratio: 4 / 3;
+    place-items: center;
+    overflow: hidden;
+    background: linear-gradient(145deg, #e9f3e9, #f7f6eb);
+}
+
+.story-week-photo { width: 100%; height: 100%; object-fit: cover; }
+.story-week-empty { color: #9aaa9c; font-size: 29px; }
+
+.story-week-info { padding: 9px; }
+.story-week-info strong { display: block; color: #345b40; font-size: 12px; }
+.story-week-info small { display: block; min-height: 15px; margin-top: 3px; color: #819083; font-size: 10px; }
+
+.story-week-button {
+    width: 100%;
+    min-height: 35px;
+    margin-top: 7px;
+    padding: 5px 7px;
+    border: 1px solid #cfe2d2;
+    border-radius: 11px;
+    background: linear-gradient(145deg, #fff, #eaf4ea);
+    color: var(--green-dark);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.story-generate-button,
+.story-save-button { width: 100%; margin-top: 13px; }
+.story-generate-button:disabled { cursor: wait; opacity: .7; }
+.story-video { display: block; width: 100%; max-height: 560px; margin-top: 15px; border-radius: 17px; background: #17251c; }
+.story-save-note { margin: 8px 2px 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+#storyPhotoInput {
+    position: fixed;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+}
+
+.story-setup-dialog {
+    width: min(calc(100% - 30px), 430px);
+    max-height: min(90dvh, 720px);
+    padding: 23px;
+    border: 1px solid rgba(255,255,255,.95);
+    border-radius: 26px;
+    background: linear-gradient(150deg, #fff, #f2f8f0);
+    box-shadow: 0 12px 0 #d8e7d8, 0 28px 70px rgba(28, 67, 46, .2), inset 0 1px #fff;
+    color: var(--text);
+}
+
+.story-setup-dialog::backdrop { background: rgba(27, 47, 33, .38); backdrop-filter: blur(4px); }
+.story-setup-dialog h2 { margin: 10px 0 7px; color: var(--green-dark); }
+.story-setup-dialog p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.story-setup-dialog label { margin-top: 12px; }
+.story-setup-dialog input { margin-top: 6px; }
+
+.story-dialog-cancel {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    margin-top: 10px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-weight: 700;
+}
+
 input, select, textarea {
     border-color: #dfe9e0;
     box-shadow: 0 3px 0 rgba(221, 232, 221, .75), inset 0 1px 2px rgba(35, 62, 41, .025);
