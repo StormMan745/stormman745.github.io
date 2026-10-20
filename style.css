@@ -74,6 +74,11 @@ button {
 
 .install-app-button[hidden] { display: none; }
 
+.auth-install-button {
+    width: 100%;
+    margin: 0 0 15px;
+}
+
 .install-app-button:active {
     transform: translateY(3px);
     box-shadow: 0 1px 0 #cfe1d0, inset 0 2px 4px rgba(34, 68, 43, .12);

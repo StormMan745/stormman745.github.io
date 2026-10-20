@@ -2354,6 +2354,12 @@ function isAppleMobileDevice() {
         || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
+function hideInstallButtons() {
+    document.querySelectorAll(".install-app-button").forEach(button => {
+        button.hidden = true;
+    });
+}
+
 function openInstallHelp(platform) {
     const dialog = document.getElementById("installHelpDialog");
     const text = document.getElementById("installHelpText");
@@ -2415,13 +2421,11 @@ window.addEventListener("beforeinstallprompt", event => {
 
 window.addEventListener("appinstalled", () => {
     deferredInstallPrompt = null;
-    const button = document.getElementById("installAppButton");
-    if (button) button.hidden = true;
+    hideInstallButtons();
 });
 
 if (isPetCareInstalled()) {
-    const button = document.getElementById("installAppButton");
-    if (button) button.hidden = true;
+    hideInstallButtons();
 }
 
 if ("serviceWorker" in navigator && window.location.protocol === "https:") {
