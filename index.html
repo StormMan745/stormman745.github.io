@@ -2,8 +2,15 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>PetCare</title>
+    <meta name="theme-color" content="#174f3b">
+    <meta name="description" content="Удобный помощник для здоровья и ежедневного ухода за питомцем.">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="PetCare">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,6 +23,7 @@
                 <h1>PetCare 🐾</h1>
                 <p>Помощник владельца питомца</p>
             </div>
+            <button type="button" class="install-app-button" id="installAppButton" onclick="installPetCareApp()">⬇ Установить</button>
         </header>
 
         <section class="welcome">
@@ -563,10 +571,17 @@
 </a>
     </nav>
 
+    <dialog class="install-help-dialog" id="installHelpDialog" aria-labelledby="installHelpTitle">
+        <div class="install-help-mark">🐾</div>
+        <h2 id="installHelpTitle">Установить PetCare</h2>
+        <p id="installHelpText"></p>
+        <ol id="installHelpSteps"></ol>
+        <button type="button" class="primary-button" onclick="closeInstallHelp()">Понятно</button>
+    </dialog>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="script.js"></script>
 </body>
 </html>
-

@@ -2339,3 +2339,95 @@ async function sendAssistantMessage(event) {
 
 document.getElementById("assistantForm")?.addEventListener("submit", sendAssistantMessage);
 
+// ==============================
+// УСТАНОВКА ВЕБ-ПРИЛОЖЕНИЯ
+// ==============================
+
+let deferredInstallPrompt = null;
+
+function isPetCareInstalled() {
+    return window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+function isAppleMobileDevice() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent)
+        || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function openInstallHelp(platform) {
+    const dialog = document.getElementById("installHelpDialog");
+    const text = document.getElementById("installHelpText");
+    const steps = document.getElementById("installHelpSteps");
+    if (!dialog || !text || !steps) return;
+
+    if (platform === "ios") {
+        text.textContent = "Добавьте PetCare на главный экран, чтобы открывать его как обычное приложение.";
+        steps.replaceChildren();
+        [
+            "Откройте сайт в Safari на iPhone или iPad.",
+            "Нажмите кнопку «Поделиться» внизу экрана.",
+            "Выберите «На экран Домой», затем нажмите «Добавить»."
+        ].forEach(step => {
+            const item = document.createElement("li");
+            item.textContent = step;
+            steps.appendChild(item);
+        });
+    } else {
+        text.textContent = "Установите PetCare из меню браузера, чтобы запускать сайт в отдельном окне.";
+        steps.replaceChildren();
+        [
+            "Откройте сайт в Chrome или другом поддерживаемом браузере.",
+            "Нажмите меню браузера ⋮.",
+            "Выберите «Установить приложение» или «Добавить на главный экран»."
+        ].forEach(step => {
+            const item = document.createElement("li");
+            item.textContent = step;
+            steps.appendChild(item);
+        });
+    }
+
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+}
+
+function closeInstallHelp() {
+    const dialog = document.getElementById("installHelpDialog");
+    if (!dialog) return;
+    if (typeof dialog.close === "function") dialog.close();
+    else dialog.removeAttribute("open");
+}
+
+async function installPetCareApp() {
+    if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+        return;
+    }
+
+    openInstallHelp(isAppleMobileDevice() ? "ios" : "android");
+}
+
+window.addEventListener("beforeinstallprompt", event => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+});
+
+window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    const button = document.getElementById("installAppButton");
+    if (button) button.hidden = true;
+});
+
+if (isPetCareInstalled()) {
+    const button = document.getElementById("installAppButton");
+    if (button) button.hidden = true;
+}
+
+if ("serviceWorker" in navigator && window.location.protocol === "https:") {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(error => {
+            console.error("Не удалось включить офлайн-оболочку PetCare:", error);
+        });
+    }, { once: true });
+}

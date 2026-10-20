@@ -51,6 +51,53 @@ button {
     margin-bottom: 25px;
 }
 
+.top-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.install-app-button {
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 0 13px;
+    border: 1px solid #cfe2d2;
+    border-radius: 14px;
+    background: linear-gradient(145deg, #f5fbf3, #e4f1e4);
+    box-shadow: 0 4px 0 #cfe1d0, 0 7px 12px rgba(49, 88, 54, .06), inset 0 1px rgba(255,255,255,.95);
+    color: #245d43;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.install-app-button[hidden] { display: none; }
+
+.install-app-button:active {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 #cfe1d0, inset 0 2px 4px rgba(34, 68, 43, .12);
+}
+
+.install-help-dialog {
+    width: min(calc(100% - 32px), 390px);
+    max-height: min(80vh, 620px);
+    margin: auto;
+    padding: 25px;
+    border: 1px solid #d9e8dc;
+    border-radius: 24px;
+    background: linear-gradient(150deg, #fff, #f5faf4);
+    box-shadow: 0 18px 60px rgba(21, 55, 34, .24);
+    color: #294b35;
+}
+
+.install-help-dialog::backdrop { background: rgba(20, 43, 29, .45); backdrop-filter: blur(3px); }
+.install-help-mark { margin-bottom: 12px; font-size: 34px; }
+.install-help-dialog h2 { margin-bottom: 9px; font-size: 21px; }
+.install-help-dialog p { color: #738377; font-size: 14px; line-height: 1.5; }
+.install-help-dialog ol { display: grid; gap: 10px; margin: 18px 0 21px; padding-left: 22px; color: #43594a; font-size: 14px; line-height: 1.45; }
+.install-help-dialog .primary-button { width: 100%; }
+
 
 .top-header h1 {
     font-size: 30px;
@@ -2532,4 +2579,3 @@ input, select, textarea {
         height: 35px;
     }
 }
-

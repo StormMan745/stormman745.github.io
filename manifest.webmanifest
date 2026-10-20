@@ -1,0 +1,18 @@
+{
+  "id": "/",
+  "name": "PetCare — помощник владельца питомца",
+  "short_name": "PetCare",
+  "description": "Здоровье, уход и напоминания для вашего питомца.",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#f4f7f2",
+  "theme_color": "#174f3b",
+  "icons": [
+    { "src": "/assets/petcare-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/assets/petcare-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
