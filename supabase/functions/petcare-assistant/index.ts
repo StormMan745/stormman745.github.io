@@ -59,6 +59,64 @@ function cleanText(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
+class GigaChatApiError extends Error {
+  constructor(readonly status: number, readonly stage: "auth" | "chat") {
+    super(`GigaChat ${stage} request failed with status ${status}`);
+  }
+}
+
+let cachedAccessToken: string | null = null;
+let cachedAccessTokenExpiresAt = 0;
+let accessTokenRequest: Promise<string> | null = null;
+
+async function getGigaChatAccessToken(
+  authKey: string,
+  scope: string,
+  client?: Deno.HttpClient,
+) {
+  if (cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt - 60_000) {
+    return cachedAccessToken;
+  }
+  if (accessTokenRequest) return accessTokenRequest;
+
+  const requestPromise = (async () => {
+    const response = await fetch("https://ngw.devices.sberbank.ru:9443/api/v2/oauth", {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${authKey}`,
+        "RqUID": crypto.randomUUID(),
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Cache-Control": "no-cache",
+      },
+      body: new URLSearchParams({ scope }),
+      ...(client ? { client } : {}),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!response.ok) throw new GigaChatApiError(response.status, "auth");
+
+    const result = await response.json();
+    if (typeof result.access_token !== "string" || !result.access_token) {
+      throw new Error("GigaChat did not return an access token");
+    }
+
+    const expiresAt = Number(result.expires_at);
+    cachedAccessToken = result.access_token;
+    cachedAccessTokenExpiresAt = Number.isFinite(expiresAt) && expiresAt > 0
+      ? expiresAt * 1000
+      : Date.now() + 29 * 60_000;
+    return cachedAccessToken;
+  })();
+
+  accessTokenRequest = requestPromise;
+  try {
+    return await requestPromise;
+  } finally {
+    if (accessTokenRequest === requestPromise) accessTokenRequest = null;
+  }
+}
+
 Deno.serve(async (request) => {
   const origin = request.headers.get("origin");
   if (origin && !allowedOrigins.has(origin)) {
@@ -73,9 +131,14 @@ Deno.serve(async (request) => {
     return jsonResponse(request, { error: "Разрешены только POST-запросы." }, 405);
   }
 
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!apiKey) {
-    return jsonResponse(request, { error: "На сервере не настроен ключ OpenAI (OPENAI_API_KEY)." }, 503);
+  const authKey = (
+    Deno.env.get("GIGACHAT_AUTH_KEY") ||
+    Deno.env.get("GIGACHAT_API_KEY") ||
+    Deno.env.get("GIGACHAT_CREDENTIALS") ||
+    ""
+  ).trim();
+  if (!authKey) {
+    return jsonResponse(request, { error: "В Supabase не настроен ключ GigaChat (GIGACHAT_AUTH_KEY)." }, 503);
   }
 
   let body: { messages?: unknown; pet?: Record<string, unknown> };
@@ -124,52 +187,64 @@ Deno.serve(async (request) => {
     petContext ? `Данные питомца: ${petContext}.` : "Пользователь пока не указал данные питомца.",
   ].join("\n");
 
+  const caCertificate = Deno.env.get("GIGACHAT_CA_CERT")?.trim();
+  let httpClient: Deno.HttpClient | undefined;
   try {
-    const openAiResponse = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: Deno.env.get("OPENAI_MODEL") || "gpt-6-astra",
-        instructions,
-        input: messages,
-        max_output_tokens: 600,
-        store: false,
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
-
-    if (!openAiResponse.ok) {
-      const status = openAiResponse.status;
-      console.error("OpenAI request failed with status:", status);
-      if (status === 401 || status === 403) {
-        return jsonResponse(request, { error: "Ключ OpenAI не принят. Проверь секрет OPENAI_API_KEY в Supabase." }, 502);
-      }
-      if (status === 429) {
-        return jsonResponse(request, { error: "Сейчас исчерпан лимит запросов OpenAI. Попробуй немного позже." }, 503);
-      }
-      return jsonResponse(request, { error: "OpenAI временно не смог ответить. Попробуй ещё раз." }, 502);
+    if (caCertificate?.includes("-----BEGIN CERTIFICATE-----")) {
+      httpClient = Deno.createHttpClient({ caCerts: [caCertificate] });
     }
 
-    const result = await openAiResponse.json();
-    const answer = Array.isArray(result.output)
-      ? result.output
-          .flatMap((item: { content?: Array<{ type?: string; text?: string }> }) => item.content || [])
-          .filter((item: { type?: string; text?: string }) => item.type === "output_text" && typeof item.text === "string")
-          .map((item: { text: string }) => item.text)
-          .join("\n")
-          .trim()
+    const scope = Deno.env.get("GIGACHAT_SCOPE") || "GIGACHAT_API_PERS";
+    const accessToken = await getGigaChatAccessToken(authKey, scope, httpClient);
+    const response = await fetch("https://api.giga.chat/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        model: Deno.env.get("GIGACHAT_MODEL") || "GigaChat-2",
+        messages: [
+          { role: "system", content: instructions },
+          ...messages,
+        ],
+        max_tokens: 600,
+        temperature: 0.7,
+        stream: false,
+      }),
+      ...(httpClient ? { client: httpClient } : {}),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!response.ok) throw new GigaChatApiError(response.status, "chat");
+
+    const result = await response.json();
+    const answer = typeof result.choices?.[0]?.message?.content === "string"
+      ? result.choices[0].message.content.trim()
       : "";
 
     if (!answer) {
-      return jsonResponse(request, { error: "Модель не вернула текстовый ответ. Попробуй задать вопрос иначе." }, 502);
+      return jsonResponse(request, { error: "GigaChat не вернул текстовый ответ. Попробуй задать вопрос иначе." }, 502);
     }
 
     return jsonResponse(request, { answer });
   } catch (error) {
-    console.error("PetCare assistant request failed:", error instanceof Error ? error.name : "UnknownError");
-    return jsonResponse(request, { error: "Не удалось связаться с ИИ. Проверь интернет и попробуй ещё раз." }, 502);
+    if (error instanceof GigaChatApiError) {
+      console.error(`GigaChat ${error.stage} request failed with status:`, error.status);
+      if (error.stage === "auth" && (error.status === 401 || error.status === 403)) {
+        return jsonResponse(request, { error: "Ключ GigaChat не принят. Проверьте секрет GIGACHAT_AUTH_KEY в Supabase." }, 502);
+      }
+      if (error.status === 429) {
+        return jsonResponse(request, { error: "Лимит запросов GigaChat исчерпан. Попробуй немного позже." }, 503);
+      }
+      return jsonResponse(request, { error: "GigaChat временно не смог ответить. Попробуй ещё раз." }, 502);
+    }
+
+    console.error("PetCare GigaChat request failed:", error instanceof Error ? error.name : "UnknownError");
+    return jsonResponse(request, { error: "Не удалось связаться с GigaChat. Проверь интернет и попробуй ещё раз." }, 502);
+  } finally {
+    httpClient?.close();
   }
 });
+
