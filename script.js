@@ -3453,10 +3453,6 @@ const petCareClickActions = {
     "reminder-save": () => saveReminder(),
     "install-close": () => closeInstallHelp(),
     "logout": () => logoutUser(),
-    "auth-login": () => showLoginForm(),
-    "auth-register": () => showRegisterForm(),
-    "login": () => loginUser(),
-    "register": () => registerUser(),
     "nav-home": () => showHome(),
     "nav-pet": () => showPet(),
     "health": () => showHealth(),
@@ -3509,4 +3505,13 @@ function bindPetCareActions() {
     });
 }
 
+function bindAuthControls() {
+    document.getElementById("loginTab")?.addEventListener("click", showLoginForm);
+    document.getElementById("registerTab")?.addEventListener("click", showRegisterForm);
+    document.getElementById("loginButton")?.addEventListener("click", loginUser);
+    document.getElementById("registerButton")?.addEventListener("click", registerUser);
+}
+
+bindAuthControls();
 bindPetCareActions();
+
