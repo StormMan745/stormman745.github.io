@@ -1,4 +1,18 @@
-const allowedOrigins = new Set(["https://stormman745.github.io"]);
+const allowedOrigins = new Set([
+  "https://stormman745.github.io",
+  "https://www.stormman745.github.io",
+]);
+
+function isAllowedOrigin(origin: string) {
+  if (allowedOrigins.has(origin)) return true;
+
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+  } catch {
+    return false;
+  }
+}
 
 function corsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -119,7 +133,8 @@ async function getGigaChatAccessToken(
 
 Deno.serve(async (request) => {
   const origin = request.headers.get("origin");
-  if (origin && !allowedOrigins.has(origin)) {
+  if (origin && !isAllowedOrigin(origin)) {
+    console.warn("PetCare assistant rejected origin:", origin);
     return new Response("Forbidden origin", { status: 403, headers: corsHeaders(request) });
   }
 
