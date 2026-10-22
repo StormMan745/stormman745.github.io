@@ -26,7 +26,7 @@ function corsHeaders(request: Request) {
     "Cache-Control": "no-store",
   });
 
-  if (origin && allowedOrigins.has(origin)) {
+  if (origin && isAllowedOrigin(origin)) {
     headers.set("Access-Control-Allow-Origin", origin);
   }
 
