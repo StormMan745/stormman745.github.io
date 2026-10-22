@@ -1,6 +1,8 @@
 const allowedOrigins = new Set([
   "https://stormman745.github.io",
   "https://www.stormman745.github.io",
+  // file:// pages send the opaque "null" origin; this function still requires a Supabase JWT.
+  "null",
 ]);
 
 function isAllowedOrigin(origin: string) {
