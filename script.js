@@ -1573,6 +1573,17 @@ async function loginUser() {
 }
 
 
+// Bind auth forms directly so login does not depend on the page-wide click handler.
+document.getElementById("loginForm")?.addEventListener("submit", event => {
+    event.preventDefault();
+    loginUser();
+});
+
+document.getElementById("registerForm")?.addEventListener("submit", event => {
+    event.preventDefault();
+    registerUser();
+});
+
 // ==============================
 // ОТКРЫТЬ ГЛАВНУЮ ПОСЛЕ ВХОДА
 // ==============================
@@ -2030,8 +2041,6 @@ const petCareClickActions = {
     "logout": () => logoutUser(),
     "auth-login": () => showLoginForm(),
     "auth-register": () => showRegisterForm(),
-    "login": () => loginUser(),
-    "register": () => registerUser(),
     "nav-home": () => showHome(),
     "nav-pet": () => showPet(),
     "health": () => showHealth(),
