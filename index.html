@@ -495,6 +495,7 @@
 
             <div class="auth-tabs">
                 <button
+                    type="button"
                     id="loginTab"
                     class="auth-tab active"
                     data-pc-click="auth-login"
@@ -503,6 +504,7 @@
                 </button>
 
                 <button
+                    type="button"
                     id="registerTab"
                     class="auth-tab"
                     data-pc-click="auth-register"
@@ -511,7 +513,7 @@
                 </button>
             </div>
 
-            <div id="loginForm">
+            <form id="loginForm" method="post" action="/" novalidate>
                 <label for="loginEmail">Email</label>
                 <input
                     type="email"
@@ -526,12 +528,12 @@
                     placeholder="Введите пароль"
                 >
 
-                <button class="primary-button" data-pc-click="login">
+                <button type="submit" class="primary-button">
                     🔐 Войти
                 </button>
-            </div>
+            </form>
 
-            <div id="registerForm" style="display: none;">
+            <form id="registerForm" method="post" action="/" novalidate style="display: none;">
                 <label for="registerEmail">Email</label>
                 <input
                     type="email"
@@ -553,10 +555,10 @@
                     placeholder="Повторите пароль"
                 >
 
-                <button class="primary-button" data-pc-click="register">
+                <button type="submit" class="primary-button">
                     📝 Зарегистрироваться
                 </button>
-            </div>
+            </form>
 
             <p id="authMessage" class="auth-message"></p>
         </div>
