@@ -1,39 +1,27 @@
 # Подключение PetCare AI
 
-Код чата уже находится в `index.html`, `script.js` и `supabase/functions/petcare-assistant/index.ts`. Запросы к OpenAI идут через Supabase Edge Function; API-ключ хранится только в секретах Supabase.
+Чат отправляет сообщения в Supabase Edge Function `petcare-assistant`, которая отвечает через GigaChat API. Секреты авторизации хранятся только в Supabase и не передаются браузеру.
 
-Если таблица `petcare_data` ещё не создана, сначала открой Supabase → **SQL Editor**, вставь содержимое `supabase_setup.sql` и нажми **Run**. Это нужно для облачного сохранения переписки.
+## Секреты GigaChat
 
-## 1. Создать ключ OpenAI и сохранить его в Supabase
+В Supabase уже настроены секреты `GIGACHAT_AUTH_KEY` и `GIGACHAT_CA_CERT`. Если подключаете другую учётную запись, откройте [секреты Edge Functions](https://supabase.com/dashboard/project/qexiyikdmdbdxgusqnee/functions/secrets) и задайте:
 
-1. Открой [страницу API-ключей OpenAI](https://platform.openai.com/api-keys) и создай новый API-ключ.
-2. Открой [секреты Edge Functions этого проекта Supabase](https://supabase.com/dashboard/project/qexiyikdmdbdxgusqnee/functions/secrets).
-3. Добавь секрет:
+- `GIGACHAT_AUTH_KEY` — ключ авторизации GigaChat API из личного кабинета.
+- `GIGACHAT_CA_CERT` — корневой сертификат НУЦ Минцифры в PEM-формате; нужен для проверки TLS-сертификата GigaChat.
+- `GIGACHAT_SCOPE` — область API, по умолчанию `GIGACHAT_API_PERS`.
+- `GIGACHAT_MODEL` — модель, по умолчанию `GigaChat-2`.
 
-- Имя: `OPENAI_API_KEY`
-- Значение: созданный API-ключ
+Не помещайте эти значения в `index.html`, `script.js`, репозиторий или чат. Функция получает токен GigaChat на сервере и использует его для генерации ответа.
 
-Нажми **Save**. Не вставляй ключ в `index.html`, `script.js` или другие файлы проекта и не отправляй его в чат. Для запросов API может потребоваться включённый биллинг OpenAI Platform.
+## Публикация функции из PowerShell
 
-## 2. Подготовить Supabase CLI для Windows
-
-CLI уже загружен в папку `.tools\supabase` этого проекта. В PowerShell, открытом в корне проекта, проверь версию:
+Из корня проекта выполните:
 
 ```powershell
-& ".\.tools\supabase\supabase.exe" --version
-```
-
-Если понадобится установить CLI на другом компьютере, смотри [официальные релизы Supabase CLI](https://github.com/supabase/cli/releases/latest) и скачай архив для Windows x64.
-
-## 3. Войти и опубликовать функцию
-
-В PowerShell перейди в папку проекта `C:\Users\Admin\Desktop\PetCare`, затем выполни:
-
-```powershell
-& ".\.tools\supabase\supabase.exe" login
 & ".\.tools\supabase\supabase.exe" functions deploy petcare-assistant --project-ref qexiyikdmdbdxgusqnee
 ```
 
-Команда `login` откроет вход Supabase в браузере. После успешной публикации обнови сайт, войди в PetCare и отправь сообщение помощнику. Функция настроена требовать активную сессию Supabase.
+Функция требует активную сессию Supabase; её настройки находятся в `supabase/config.toml`. После публикации войдите в PetCare и отправьте сообщение в раздел «ИИ-помощник».
 
-После публикации открой сайт, войди в аккаунт и отправь сообщение в разделе «ИИ-помощник». Переписка сохраняется в данных аккаунта PetCare.
+Переписка и данные питомца сохраняются в аккаунте PetCare. Ответы помощника не заменяют консультацию ветеринара.
+
