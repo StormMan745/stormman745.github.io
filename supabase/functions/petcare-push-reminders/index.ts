@@ -264,4 +264,3 @@ Deno.serve(async request => {
     return jsonResponse({ error: "Push dispatcher failed" }, 500);
   }
 });
-

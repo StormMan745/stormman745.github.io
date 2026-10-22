@@ -202,4 +202,3 @@ select cron.schedule(
     '20 4 * * *',
     $$delete from public.petcare_push_delivery_log where created_at < now() - interval '90 days'$$
 );
-
