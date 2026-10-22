@@ -1,4 +1,4 @@
-const CACHE_NAME = "petcare-shell-v8";
+const CACHE_NAME = "petcare-shell-v9";
 const SHELL_FILES = [
     "/",
     "/index.html",
@@ -110,3 +110,4 @@ self.addEventListener("notificationclick", event => {
         return self.clients.openWindow(targetUrl.href);
     })());
 });
+
