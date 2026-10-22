@@ -513,7 +513,7 @@
                 </button>
             </div>
 
-            <form id="loginForm" method="post" action="/" novalidate>
+            <div id="loginForm">
                 <label for="loginEmail">Email</label>
                 <input
                     type="email"
@@ -528,12 +528,12 @@
                     placeholder="Введите пароль"
                 >
 
-                <button type="submit" class="primary-button">
+                <button class="primary-button" data-pc-click="login">
                     🔐 Войти
                 </button>
-            </form>
+            </div>
 
-            <form id="registerForm" method="post" action="/" novalidate style="display: none;">
+            <div id="registerForm" style="display: none;">
                 <label for="registerEmail">Email</label>
                 <input
                     type="email"
@@ -555,10 +555,10 @@
                     placeholder="Повторите пароль"
                 >
 
-                <button type="submit" class="primary-button">
+                <button class="primary-button" data-pc-click="register">
                     📝 Зарегистрироваться
                 </button>
-            </form>
+            </div>
 
             <p id="authMessage" class="auth-message"></p>
         </div>
