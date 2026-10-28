@@ -14,7 +14,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="PetCare">
     <script src="/frameguard.js"></script>
-    <link rel="stylesheet" href="style.css?v=20261028-profile-events">
+    <script src="install.js?v=20261028-studio"></script>
+    <link rel="stylesheet" href="style.css?v=20261028-studio">
+    <link rel="stylesheet" href="experience.css?v=20261028-studio">
 </head>
 <body>
 <div class="app">
@@ -23,8 +25,8 @@
     <main id="homePage" class="page" style="display: none;">
         <header class="top-header">
             <div>
-                <h1>PetCare 🐾</h1>
-                <p>Помощник владельца питомца</p>
+                <span class="page-eyebrow">ВАШЕ ПРОСТРАНСТВО ЗАБОТЫ</span>
+                <h1>Всё для любимого питомца<span class="heading-dot">.</span></h1>
             </div>
             <div class="header-actions">
                 <button type="button" class="history-open-button" data-pc-click="history-open" data-history-type="all" aria-label="Открыть историю записей"><span aria-hidden="true">↺</span> История</button>
@@ -32,23 +34,28 @@
             </div>
         </header>
 
-        <section class="welcome">
+        <section class="welcome studio-welcome">
             <div class="welcome-copy">
-                <span class="welcome-tag">ЗАБОТА КАЖДЫЙ ДЕНЬ</span>
-                <h2>Привет! 👋</h2>
-                <p>Заботься о своём питомце и ничего не забывай.</p>
+                <span class="welcome-tag"><span class="status-dot"></span> РЯДОМ В КАЖДЫЙ МОМЕНТ</span>
+                <h2 id="welcomeTitle">Большая любовь начинается с заботы</h2>
+                <p id="welcomeDescription">Здоровье, привычки и счастливые моменты — соберите историю своего питомца в одном месте.</p>
+                <button type="button" class="studio-button" id="welcomeAction" data-pc-click="pet">Профиль питомца ↗</button>
+                <span class="hero-footnote">Маленькие дела. Большая любовь.</span>
             </div>
-            <div class="hero-3d" aria-hidden="true">
-                <span class="hero-orbit hero-orbit-back"></span>
-                <span class="hero-orbit hero-orbit-front"></span>
-                <span class="hero-star hero-star-one">✦</span>
-                <span class="hero-star hero-star-two">✧</span>
-                <div class="hero-platform"></div>
-                <span class="hero-sphere"></span>
-                <span class="hero-torus"></span>
-                <span class="hero-cube"></span>
-                <div class="hero-heart">♥</div>
+            <div class="pet-scene hero-pet-scene" data-pet-scene="profile" data-animal="🐶" role="group" aria-label="Объёмная модель питомца">
+                <span class="scene-orbit" aria-hidden="true"></span>
+                <span class="scene-spark scene-spark-a" aria-hidden="true">✦</span>
+                <span class="scene-spark scene-spark-b" aria-hidden="true">✧</span>
+                <span class="pet-scene-fallback" aria-hidden="true">🐾</span>
+                <div class="scene-caption"><span class="status-dot"></span><span data-selected-pet-name>Мой питомец</span></div>
+                <button type="button" class="scene-rotate" data-pet-rotate aria-label="Повернуть 3D-модель питомца">↻</button>
             </div>
+        </section>
+
+        <section class="care-overview" aria-label="Обзор записей питомца">
+            <button type="button" class="overview-item" data-pc-click="history-open" data-history-type="health"><span class="overview-icon">♡</span><span><strong id="overview-health">00</strong><small>записей о здоровье</small></span><span class="overview-arrow">↗</span></button>
+            <button type="button" class="overview-item" data-pc-click="reminders"><span class="overview-icon">◷</span><span><strong id="overview-reminders">00</strong><small>активных напоминаний</small></span><span class="overview-arrow">↗</span></button>
+            <button type="button" class="overview-item" data-pc-click="nav-stories"><span class="overview-icon">▧</span><span><strong id="overview-photos">00</strong><small>сохранённых фото</small></span><span class="overview-arrow">↗</span></button>
         </section>
 
         <section class="pet-card">
@@ -102,6 +109,14 @@
             </div>
             <div id="homeRemindersList" class="home-reminders-list" aria-live="polite"></div>
         </section>
+        <section class="care-discover" aria-labelledby="discoverTitle">
+            <div class="section-heading"><div><span class="page-eyebrow">ПОЛЕЗНОЕ РЯДОМ</span><h2 id="discoverTitle">Забота становится проще</h2></div></div>
+            <div class="discover-grid">
+                <button type="button" class="discover-card discover-memory" data-pc-click="nav-stories"><span class="discover-kicker">ФОТОИСТОРИЯ</span><span class="mini-photo-stack" aria-hidden="true"><i>✿</i><i>♡</i><i>🐾</i></span><strong>Растём вместе</strong><span>Один снимок в неделю — и целый месяц в красивом коллаже.</span><b>Собрать коллаж <span>↗</span></b></button>
+                <button type="button" class="discover-card discover-assistant" data-pc-click="nav-assistant"><span class="discover-kicker">PETCARE АССИСТЕНТ</span><span class="assistant-orb" aria-hidden="true">✦</span><strong>Есть вопрос?<br>Давайте разберёмся.</strong><span>Помощник по уходу с учётом записей вашего питомца.</span><b>Открыть чат <span>↗</span></b></button>
+            </div>
+        </section>
+        <div class="care-footer"><span class="footer-brand">PetCare <span>✳</span></span><p>Больше времени вместе.</p><button type="button" data-pc-click="health">Добавить запись о здоровье ↗</button></div>
     </main>
 
     <!-- СТРАНИЦА ПИТОМЦА -->
@@ -121,6 +136,7 @@
         </div>
 
         <div class="pet-big-card">
+            <div class="pet-scene profile-pet-scene" data-pet-scene="profile" data-animal="🐶" role="group" aria-label="Объёмная модель питомца"><span class="pet-scene-fallback" aria-hidden="true">🐾</span><button type="button" class="scene-rotate" data-pet-rotate aria-label="Повернуть 3D-модель питомца">↻</button></div>
             <div class="pet-big-photo" id="petPhoto">🐶</div>
             <h2 id="petName">Барни</h2>
             <p id="petBreed">Золотистый ретривер</p>
@@ -196,11 +212,16 @@
         <label for="animalInput">Тип животного</label>
         <select id="animalInput">
             <option value="🐶">Собака 🐶</option>
+            <option value="🐕">Щенок 🐕</option>
             <option value="🐱">Кошка 🐱</option>
             <option value="🐰">Кролик 🐰</option>
             <option value="🐹">Хомяк 🐹</option>
             <option value="🐦">Птица 🐦</option>
+            <option value="🦜">Попугай 🦜</option>
+            <option value="🐢">Черепаха 🐢</option>
+            <option value="🐠">Рыбка 🐠</option>
         </select>
+        <div class="pet-model-preview"><div><span class="page-eyebrow">ЗНАКОМЬТЕСЬ, ВАШ ПИТОМЕЦ</span><p>Его объёмный образ появится в профиле после сохранения.</p></div><div class="pet-scene form-pet-scene" data-pet-scene="preview" data-animal="🐶" role="group" aria-label="Предпросмотр 3D-модели"><span class="pet-scene-fallback" aria-hidden="true">🐶</span><button type="button" class="scene-rotate" data-pet-rotate aria-label="Повернуть 3D-модель питомца">↻</button></div></div>
 
         <button class="primary-button" id="savePetButton" data-pc-click="pet-save">
             💾 Сохранить
@@ -501,12 +522,21 @@
     </section>
      <!-- ВХОД И РЕГИСТРАЦИЯ -->
     <section class="page auth-page" id="authPage" style="display: flex;">
+        <div class="auth-story">
+            <a class="studio-wordmark" href="/" aria-label="PetCare — главная">PetCare<span>✳</span></a>
+            <span class="welcome-tag">ДЛЯ ТЕХ, КТО ЧАСТЬ СЕМЬИ</span>
+            <h2>Больше заботы.<br>Больше счастливых<br><em>моментов.</em></h2>
+            <p>Здоровье, планы и фотоистории вашего питомца. Всё важное — в одном уютном месте.</p>
+            <div class="auth-scene-wrap"><div class="pet-scene auth-pet-scene" data-pet-scene="demo" data-animal="🐶" role="group" aria-label="Объёмная модель питомца"><span class="pet-scene-fallback" aria-hidden="true">🐶</span><button type="button" class="scene-rotate" data-pet-rotate aria-label="Повернуть 3D-модель питомца">↻</button></div><span class="auth-floating-note">С любовью к каждому <span>♡</span></span></div>
+            <div class="animal-demo" aria-label="Выбрать вид питомца для просмотра"><button type="button" data-demo-animal="🐶" aria-pressed="true" aria-label="Показать собаку">🐶</button><button type="button" data-demo-animal="🐱" aria-pressed="false" aria-label="Показать кошку">🐱</button><button type="button" data-demo-animal="🐰" aria-pressed="false" aria-label="Показать кролика">🐰</button><button type="button" data-demo-animal="🦜" aria-pressed="false" aria-label="Показать попугая">🦜</button><span>Кто ваш любимец?</span></div>
+            <div class="auth-benefits"><span>♡ Здоровье под рукой</span><span>◷ Забота по плану</span><span>▧ Воспоминания навсегда</span></div>
+        </div>
         <div class="auth-card">
             <div class="auth-logo">🐾</div>
             <h1>PetCare</h1>
 
             <p class="auth-subtitle">
-                Помощник владельца питомца
+                Ваш маленький мир большой заботы
             </p>
 
             <button type="button" class="install-app-button auth-install-button" id="authInstallAppButton" data-pc-click="install">⬇ Установить приложение</button>
@@ -652,12 +682,16 @@
     </nav>
 
     <dialog class="install-help-dialog" id="installHelpDialog" aria-labelledby="installHelpTitle">
-        <div class="install-help-mark">🐾</div>
+        <div class="install-app-identity"><img src="assets/petcare-192.png" width="64" height="64" alt=""><div><strong>PetCare</strong><span>Всегда рядом с вами</span></div><button type="button" class="install-dismiss" data-pc-click="install-close" aria-label="Закрыть">×</button></div>
         <h2 id="installHelpTitle">Установить PetCare</h2>
+        <div class="install-platforms" aria-label="Устройство"><button type="button" data-install-platform="ios">iPhone / iPad</button><button type="button" data-install-platform="android">Android</button><button type="button" data-install-platform="desktop">Компьютер</button></div>
         <p id="installHelpText"></p>
         <ol id="installHelpSteps"></ol>
-        <button type="button" class="primary-button" data-pc-click="install-close">Понятно</button>
+        <a id="installPublishedLink" class="studio-button" href="https://stormman745.github.io/" hidden>Открыть сайт для установки ↗</a>
+        <button type="button" class="primary-button" id="installNativeButton" data-pc-click="install" hidden>Установить сейчас</button>
+        <button type="button" class="install-done" data-pc-click="install-close">Понятно</button>
     </dialog>
+    <p id="installFeedback" class="install-feedback" role="status" aria-live="polite"></p>
 
     <dialog class="health-export-dialog" id="healthExportDialog" aria-labelledby="healthExportTitle" aria-describedby="healthExportPetName">
         <h2 id="healthExportTitle">Что напечатать о здоровье?</h2>
@@ -723,6 +757,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
-<script src="script.js?v=20261028-profile-events"></script>
+<script src="experience.js?v=20261028-studio"></script>
+<script src="script.js?v=20261028-studio"></script>
+<script type="module" src="pet-scene.js?v=20261028-studio"></script>
 </body>
 </html>

@@ -203,6 +203,7 @@ function normalizeAppData() {
 
 function saveData() {
     if (!activeUserId) return Promise.resolve();
+    updateHomeOverview();
 
     const userId = activeUserId;
     const snapshot = JSON.parse(JSON.stringify(appData));
@@ -763,6 +764,7 @@ function fillPetForm() {
     }
 
     renderPetAvatar(document.getElementById("petPhotoPreview"), formPet || { animal: animalInput?.value || "🐶" });
+    window.PetCareExperience?.previewPet(formPet || { animal: animalInput?.value || "🐶" });
 }
 
 
@@ -987,6 +989,8 @@ async function deletePet() {
 
 function updatePetOnScreen() {
     const pet = appData.pet || {};
+    window.PetCareExperience?.updatePet(pet);
+    updateHomeOverview();
 
     const name = pet.name || (pet.isPlaceholder ? "Добавьте питомца" : "Барни");
     const breed = pet.breed || (pet.isPlaceholder ? "Создайте карточку, чтобы начать" : "Порода не указана");
@@ -1037,6 +1041,16 @@ function updatePetOnScreen() {
     renderWeightHistory();
     renderEventHistory();
     renderCalendar();
+}
+
+function updateHomeOverview() {
+    const petId = getActivePetKey();
+    const belongs = row => String(row.petId ?? petId) === petId;
+    window.PetCareExperience?.updateSummary({
+        health: (appData.healthRecords || []).filter(belongs).length,
+        reminders: (appData.reminders || []).filter(belongs).filter(row => !isReminderCompleted(row)).length,
+        photos: (appData.storyProjects || []).filter(belongs).reduce((sum, story) => sum + (story.photos || []).length, 0)
+    });
 }
 
 function formatPetAge(birthDate) {
@@ -3386,7 +3400,7 @@ async function checkAuth() {
             await openMainAfterLogin();
         } else {
             resetActiveAccountData();
-            if (authPage) authPage.style.display = "block";
+            if (authPage) authPage.style.display = "flex";
             if (homePage) homePage.style.display = "none";
             if (bottomMenu) bottomMenu.style.display = "none";
 
@@ -3493,7 +3507,7 @@ async function startApp() {
     const homePage = document.getElementById("homePage");
     const bottomMenu = document.querySelector(".bottom-menu");
 
-    if (authPage) authPage.style.display = "block";
+    if (authPage) authPage.style.display = "flex";
     if (homePage) homePage.style.display = "none";
     if (bottomMenu) bottomMenu.style.display = "none";
 
@@ -3505,6 +3519,7 @@ document.getElementById("petPhotoInput")?.addEventListener("change", handlePetPh
 document.getElementById("recordPhotoInput")?.addEventListener("change", event => queueAttachmentPhotoSelection(event, "health"));
 document.getElementById("reminderPhotoInput")?.addEventListener("change", event => queueAttachmentPhotoSelection(event, "reminder"));
 document.getElementById("animalInput")?.addEventListener("change", event => {
+    window.PetCareExperience?.previewPet({ animal: event.target.value, name: document.getElementById("nameInput")?.value });
     const currentPhoto = pendingPetPhoto !== undefined
         ? pendingPetPhoto
         : (petFormMode === "create" ? null : appData.pet?.photoData);
@@ -3947,110 +3962,8 @@ document.getElementById("assistantForm")?.addEventListener("submit", sendAssista
 // УСТАНОВКА ВЕБ-ПРИЛОЖЕНИЯ
 // ==============================
 
-let deferredInstallPrompt = null;
-
-function isPetCareInstalled() {
-    return window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true;
-}
-
-function isAppleMobileDevice() {
-    return /iPhone|iPad|iPod/i.test(navigator.userAgent)
-        || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-}
-
-function showInstallButtons() {
-    document.querySelectorAll(".install-app-button").forEach(button => {
-        button.hidden = false;
-    });
-}
-
-function openInstallHelp(platform) {
-    const dialog = document.getElementById("installHelpDialog");
-    const text = document.getElementById("installHelpText");
-    const steps = document.getElementById("installHelpSteps");
-    if (!dialog || !text || !steps) return;
-
-    if (platform === "installed") {
-        text.textContent = "PetCare уже установлен на этом устройстве. Откройте его с главного экрана или из списка приложений.";
-        steps.replaceChildren();
-    } else if (platform === "ios") {
-        text.textContent = "Добавьте PetCare на главный экран, чтобы открывать его как обычное приложение.";
-        steps.replaceChildren();
-        [
-            "Откройте сайт в Safari на iPhone или iPad.",
-            "Нажмите кнопку «Поделиться» внизу экрана.",
-            "Выберите «На экран Домой», затем нажмите «Добавить»."
-        ].forEach(step => {
-            const item = document.createElement("li");
-            item.textContent = step;
-            steps.appendChild(item);
-        });
-    } else {
-        text.textContent = "Установите PetCare из меню браузера, чтобы запускать сайт в отдельном окне.";
-        steps.replaceChildren();
-        [
-            "Откройте сайт в Chrome или другом поддерживаемом браузере.",
-            "Нажмите меню браузера ⋮.",
-            "Выберите «Установить приложение» или «Добавить на главный экран»."
-        ].forEach(step => {
-            const item = document.createElement("li");
-            item.textContent = step;
-            steps.appendChild(item);
-        });
-    }
-
-    if (typeof dialog.showModal === "function") dialog.showModal();
-    else dialog.setAttribute("open", "");
-}
-
-function closeInstallHelp() {
-    const dialog = document.getElementById("installHelpDialog");
-    if (!dialog) return;
-    if (typeof dialog.close === "function") dialog.close();
-    else dialog.removeAttribute("open");
-}
-
-async function installPetCareApp() {
-    if (isPetCareInstalled()) {
-        openInstallHelp("installed");
-        return;
-    }
-
-    if (deferredInstallPrompt) {
-        deferredInstallPrompt.prompt();
-        await deferredInstallPrompt.userChoice;
-        deferredInstallPrompt = null;
-        return;
-    }
-
-    openInstallHelp(isAppleMobileDevice() ? "ios" : "android");
-}
-
-window.addEventListener("beforeinstallprompt", event => {
-    event.preventDefault();
-    deferredInstallPrompt = event;
-});
-
-window.addEventListener("appinstalled", () => {
-    deferredInstallPrompt = null;
-    showInstallButtons();
-});
-
-if (isPetCareInstalled()) {
-    showInstallButtons();
-}
-
-if ("serviceWorker" in navigator && window.location.protocol === "https:") {
-    window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(error => {
-            console.error("Не удалось включить офлайн-оболочку PetCare:", error);
-        });
-    }, { once: true });
-}
-
 // Keep event behavior in this file so the page can use a strict script CSP.
 const petCareClickActions = {
-    "install": () => installPetCareApp(),
     "home": () => showHome(),
     "pet": () => showPet(),
     "task-feeding": element => completeTask(element, "feeding"),
@@ -4086,7 +3999,6 @@ const petCareClickActions = {
     "reminder-close": () => closeReminderForm(),
     "reminder-save": () => saveReminder(),
     "reminder-delete": element => deleteReminder(element.dataset.entryId, element.dataset.petId),
-    "install-close": () => closeInstallHelp(),
     "logout": () => logoutUser(),
     "nav-home": () => showHome(),
     "nav-pet": () => showPet(),

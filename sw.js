@@ -1,9 +1,13 @@
-const CACHE_NAME = "petcare-shell-v19";
+const CACHE_NAME = "petcare-shell-v20";
 const SHELL_FILES = [
     "/",
     "/index.html",
     "/style.css",
     "/script.js",
+    "/install.js",
+    "/experience.js",
+    "/experience.css",
+    "/pet-scene.js",
     "/frameguard.js",
     "/manifest.webmanifest",
     "/assets/petcare-192.png",
@@ -33,6 +37,15 @@ self.addEventListener("fetch", event => {
     const request = event.request;
     const url = new URL(request.url);
     if (request.method !== "GET" || url.origin !== self.location.origin) return;
+
+    // The version-pinned renderer is downloaded once, only when a model is visible.
+    if (url.pathname.startsWith('/assets/vendor/')) {
+        event.respondWith(caches.match(request).then(cached => cached || fetch(request).then(response => {
+            if (response.ok) { const copy = response.clone(); caches.open(CACHE_NAME).then(cache => cache.put(request, copy)); }
+            return response;
+        })));
+        return;
+    }
 
     if (request.mode === "navigate") {
         event.respondWith(
