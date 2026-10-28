@@ -14,7 +14,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="PetCare">
     <script src="/frameguard.js"></script>
-    <link rel="stylesheet" href="style.css?v=20261028-assistant-name">
+    <link rel="stylesheet" href="style.css?v=20261028-history-design">
 </head>
 <body>
 <div class="app">
@@ -26,7 +26,10 @@
                 <h1>PetCare 🐾</h1>
                 <p>Помощник владельца питомца</p>
             </div>
-            <button type="button" class="install-app-button" id="installAppButton" data-pc-click="install">⬇ Установить</button>
+            <div class="header-actions">
+                <button type="button" class="history-open-button" data-pc-click="history-open" data-history-type="all" aria-label="Открыть историю записей"><span aria-hidden="true">↺</span> История</button>
+                <button type="button" class="install-app-button" id="installAppButton" data-pc-click="install">⬇ Установить</button>
+            </div>
         </header>
 
         <section class="welcome">
@@ -41,6 +44,9 @@
                 <span class="hero-star hero-star-one">✦</span>
                 <span class="hero-star hero-star-two">✧</span>
                 <div class="hero-platform"></div>
+                <span class="hero-sphere"></span>
+                <span class="hero-torus"></span>
+                <span class="hero-cube"></span>
                 <div class="hero-heart">♥</div>
             </div>
         </section>
@@ -103,6 +109,7 @@
         <div class="page-header">
             <button data-pc-click="home">←</button>
             <h2>Мой питомец</h2>
+            <button type="button" class="history-open-button" data-pc-click="history-open" data-history-type="all" aria-label="Открыть историю питомца"><span aria-hidden="true">↺</span> История</button>
         </div>
 
         <div class="pet-switcher">
@@ -204,9 +211,11 @@
         <div class="page-header">
             <button data-pc-click="home">←</button>
             <h2>Здоровье ❤️</h2>
+            <button type="button" class="history-open-button" data-pc-click="history-open" data-history-type="health" aria-label="Открыть историю записей о здоровье"><span aria-hidden="true">↺</span> История</button>
         </div>
 
         <div class="health-header">
+            <span class="surface-eyebrow">С ЗАБОТОЙ О САМОМ ВАЖНОМ</span>
             <div class="health-icon">❤️</div>
             <div>
                 <h2 id="healthPetName">Барни</h2>
@@ -236,7 +245,7 @@
         <section class="weight-section">
             <div class="section-heading"><h3>Вес в динамике</h3><span id="weightLatest"></span></div>
             <div id="weightChart" class="weight-chart" aria-label="График изменения веса"></div>
-            <div id="weightHistoryList" class="weight-history-list"></div>
+            <button type="button" class="weight-history-link" data-pc-click="history-open" data-history-type="weight">↺ История взвешиваний <span aria-hidden="true">↗</span></button>
             <div class="weight-entry">
                 <label for="weightLogValue">Записать вес, кг</label>
                 <div class="weight-entry-row">
@@ -273,21 +282,34 @@
             + Добавить запись
         </button>
 
-        <section class="history-section">
-            <div class="section-heading"><h3>История событий</h3></div>
-            <div class="history-filters">
-                <input type="search" id="historySearch" placeholder="Найти событие…" data-pc-input="history-filter">
-                <select id="historyTypeFilter" data-pc-change="history-filter" aria-label="Фильтр истории">
-                    <option value="all">Все события</option>
-                    <option value="health">Здоровье</option>
-                    <option value="weight">Вес</option>
-                    <option value="reminder">Напоминания</option>
-                    <option value="task">Задачи</option>
-                </select>
-                <input type="date" id="historyFromDate" aria-label="История с даты" data-pc-change="history-filter">
-                <input type="date" id="historyToDate" aria-label="История по дату" data-pc-change="history-filter">
+    </section>
+
+    <section class="page" id="entryHistoryPage" aria-labelledby="entryHistoryTitle">
+        <div class="page-header">
+            <button type="button" data-pc-click="history-close" aria-label="Вернуться в предыдущий раздел">←</button>
+            <h2 id="entryHistoryTitle" tabindex="-1">История записей</h2>
+        </div>
+        <section class="section-hero section-hero-history">
+            <div class="section-hero-copy">
+                <span class="surface-eyebrow">КАЖДЫЙ МОМЕНТ ЗАБОТЫ</span>
+                <h3>Всё важное — в одной истории</h3>
+                <p>Здоровье, вес и выполненные дела вашего питомца. Найдите нужную запись по типу или дате.</p>
             </div>
-            <div id="eventHistory" class="event-history"></div>
+            <div class="care-art care-art-history" aria-hidden="true"><span class="care-art-ring"></span><span class="care-art-tile">↺</span><span class="care-art-pearl"></span><span class="care-art-spark">✦</span></div>
+        </section>
+        <div class="pet-switcher compact-pet-switcher">
+            <label for="historyPetSwitcher">История питомца</label>
+            <select id="historyPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для просмотра истории"></select>
+        </div>
+        <section class="history-section history-workspace" aria-label="Записи и фильтры">
+            <div class="history-toolbar"><strong id="historyResultCount" role="status" aria-live="polite"></strong><button type="button" class="history-reset-button" data-pc-click="history-reset">Сбросить фильтры</button></div>
+            <div class="history-filters">
+                <label class="history-search-field">Поиск<input type="search" id="historySearch" placeholder="Название или заметка…" data-pc-input="history-filter"></label>
+                <label>Тип записи<select id="historyTypeFilter" data-pc-change="history-filter"><option value="all">Все события</option><option value="health">Здоровье</option><option value="weight">Вес</option><option value="reminder">Напоминания</option><option value="task">Задачи</option></select></label>
+                <label>С даты<input type="date" id="historyFromDate" data-pc-change="history-filter"></label>
+                <label>По дату<input type="date" id="historyToDate" data-pc-change="history-filter"></label>
+            </div>
+            <div id="eventHistory" class="event-history" aria-live="polite"></div>
         </section>
     </section>
 
@@ -335,7 +357,13 @@
         <div class="page-header">
             <button data-pc-click="home">←</button>
             <h2>Напоминания 🔔</h2>
+            <button type="button" class="history-open-button" data-pc-click="history-open" data-history-type="reminder" aria-label="Открыть историю выполненных напоминаний"><span aria-hidden="true">↺</span> История</button>
         </div>
+
+        <section class="section-hero section-hero-reminders">
+            <div class="section-hero-copy"><span class="surface-eyebrow">МАЛЕНЬКИЕ ДЕЛА, БОЛЬШАЯ ЗАБОТА</span><h3>Для всего найдётся время</h3><p>Кормление, прогулки и важные процедуры — в вашем ритме.</p></div>
+            <div class="care-art care-art-reminders" aria-hidden="true"><span class="care-art-ring"></span><span class="care-art-tile">🔔</span><span class="care-art-pearl"></span><span class="care-art-spark">✦</span></div>
+        </section>
 
         <div class="pet-switcher compact-pet-switcher">
             <label for="reminderPetSwitcher">Питомец</label>
@@ -439,6 +467,7 @@
         <div class="page-header">
             <button type="button" data-pc-click="home">←</button>
             <h2>Коллажи питомца 📸</h2>
+            <button type="button" class="history-open-button" data-pc-click="history-open" data-history-type="all" aria-label="Открыть историю записей питомца"><span aria-hidden="true">↺</span> История</button>
         </div>
 
         <section class="stories-intro">
@@ -467,6 +496,7 @@
         <div class="page-header">
             <button data-pc-click="home">←</button>
             <h2>Профиль 👤</h2>
+            <button type="button" class="history-open-button" data-pc-click="history-open" data-history-type="all" aria-label="Открыть историю записей"><span aria-hidden="true">↺</span> История</button>
         </div>
 
         <div class="profile-card">
@@ -700,6 +730,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
-<script src="script.js?v=20261028-assistant-name"></script>
+<script src="script.js?v=20261028-history-design"></script>
 </body>
 </html>

@@ -51,6 +51,7 @@ function createInitialAppData() {
 let appData = createInitialAppData();
 let calendarCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let selectedCalendarDate = getLocalDateInputValue();
+let historyReturnPageId = "homePage";
 
 function resetActiveAccountData() {
     activeDataLoadToken += 1;
@@ -1318,6 +1319,40 @@ function formatHistoryDate(value) {
     return date ? date.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" }) : "Дата не указана";
 }
 
+function resetEntryHistoryFilters(kind = "all") {
+    ["historySearch", "historyFromDate", "historyToDate"].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.value = "";
+    });
+    const select = document.getElementById("historyTypeFilter");
+    if (select) select.value = ["all", "health", "weight", "reminder", "task"].includes(kind) ? kind : "all";
+    renderEventHistory();
+}
+
+function openEntryHistory(button) {
+    if (!activeUserId) return;
+    const allowedPages = ["homePage", "petPage", "healthPage", "remindersPage", "storiesPage", "profilePage"];
+    historyReturnPageId = allowedPages.find(id => document.getElementById(id)?.style.display === "block") || "homePage";
+    const navigation = { homePage: "nav-home", petPage: "nav-pet", healthPage: "nav-health", remindersPage: "nav-reminders", storiesPage: "nav-stories", profilePage: "nav-profile" };
+    hideAllPages();
+    markActiveNavigation(navigation[historyReturnPageId]);
+    const page = document.getElementById("entryHistoryPage");
+    if (!page) return;
+    page.style.display = "block";
+    renderPetSwitcher();
+    resetEntryHistoryFilters(button?.dataset.historyType || "all");
+    window.scrollTo(0, 0);
+    document.getElementById("entryHistoryTitle")?.focus({ preventScroll: true });
+}
+
+function closeEntryHistory() {
+    const destinations = { homePage: showHome, petPage: showPet, healthPage: showHealth, remindersPage: showReminders, storiesPage: showStories, profilePage: showProfile };
+    const destination = historyReturnPageId;
+    (destinations[destination] || showHome)();
+    window.scrollTo(0, 0);
+    document.getElementById(destination)?.querySelector('[data-pc-click="history-open"]')?.focus({ preventScroll: true });
+}
+
 function buildPetEventHistory() {
     const petId = getActivePetKey();
     const health = appData.healthRecords
@@ -1362,22 +1397,25 @@ function buildPetEventHistory() {
 
 function renderEventHistory() {
     const container = document.getElementById("eventHistory");
-    if (!container) return;
+    if (!container || document.getElementById("entryHistoryPage")?.style.display !== "block") return;
     container.replaceChildren();
     const query = (document.getElementById("historySearch")?.value || "").trim().toLocaleLowerCase("ru-RU");
     const kind = document.getElementById("historyTypeFilter")?.value || "all";
     const fromDate = document.getElementById("historyFromDate")?.value || "";
     const toDate = document.getElementById("historyToDate")?.value || "";
-    const events = buildPetEventHistory().filter(event => {
+    const allEvents = buildPetEventHistory();
+    const events = allEvents.filter(event => {
         const matchesKind = kind === "all" || event.kind === kind;
         const text = `${event.title} ${event.note}`.toLocaleLowerCase("ru-RU");
         const matchesDate = (!fromDate || event.date >= fromDate) && (!toDate || event.date <= toDate);
         return matchesKind && matchesDate && (!query || text.includes(query));
     });
+    const resultCount = document.getElementById("historyResultCount");
+    if (resultCount) resultCount.textContent = `Найдено: ${events.length} · Всего записей: ${allEvents.length}`;
     if (!events.length) {
         const empty = document.createElement("p");
         empty.className = "empty-state";
-        empty.textContent = "Событий пока нет";
+        empty.textContent = allEvents.length ? "По этим фильтрам ничего не найдено. Попробуйте изменить тип или период." : "Здесь появятся записи о здоровье, взвешивания и выполненные дела питомца.";
         container.appendChild(empty);
         return;
     }
@@ -1403,14 +1441,12 @@ function renderEventHistory() {
 
 function renderWeightHistory() {
     const chart = document.getElementById("weightChart");
-    const list = document.getElementById("weightHistoryList");
     const latest = document.getElementById("weightLatest");
-    if (!chart || !list) return;
+    if (!chart) return;
     const entries = [...(appData.pet?.weightHistory || [])]
         .filter(entry => Number(entry.value) > 0 && entry.date)
         .sort((a, b) => String(a.date).localeCompare(String(b.date)));
     chart.replaceChildren();
-    list.replaceChildren();
     if (!entries.length) {
         chart.textContent = "Добавьте первое взвешивание, чтобы увидеть динамику.";
         if (latest) latest.textContent = "";
@@ -1452,18 +1488,6 @@ function renderWeightHistory() {
     } else {
         chart.textContent = "Добавьте ещё одно взвешивание, чтобы увидеть динамику.";
     }
-    entries.slice(-5).reverse().forEach(entry => {
-        const row = document.createElement("div");
-        row.className = "weight-history-row";
-        const date = document.createElement("span");
-        date.textContent = formatHistoryDate(entry.date);
-        const value = document.createElement("strong");
-        value.textContent = `${entry.value} кг`;
-        row.append(date, value, createEntryDeleteButton(
-            "weight-delete", entry.id, getActivePetKey(), `Удалить взвешивание за ${formatHistoryDate(entry.date)}`
-        ));
-        list.appendChild(row);
-    });
 }
 
 async function savePetWeight() {
@@ -3721,6 +3745,9 @@ const petCareClickActions = {
     "weight-delete": element => deleteWeightEntry(element.dataset.entryId, element.dataset.petId),
     "activity-delete": element => deleteActivityEntry(element.dataset.entryId, element.dataset.petId),
     "history-filter": () => renderEventHistory(),
+    "history-open": element => openEntryHistory(element),
+    "history-close": () => closeEntryHistory(),
+    "history-reset": () => resetEntryHistoryFilters(),
     "calendar-previous": () => changeCalendarMonth(-1),
     "calendar-next": () => changeCalendarMonth(1),
     "reminder-add": () => openReminderForm(),
