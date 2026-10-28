@@ -1561,6 +1561,14 @@ input:focus, select:focus, textarea:focus {
 }
 
 .assistant-message.bot-message { align-self: flex-start; }
+.assistant-sender {
+    margin-bottom: 6px;
+    color: var(--green);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.3;
+    white-space: normal;
+}
 .assistant-message.assistant-error { color: #854c32; background: #fff6ef; border-color: #f1dfd1; }
 
 .assistant-input {
@@ -2178,10 +2186,28 @@ body {
 .story-generate-button,
 .story-save-button { width: 100%; margin-top: 13px; }
 .story-generate-button:disabled { cursor: wait; opacity: .7; }
-.story-video { display: block; width: 100%; max-height: 560px; margin-top: 15px; border-radius: 17px; background: #17251c; }
+.story-collage-preview { display: block; width: 100%; height: auto; margin-top: 18px; border: 1px solid var(--border); border-radius: 17px; background: #eff5ef; }
 .story-save-note { margin: 8px 2px 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 
-#storyPhotoInput {
+.story-batch-button { min-height: 46px; margin: 0 0 14px; font-size: 13px; }
+.story-week-button { min-height: 44px; }
+.story-photo-date-label { display: block; margin-top: 8px; font-size: 11px; }
+.story-photo-date-label input { display: block; width: 100%; min-width: 0; min-height: 42px; margin-top: 5px; padding: 7px; font-size: 14px; }
+.story-layout-label { display: block; margin-top: 18px; }
+.story-layout-label select { display: block; width: 100%; margin-top: 7px; }
+.story-reminder-choice { display: flex; align-items: center; gap: 10px; line-height: 1.5; }
+.story-reminder-choice input { flex: 0 0 20px; width: 20px; height: 20px; min-height: 20px; margin: 0; accent-color: var(--green); }
+.story-setup-dialog .story-reminder-choice input { margin: 0; }
+.story-card[aria-busy="true"] { cursor: progress; }
+.story-card button:disabled, .story-card input:disabled, .story-card select:disabled { opacity: .55; cursor: default; }
+.story-card .story-generate-button:disabled { cursor: default; }
+.story-setup-dialog input:disabled { opacity: .5; }
+
+@media (hover: hover) and (pointer: fine) {
+    .story-camera-button { display: none; }
+}
+
+.story-file-input {
     position: fixed;
     left: -10000px;
     width: 1px;
@@ -2192,6 +2218,8 @@ body {
 .story-setup-dialog {
     width: min(calc(100% - 30px), 430px);
     max-height: min(90dvh, 720px);
+    margin: auto;
+    overflow-y: auto;
     padding: 23px;
     border: 1px solid rgba(255,255,255,.95);
     border-radius: 26px;
@@ -2332,6 +2360,7 @@ input, select, textarea {
 }
 
 .task button.task-complete,
+.home-reminder button.reminder-complete,
 .reminder button.reminder-complete {
     display: grid;
     flex: 0 0 42px;
@@ -2797,4 +2826,315 @@ input, select, textarea {
     .calendar-empty-day {
         height: 35px;
     }
+}
+
+.health-export-dialog {
+    width: min(calc(100% - 28px), 560px);
+    max-height: 88dvh;
+    margin: auto;
+    overflow-y: auto;
+    padding: 22px;
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    background: var(--page-bg);
+    color: var(--text);
+    box-shadow: 0 24px 70px rgba(28, 67, 46, .22);
+}
+
+.health-export-dialog::backdrop { background: rgba(27, 47, 33, .42); }
+.health-export-dialog h2 { color: var(--green-dark); font-size: 21px; }
+.health-export-dialog > p { margin: 8px 0 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.health-export-group { min-width: 0; margin: 16px 0; padding: 12px; border: 1px solid var(--border); border-radius: 16px; background: #fff; }
+.health-export-group legend { padding: 0 6px; color: var(--green-dark); font-size: 14px; font-weight: 700; }
+.health-export-option { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 11px 5px; cursor: pointer; }
+.health-export-option + .health-export-option { border-top: 1px solid var(--border); }
+.health-export-option input[type="checkbox"] { flex: 0 0 20px; width: 20px; height: 20px; min-height: 20px; margin: 1px 0 0; padding: 0; border-radius: 4px; box-shadow: none; accent-color: var(--green); cursor: pointer; }
+.health-export-option input:focus-visible { outline: 3px solid #91c39d; outline-offset: 3px; }
+.health-export-option span { min-width: 0; overflow-wrap: anywhere; }
+.health-export-option strong { display: block; font-size: 13px; line-height: 1.5; }
+.health-export-option small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.health-export-list { max-height: 190px; overflow-y: auto; }
+.health-export-group-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.health-export-group-actions button { min-height: 36px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 10px; background: var(--mint); color: var(--green-dark); font: inherit; font-size: 11px; cursor: pointer; }
+.health-export-group-actions button:disabled { opacity: .5; cursor: default; }
+.health-export-empty { margin: 10px 5px; color: var(--muted); font-size: 12px; }
+.health-export-footer { padding-top: 4px; }
+#healthExportSelectionStatus { color: var(--green-dark); font-size: 13px; font-weight: 600; }
+.health-export-hint { margin: 8px 0 14px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.health-export-footer .primary-button { width: 100%; }
+.health-export-footer .primary-button:disabled { opacity: .5; cursor: default; }
+
+@media (max-width: 380px) {
+    .health-export-dialog { padding: 16px; }
+    .health-export-dialog h2 { font-size: 19px; }
+}
+
+/* Saved entry actions */
+.entry-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.entry-actions .reminder-complete {
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+}
+
+.entry-delete-button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid #e6c9c4;
+    border-radius: 11px;
+    background: #fff8f6;
+    box-shadow: none;
+    color: #9a463b;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: nowrap;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.entry-delete-button:focus-visible {
+    outline: 3px solid #d89b90;
+    outline-offset: 3px;
+}
+
+.entry-delete-button:active {
+    background: #f8e6e1;
+}
+
+.entry-delete-button:disabled {
+    cursor: wait;
+    opacity: .6;
+}
+
+.health-record > .entry-delete-button,
+.history-event > .entry-delete-button {
+    align-self: flex-start;
+    margin-left: auto;
+}
+
+.history-event-content {
+    flex: 1;
+    overflow-wrap: anywhere;
+}
+
+.health-record > .record-info,
+.reminder > .record-info {
+    overflow-wrap: anywhere;
+}
+
+.weight-history-row {
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.weight-history-row > span {
+    flex: 1;
+    min-width: 0;
+}
+
+.weight-history-row > strong {
+    white-space: nowrap;
+}
+
+.story-card-heading {
+    flex-wrap: wrap;
+}
+
+.story-card-heading > div {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+@media (hover: hover) {
+    .entry-delete-button:hover:not(:disabled) {
+        border-color: #d8a398;
+        background: #fbece8;
+    }
+}
+
+@media (max-width: 480px) {
+    .entry-actions {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 390px) {
+    .health-record,
+    .home-reminder,
+    .reminder,
+    .history-event {
+        flex-wrap: wrap;
+    }
+
+    .health-record > .record-info {
+        flex-basis: calc(100% - 59px);
+    }
+
+    .home-reminder > .home-reminder-info {
+        flex-basis: calc(100% - 58px);
+    }
+
+    .reminder > .record-info {
+        flex-basis: calc(100% - 62px);
+    }
+
+    .reminder > .reminder-icon {
+        flex-shrink: 0;
+    }
+
+    .history-event > .history-event-content {
+        flex-basis: calc(100% - 48px);
+    }
+
+    .entry-actions {
+        flex-basis: 100%;
+        flex-direction: row;
+    }
+}
+
+/* Shared phone, tablet and desktop layout. */
+html { -webkit-text-size-adjust: 100%; scroll-padding-bottom: 120px; }
+body { min-width: 280px; }
+.app { width: 100%; padding-bottom: calc(120px + env(safe-area-inset-bottom)); }
+.page { min-width: 0; }
+.page-header > h2, .top-header > div, .pet-info, .task-info, .record-info,
+.home-reminder-info, .stories-intro > div { min-width: 0; overflow-wrap: anywhere; }
+.page-header > button { flex-shrink: 0; }
+.page-header h2 { font-size: clamp(20px, 4.8vw, 27px); }
+input, select, textarea { max-width: 100%; min-width: 0; font-size: 16px; }
+input[type="date"], input[type="month"], input[type="time"] { min-width: 0; width: 100%; }
+.story-photo-date-label input { font-size: 16px; }
+textarea { resize: vertical; }
+button, a, input, select, textarea { touch-action: manipulation; }
+.primary-button, .secondary-button { white-space: normal; overflow-wrap: anywhere; }
+.section-heading { gap: 10px; }
+.bottom-menu { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+.bottom-menu a { min-height: 52px; justify-content: center; overflow-wrap: anywhere; }
+.bottom-menu a[aria-current="page"] { color: var(--green-dark); background: #e0efe5; box-shadow: inset 0 0 0 1px #cfe3d5; }
+.story-week-image-wrap img { display: block; }
+.story-collage-preview { max-width: 100%; }
+.story-setup-dialog .primary-button { margin-top: 20px; }
+.auth-page { min-height: calc(100dvh - 100px); }
+
+@media (max-width: 420px) {
+    .app { padding: calc(18px + env(safe-area-inset-top)) 12px calc(116px + env(safe-area-inset-bottom)); }
+    .top-header { flex-wrap: wrap; }
+    .top-header h1 { font-size: 29px; }
+    .top-header p { font-size: 12px; }
+    .top-header .install-app-button { min-height: 44px; }
+    .page-header { gap: 10px; }
+    .stories-intro { padding: 16px 13px; gap: 10px; }
+    .stories-intro-icon { flex-basis: 40px; width: 40px; height: 40px; font-size: 22px; }
+    .stories-intro h3 { font-size: 18px; }
+    .story-card { padding: 12px; }
+    .story-week-info { padding: 8px; }
+    .story-week-button { font-size: 11px; padding: 7px 4px; }
+    .story-photo-date-label input { padding: 7px 2px; font-size: 16px; }
+    .story-card-heading h3 { font-size: 17px; }
+    .weight-entry-row, .pet-switcher-controls { grid-template-columns: minmax(0, 1fr); }
+    .pet-switcher-controls > button { width: 100%; }
+    .bottom-menu { width: calc(100% - 12px); bottom: 7px; padding-inline: 3px; border-radius: 18px; }
+    .bottom-menu a { padding: 5px 1px; font-size: 9px; line-height: 1.25; }
+    .bottom-menu span { font-size: 20px; }
+    #assistantMessages { height: clamp(240px, calc(100dvh - 345px), 540px); padding: 12px 10px; }
+    .assistant-message { max-width: 95%; font-size: 15px; }
+    .assistant-input { gap: 8px; }
+    .auth-page { padding: 12px 0; }
+    .auth-card { padding: 26px 18px; }
+}
+
+@media (max-width: 340px) {
+    .story-week-grid, .passport-grid, .history-filters { grid-template-columns: minmax(0, 1fr); }
+    .stories-intro-icon { display: none; }
+    .welcome { flex-wrap: wrap; }
+    .hero-3d { display: none; }
+}
+
+@media (min-width: 600px) and (max-width: 899px) {
+    .app { max-width: 760px; width: calc(100% - 32px); padding: 30px 28px calc(125px + env(safe-area-inset-bottom)); }
+    .bottom-menu { width: min(calc(100% - 48px), 680px); max-width: 680px; }
+    .bottom-menu a { font-size: 12px; }
+    .story-week-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .story-week-button { font-size: 12px; }
+    .story-setup-dialog { width: min(calc(100% - 40px), 480px); }
+}
+
+@media (min-width: 760px) and (max-width: 899px) {
+    .story-week-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (min-width: 900px) {
+    .app { max-width: 1200px; width: calc(100% - 48px); min-height: calc(100dvh - 48px); margin: 24px auto; padding: 36px 36px 48px 260px; border-radius: 30px; }
+    .bottom-menu { left: max(40px, calc((100vw - 1200px) / 2 + 16px)); top: 44px; bottom: auto; transform: none; width: 208px; max-width: none; max-height: calc(100dvh - 88px); overflow-y: auto; flex-direction: column; justify-content: flex-start; gap: 7px; padding: 22px 12px; border-radius: 22px; }
+    .bottom-menu::before { content: "PetCare 🐾"; display: block; padding: 2px 12px 19px; color: var(--green-dark); font-size: 23px; font-weight: 800; letter-spacing: -.6px; }
+    .bottom-menu a { flex: 0 0 auto; flex-direction: row; justify-content: flex-start; gap: 13px; padding: 12px; min-height: 52px; font-size: 14px; text-align: left; }
+    .bottom-menu span { flex: 0 0 26px; font-size: 23px; }
+    .page { min-height: calc(100dvh - 135px); }
+    .page-header { margin-bottom: 26px; }
+    .top-header { margin-bottom: 0; }
+    .welcome { min-height: 220px; padding: 32px; }
+    .welcome h2 { font-size: 34px; }
+    .welcome p { max-width: 460px; font-size: 16px; }
+    .welcome-tag { font-size: 11px; }
+    .hero-3d { transform: scale(1.12); margin-right: 20px; }
+    #homePage[style*="display: block"] { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-content: start; }
+    #homePage > .top-header, #homePage > .welcome, #homePage > .pet-card { grid-column: 1 / -1; }
+    #homePage > .welcome, #homePage > .pet-card { margin-bottom: 0; }
+    #homePage > .home-reminders { margin-top: 0; }
+    #healthPage[style*="display: block"] { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-content: start; align-items: start; }
+    #healthPage > * { grid-column: 1 / -1; margin-block: 0; }
+    #healthPage > .health-passport { grid-column: 1; }
+    #healthPage > .weight-section { grid-column: 2; }
+    #healthPage > .health-passport, #healthPage > .weight-section { padding: 17px; }
+    #healthPage .passport-grid, #healthPage .weight-entry-row { grid-template-columns: minmax(0, 1fr); }
+    #healthRecords, #remindersList { display: grid; gap: 12px; }
+    #healthRecords > .health-record, #remindersList > .reminder { margin-bottom: 0; }
+    #petPage, #profilePage { max-width: 720px; margin-inline: auto; }
+    #petForm, #healthForm, #reminderForm { max-width: 660px; margin-inline: auto; }
+    .pet-data { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .story-week-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .story-week-info { padding: 10px; }
+    .story-card { padding: 22px; }
+    .story-card-heading h3 { font-size: 22px; }
+    .story-card-heading small, .story-save-note, .stories-storage-note, .stories-intro p { font-size: 14px; }
+    .story-collage-preview { max-width: 600px; margin-inline: auto; }
+    .story-layout-label { max-width: 440px; }
+    .story-setup-dialog { width: min(calc(100% - 48px), 480px); }
+    #assistantMessages { height: clamp(320px, calc(100dvh - 330px), 720px); padding: 24px; }
+    .assistant-message { max-width: 82%; font-size: 16px; }
+    .assistant-input { margin-top: 18px; }
+    .app:has(#authPage[style*="display: flex"]) { max-width: 560px; padding: 32px; }
+    .auth-page { min-height: calc(100dvh - 112px); padding: 0; }
+}
+
+@media (min-width: 900px) and (max-width: 1100px) {
+    .app { padding-left: 232px; padding-right: 24px; }
+    .bottom-menu { width: 186px; }
+    .bottom-menu a { font-size: 13px; gap: 9px; }
+    .story-week-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #healthPage[style*="display: block"] { grid-template-columns: minmax(0, 1fr); }
+    #healthPage > .health-passport, #healthPage > .weight-section { grid-column: 1; }
+    #homePage[style*="display: block"] { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-height: 520px) and (max-width: 899px) and (orientation: landscape) {
+    .bottom-menu { padding-block: 4px; }
+    .bottom-menu a { min-height: 42px; flex-direction: row; gap: 4px; }
+    .bottom-menu span { font-size: 17px; }
+    .app { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+    .story-setup-dialog { max-height: 90dvh; }
 }

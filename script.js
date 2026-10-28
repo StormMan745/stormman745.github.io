@@ -23,7 +23,8 @@ let activeUserId = null;
 let cloudSaveQueue = Promise.resolve();
 let activeDataLoadToken = 0;
 const storyMediaUrlCache = new Map();
-const storyVideoBlobCache = new Map();
+const storyCollageBlobCache = new Map();
+const storyOperationsInProgress = new Set();
 
 function createInitialAppData() {
     return {
@@ -53,6 +54,11 @@ let selectedCalendarDate = getLocalDateInputValue();
 function resetActiveAccountData() {
     activeDataLoadToken += 1;
     activeUserId = null;
+    storyMediaUrlCache.forEach(item => {
+        if (item.url?.startsWith("blob:")) URL.revokeObjectURL(item.url);
+    });
+    storyMediaUrlCache.clear();
+    storyCollageBlobCache.clear();
     appData = createInitialAppData();
 }
 
@@ -62,6 +68,11 @@ function getPetKey(pet) {
 
 function getActivePetKey() {
     return getPetKey(appData.pet);
+}
+
+function createEntryId(prefix) {
+    const uniqueId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return `${prefix}-${uniqueId}`;
 }
 
 function normalizeAppData() {
@@ -107,6 +118,10 @@ function normalizeAppData() {
                 ? [{ id: `initial-${getPetKey(pet)}`, date: getLocalDateInputValue(), value: Number(pet.weight) }]
                 : [];
         }
+        pet.weightHistory = pet.weightHistory.map(entry => ({
+            ...entry,
+            id: entry.id ?? createEntryId("weight")
+        }));
     });
     const desiredId = appData.activePetId == null
         ? (previousPet ? getPetKey(previousPet) : getPetKey(pets[0]))
@@ -147,10 +162,12 @@ function normalizeAppData() {
 
     appData.healthRecords = appData.healthRecords.map(record => ({
         ...record,
+        id: record.id ?? createEntryId("health"),
         petId: record.petId == null ? legacyPetId : String(record.petId)
     }));
     appData.reminders = appData.reminders.map(reminder => ({
         ...reminder,
+        id: reminder.id ?? createEntryId("reminder"),
         petId: reminder.petId == null ? legacyPetId : String(reminder.petId),
         repeat: reminder.repeat || "once",
         completed: Boolean(reminder.completed),
@@ -313,6 +330,14 @@ function hideAllPages() {
     pages.forEach(page => {
         page.style.display = "none";
     });
+    document.querySelectorAll('.bottom-menu [aria-current="page"]').forEach(link => link.removeAttribute("aria-current"));
+}
+
+function markActiveNavigation(action) {
+    document.querySelectorAll(".bottom-menu a").forEach(link => {
+        if (link.dataset.pcClick === action) link.setAttribute("aria-current", "page");
+        else link.removeAttribute("aria-current");
+    });
 }
 
 
@@ -322,6 +347,7 @@ function hideAllPages() {
 
 function showHome() {
     hideAllPages();
+    markActiveNavigation("nav-home");
 
     const homePage = document.getElementById("homePage");
 
@@ -340,6 +366,7 @@ function showHome() {
 
 function showPet() {
     hideAllPages();
+    markActiveNavigation("nav-pet");
 
     const petPage = document.getElementById("petPage");
 
@@ -357,6 +384,7 @@ function showPet() {
 
 function showHealth() {
     hideAllPages();
+    markActiveNavigation("nav-health");
 
     const healthPage = document.getElementById("healthPage");
 
@@ -377,6 +405,7 @@ function showHealth() {
 
 function showReminders() {
     hideAllPages();
+    markActiveNavigation("nav-reminders");
 
     const remindersPage = document.getElementById("remindersPage");
 
@@ -391,6 +420,7 @@ function showReminders() {
 
 function showStories() {
     hideAllPages();
+    markActiveNavigation("nav-stories");
     const page = document.getElementById("storiesPage");
     if (page) page.style.display = "block";
     renderStories();
@@ -403,6 +433,7 @@ function showStories() {
 
 function showProfile() {
     hideAllPages();
+    markActiveNavigation("nav-profile");
 
     const profilePage = document.getElementById("profilePage");
 
@@ -443,7 +474,7 @@ function renderPetAvatar(element, pet) {
 }
 
 
-function compressPetPhoto(file) {
+function compressPetPhoto(file, maxSide = 720, quality = 0.78) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = () => reject(new Error("Не удалось прочитать файл фотографии."));
@@ -451,7 +482,7 @@ function compressPetPhoto(file) {
             const image = new Image();
             image.onerror = () => reject(new Error("Не удалось открыть изображение."));
             image.onload = () => {
-                const scale = Math.min(1, 720 / Math.max(image.naturalWidth, image.naturalHeight));
+                const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
                 const canvas = document.createElement("canvas");
                 canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
                 canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
@@ -463,7 +494,7 @@ function compressPetPhoto(file) {
                 context.fillStyle = "#ffffff";
                 context.fillRect(0, 0, canvas.width, canvas.height);
                 context.drawImage(image, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL("image/jpeg", 0.78));
+                resolve(canvas.toDataURL("image/jpeg", quality));
             };
             image.src = reader.result;
         };
@@ -636,6 +667,7 @@ function openPetForm(createNew = false, returnPage = "petPage") {
     petFormMode = createNew ? "create" : "edit";
     petFormReturnPage = returnPage;
     hideAllPages();
+    markActiveNavigation(returnPage === "healthPage" ? "nav-health" : "nav-pet");
 
     const petForm = document.getElementById("petForm");
 
@@ -867,7 +899,7 @@ async function deletePet() {
     appData.activityHistory = appData.activityHistory.filter(event => String(event.petId) !== deletedPetId);
     const removedStories = appData.storyProjects.filter(story => String(story.petId) === deletedPetId);
     const removedStoryPaths = removedStories.flatMap(story => [
-        story.videoPath,
+        story.videoPath, story.collagePath,
         ...(Array.isArray(story.photos) ? story.photos.map(photo => photo.path) : [])
     ]).filter(Boolean);
     appData.storyProjects = appData.storyProjects.filter(story => String(story.petId) !== deletedPetId);
@@ -893,7 +925,7 @@ async function deletePet() {
         if (storageError) console.warn("Не удалось удалить часть файлов истории питомца из хранилища:", storageError);
         removedStoryPaths.forEach(path => {
             storyMediaUrlCache.delete(path);
-            storyVideoBlobCache.delete(path);
+            storyCollageBlobCache.delete(path);
         });
     }
     let synced = await saveData();
@@ -1067,7 +1099,9 @@ async function loadPetFromDatabase(expectedUserId = activeUserId) {
                 dbId: row.id,
                 name: row.name || savedPet.name || "Барни",
                 breed: row.breed ?? savedPet.breed ?? "",
-                weight: row.weight ?? savedPet.weight ?? "",
+                weight: Array.isArray(savedPet.weightHistory)
+                    ? (savedPet.weight ?? null)
+                    : (row.weight ?? savedPet.weight ?? ""),
                 animal: row.animal || savedPet.animal || "🐶",
                 photoData: savedPet.photoData || null
             };
@@ -1123,6 +1157,7 @@ function openHealthForm() {
     if (noteInput) noteInput.value = "";
 
     hideAllPages();
+    markActiveNavigation("nav-health");
 
     const healthForm = document.getElementById("healthForm");
 
@@ -1241,7 +1276,9 @@ function addHealthRecordToScreen(record) {
         info.appendChild(note);
     }
     appendAttachmentPhotos(info, record, `Фото к записи «${record.name}»`);
-    recordElement.append(iconElement, info);
+    recordElement.append(iconElement, info, createEntryDeleteButton(
+        "health-delete", record.id, record.petId ?? getActivePetKey(), `Удалить запись «${record.name}»`
+    ));
 
     container.appendChild(recordElement);
 }
@@ -1286,6 +1323,9 @@ function buildPetEventHistory() {
         .filter(record => String(record.petId ?? petId) === petId)
         .map(record => ({
             id: `health-${record.id}`,
+            entryType: "health",
+            entryId: record.id,
+            petId,
             kind: "health",
             date: record.date || getLocalDateInputValue(),
             title: record.name,
@@ -1294,6 +1334,9 @@ function buildPetEventHistory() {
         }));
     const weights = (appData.pet?.weightHistory || []).map(entry => ({
         id: `weight-${entry.id}`,
+        entryType: "weight",
+        entryId: entry.id,
+        petId,
         kind: "weight",
         date: entry.date || getLocalDateInputValue(),
         title: `Взвешивание · ${entry.value} кг`,
@@ -1304,6 +1347,9 @@ function buildPetEventHistory() {
         .filter(event => String(event.petId ?? petId) === petId && ["reminder", "task"].includes(event.kind))
         .map(event => ({
             id: `activity-${event.id}`,
+            entryType: "activity",
+            entryId: event.id,
+            petId,
             kind: event.kind,
             date: event.date,
             title: event.title,
@@ -1347,7 +1393,9 @@ function renderEventHistory() {
         const meta = document.createElement("small");
         meta.textContent = [formatHistoryDate(event.date), event.note].filter(Boolean).join(" · ");
         content.append(title, meta);
-        card.append(icon, content);
+        card.append(icon, content, createEntryDeleteButton(
+            `${event.entryType}-delete`, event.entryId, event.petId, `Удалить: ${event.title}`
+        ));
         container.appendChild(card);
     });
 }
@@ -1410,7 +1458,9 @@ function renderWeightHistory() {
         date.textContent = formatHistoryDate(entry.date);
         const value = document.createElement("strong");
         value.textContent = `${entry.value} кг`;
-        row.append(date, value);
+        row.append(date, value, createEntryDeleteButton(
+            "weight-delete", entry.id, getActivePetKey(), `Удалить взвешивание за ${formatHistoryDate(entry.date)}`
+        ));
         list.appendChild(row);
     });
 }
@@ -1457,48 +1507,166 @@ function escapeHtml(value) {
     })[character]);
 }
 
-function exportPetHealthPdf() {
-    const pet = appData.pet || {};
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-        alert("Разрешите открытие нового окна, чтобы сохранить карточку в PDF.");
+function createHealthExportOption(value, title, detail, name) {
+    const label = document.createElement("label");
+    label.className = "health-export-option";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = name;
+    input.value = String(value);
+    input.dataset.pcChange = "health-export-selection";
+    const text = document.createElement("span");
+    const heading = document.createElement("strong");
+    heading.textContent = title;
+    text.appendChild(heading);
+    if (detail) {
+        const description = document.createElement("small");
+        description.textContent = detail;
+        text.appendChild(description);
+    }
+    label.append(input, text);
+    return label;
+}
+
+function openHealthExportDialog() {
+    const dialog = document.getElementById("healthExportDialog");
+    if (!dialog) return;
+    if (!activeUserId || !appData.pet || appData.pet.isPlaceholder) {
+        alert("Войдите в аккаунт и выберите питомца для экспорта.");
         return;
     }
+    const petId = getActivePetKey();
+    dialog.dataset.userId = activeUserId;
+    dialog.dataset.petId = petId;
+    document.getElementById("healthExportPetName").textContent = `Питомец: ${appData.pet.name || "Без имени"}. Отметьте только то, что нужно напечатать.`;
+    dialog.querySelectorAll('[name="healthExportField"]').forEach(input => {
+        input.checked = input.value === "basic";
+    });
+
     const records = appData.healthRecords
-        .filter(record => String(record.petId ?? getActivePetKey()) === getActivePetKey())
+        .filter(record => String(record.petId ?? petId) === petId)
         .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-    const weights = [...(pet.weightHistory || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-    const history = buildPetEventHistory();
-    const recordRows = records.length ? records.map(record => `
+    const weights = [...(appData.pet.weightHistory || [])]
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    const groups = [
+        ["healthExportRecords", records, "healthExportRecord", record => [record.name || "Без названия", [record.type, formatHistoryDate(record.date)].filter(Boolean).join(" · ")], "Медицинских записей пока нет."],
+        ["healthExportWeights", weights, "healthExportWeight", entry => [`${entry.value} кг`, formatHistoryDate(entry.date)], "Взвешиваний пока нет."]
+    ];
+    groups.forEach(([id, entries, name, describe, emptyText]) => {
+        const container = document.getElementById(id);
+        container.replaceChildren();
+        entries.forEach(entry => {
+            const [title, detail] = describe(entry);
+            container.appendChild(createHealthExportOption(entry.id, title, detail, name));
+        });
+        if (!entries.length) {
+            const empty = document.createElement("p");
+            empty.className = "health-export-empty";
+            empty.textContent = emptyText;
+            container.appendChild(empty);
+        }
+        dialog.querySelectorAll(`[data-export-group="${id}"]`).forEach(button => {
+            button.disabled = entries.length === 0;
+        });
+    });
+    updateHealthExportSelection();
+    if (!dialog.open) {
+        if (typeof dialog.showModal === "function") dialog.showModal();
+        else dialog.setAttribute("open", "");
+    }
+}
+
+function closeHealthExportDialog() {
+    const dialog = document.getElementById("healthExportDialog");
+    if (!dialog) return;
+    if (typeof dialog.close === "function") dialog.close();
+    else dialog.removeAttribute("open");
+}
+
+function updateHealthExportSelection() {
+    const dialog = document.getElementById("healthExportDialog");
+    if (!dialog) return;
+    const count = dialog.querySelectorAll('input[type="checkbox"]:checked').length;
+    document.getElementById("healthExportPrintButton").disabled = count === 0;
+    document.getElementById("healthExportSelectionStatus").textContent = count
+        ? `Выбрано пунктов: ${count}`
+        : "Выберите хотя бы один пункт для печати.";
+}
+
+function setHealthExportGroup(groupId, checked) {
+    if (!["healthExportRecords", "healthExportWeights"].includes(groupId)) return;
+    document.getElementById(groupId)?.querySelectorAll('input[type="checkbox"]').forEach(input => {
+        input.checked = checked;
+    });
+    updateHealthExportSelection();
+}
+
+function buildPetHealthPrintHtml(pet, fields, records, weights) {
+    const cards = [];
+    const addCard = (label, value) => cards.push(`<div class="card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></div>`);
+    if (fields.has("basic")) {
+        addCard("Вид и порода", [pet.animal, pet.breed].filter(Boolean).join(" · ") || "Не указаны");
+        addCard("Возраст и текущий вес", `${formatPetAge(pet.birthDate)} · ${pet.weight ? `${pet.weight} кг` : "Вес не указан"}`);
+    }
+    if (fields.has("allergies")) addCard("Аллергии", pet.allergies || "Не указаны");
+    if (fields.has("medications")) addCard("Постоянные лекарства", pet.medications || "Не указаны");
+    if (fields.has("vet")) addCard("Ветеринарная клиника и телефон", [pet.vetClinic, pet.vetPhone].filter(Boolean).join(" · ") || "Не указаны");
+    const recordRows = records.map(record => `
         <article class="entry"><strong>${escapeHtml(record.name)}</strong><small>${escapeHtml(record.type)} · ${escapeHtml(formatHistoryDate(record.date))}</small>
         ${record.nextDate ? `<small>Следующая процедура: ${escapeHtml(formatHistoryDate(record.nextDate))}</small>` : ""}
-        ${record.note ? `<p>${escapeHtml(record.note)}</p>` : ""}</article>`).join("") : "<p>Медицинских записей пока нет.</p>";
-    const weightRows = weights.length ? weights.map(entry => `<li>${escapeHtml(formatHistoryDate(entry.date))} — <strong>${escapeHtml(entry.value)} кг</strong></li>`).join("") : "<li>Взвешиваний пока нет.</li>";
-    const historyRows = history.length ? history.map(event => `<article class="entry"><strong>${escapeHtml(event.title)}</strong><small>${escapeHtml(formatHistoryDate(event.date))} · ${escapeHtml(event.note)}</small></article>`).join("") : "<p>Событий пока нет.</p>";
-    printWindow.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Карточка здоровья — ${escapeHtml(pet.name || "Питомец")}</title>
+        ${record.note ? `<p>${escapeHtml(record.note)}</p>` : ""}</article>`).join("");
+    const weightRows = weights.map(entry => `<li>${escapeHtml(formatHistoryDate(entry.date))} — <strong>${escapeHtml(entry.value)} кг</strong></li>`).join("");
+    return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Здоровье — ${escapeHtml(pet.name || "Питомец")}</title>
         <style>
-            body{font:15px Arial,sans-serif;color:#24382a;max-width:760px;margin:40px auto;padding:0 24px;line-height:1.5}
-            h1,h2{color:#216044}h1{margin-bottom:4px}.subtitle{color:#728277;margin-top:0}
-            .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:22px 0}
-            .card,.entry{border:1px solid #dce9df;border-radius:12px;padding:14px;margin:10px 0;break-inside:avoid}
-            .card small,.entry small{display:block;color:#6c7f70;margin:4px 0}.card strong{display:block;white-space:pre-wrap}
-            ul{padding-left:20px}.section{margin-top:28px}
-            @media print{body{margin:14mm auto;padding:0}.section{break-inside:avoid}}
+            @page{size:A4;margin:16mm}
+            *{box-sizing:border-box}body{font:14px Arial,sans-serif;color:#24382a;max-width:760px;margin:32px auto;padding:0 20px;line-height:1.5;overflow-wrap:anywhere}
+            h1,h2{color:#216044}h1{font-size:24px;margin-bottom:4px}h2{font-size:18px;break-after:avoid}.subtitle{color:#728277;margin-top:0}
+            .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:22px 0}
+            .card,.entry{border:1px solid #dce9df;border-radius:10px;padding:12px;break-inside:avoid}.entry{margin:10px 0}
+            .card small,.entry small{display:block;color:#6c7f70;margin:4px 0}.card strong,.entry p{display:block;white-space:pre-wrap}
+            ul{padding-left:20px}li{margin:6px 0;break-inside:avoid}.section{margin-top:24px}
+            @media print{body{max-width:none;margin:0;padding:0}}
         </style></head><body>
-        <h1>PetCare · Карточка здоровья</h1><p class="subtitle">Сформировано ${escapeHtml(new Date().toLocaleDateString("ru-RU"))}</p>
-        <div class="grid">
-            <div class="card"><small>Питомец</small><strong>${escapeHtml(pet.name || "Без имени")}</strong></div>
-            <div class="card"><small>Вид и порода</small><strong>${escapeHtml([pet.animal, pet.breed].filter(Boolean).join(" · ") || "Не указаны")}</strong></div>
-            <div class="card"><small>Возраст и текущий вес</small><strong>${escapeHtml(formatPetAge(pet.birthDate))} · ${escapeHtml(pet.weight ? `${pet.weight} кг` : "Вес не указан")}</strong></div>
-            <div class="card"><small>Аллергии</small><strong>${escapeHtml(pet.allergies || "Не указаны")}</strong></div>
-            <div class="card"><small>Постоянные лекарства</small><strong>${escapeHtml(pet.medications || "Не указаны")}</strong></div>
-            <div class="card"><small>Ветеринарная клиника и телефон</small><strong>${escapeHtml([pet.vetClinic, pet.vetPhone].filter(Boolean).join(" · ") || "Не указаны")}</strong></div>
-        </div>
-        <section class="section"><h2>Медицинские записи</h2>${recordRows}</section>
-        <section class="section"><h2>История веса</h2><ul>${weightRows}</ul></section>
-        <section class="section"><h2>История ухода</h2>${historyRows}</section>
-        </body></html>`);
+        <h1>Здоровье питомца · ${escapeHtml(pet.name || "Без имени")}</h1>
+        <p class="subtitle">PetCare · Сформировано ${escapeHtml(new Date().toLocaleDateString("ru-RU"))}</p>
+        ${cards.length ? `<div class="grid">${cards.join("")}</div>` : ""}
+        ${records.length ? `<section class="section"><h2>Медицинские записи</h2>${recordRows}</section>` : ""}
+        ${weights.length ? `<section class="section"><h2>История веса</h2><ul>${weightRows}</ul></section>` : ""}
+        </body></html>`;
+}
+
+function exportPetHealthPdf() {
+    const dialog = document.getElementById("healthExportDialog");
+    if (!dialog?.open) return;
+    if (!activeUserId || dialog.dataset.userId !== activeUserId || dialog.dataset.petId !== getActivePetKey()) {
+        closeHealthExportDialog();
+        alert("Питомец или аккаунт изменился. Откройте выбор данных для PDF ещё раз.");
+        return;
+    }
+    const selectedValues = name => new Set([...dialog.querySelectorAll(`input[name="${name}"]:checked`)].map(input => input.value));
+    const fields = selectedValues("healthExportField");
+    const recordIds = selectedValues("healthExportRecord");
+    const weightIds = selectedValues("healthExportWeight");
+    const petId = getActivePetKey();
+    const records = appData.healthRecords.filter(record =>
+        String(record.petId ?? petId) === petId && recordIds.has(String(record.id))
+    ).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    const weights = (appData.pet.weightHistory || []).filter(entry => weightIds.has(String(entry.id)))
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    if (!fields.size && !records.length && !weights.length) {
+        alert("Выберите хотя бы один пункт для печати.");
+        updateHealthExportSelection();
+        return;
+    }
+    const html = buildPetHealthPrintHtml(appData.pet, fields, records, weights);
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+        alert("Разрешите открытие нового окна, чтобы распечатать выбранные данные или сохранить PDF.");
+        return;
+    }
+    printWindow.document.write(html);
     printWindow.document.close();
+    closeHealthExportDialog();
     printWindow.focus();
     window.setTimeout(() => printWindow.print(), 300);
 }
@@ -1512,6 +1680,7 @@ function openReminderForm() {
     clearReminderPhotos();
 
     hideAllPages();
+    markActiveNavigation("nav-reminders");
 
     const reminderForm = document.getElementById("reminderForm");
     const dateInput = document.getElementById("reminderDate");
@@ -1608,6 +1777,15 @@ function createReminderCompletionButton(reminder, completed) {
     return button;
 }
 
+function createReminderActions(reminder, completed) {
+    const actions = document.createElement("div");
+    actions.className = "entry-actions";
+    actions.append(createReminderCompletionButton(reminder, completed), createEntryDeleteButton(
+        "reminder-delete", reminder.id, reminder.petId ?? getActivePetKey(), `Удалить напоминание «${reminder.name}»`
+    ));
+    return actions;
+}
+
 function addHomeReminderToScreen(reminder) {
     const container = document.getElementById("homeRemindersList");
     if (!container) return;
@@ -1633,7 +1811,7 @@ function addHomeReminderToScreen(reminder) {
     ].filter(Boolean).join(" · ");
     info.append(title, detail);
 
-    card.append(icon, info, createReminderCompletionButton(reminder, false));
+    card.append(icon, info, createReminderActions(reminder, false));
     container.appendChild(card);
 }
 
@@ -1729,7 +1907,7 @@ function addReminderToScreen(reminder) {
     info.append(title, detail);
     appendAttachmentPhotos(info, reminder, `Фото к напоминанию «${reminder.name}»`);
 
-    reminderElement.append(iconElement, info, createReminderCompletionButton(reminder, completed));
+    reminderElement.append(iconElement, info, createReminderActions(reminder, completed));
 
     container.appendChild(reminderElement);
 }
@@ -1932,6 +2110,211 @@ function renderReminders() {
     });
 }
 
+// Удаление всегда ограничено открытым аккаунтом и выбранным питомцем.
+function createEntryDeleteButton(action, entryId, petId, label) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "entry-delete-button";
+    button.textContent = "Удалить";
+    button.dataset.pcClick = action;
+    button.dataset.entryId = String(entryId);
+    button.dataset.petId = String(petId);
+    button.setAttribute("aria-label", label);
+    return button;
+}
+
+function canDeleteEntry(petId) {
+    if (!activeUserId) {
+        alert("Войдите в аккаунт, чтобы удалить запись.");
+        return false;
+    }
+    return String(petId) === getActivePetKey();
+}
+
+function removeReminderActivity(reminders, petId) {
+    const eventIds = new Set();
+    appData.activityHistory.forEach(event => {
+        if (event.kind !== "reminder" || String(event.petId ?? petId) !== petId) return;
+        if (reminders.some(reminder => String(event.id) === `reminder-${reminder.id}-${event.date}`)) {
+            eventIds.add(String(event.id));
+        }
+    });
+    appData.activityHistory = appData.activityHistory.filter(event =>
+        String(event.petId ?? petId) !== petId || !eventIds.has(String(event.id))
+    );
+}
+
+function refreshDeletedEntries() {
+    updatePetOnScreen();
+    renderHealthRecords();
+    renderReminders();
+    renderHomeReminders();
+    renderStories();
+}
+
+async function saveEntryDeletion(expectedUserId) {
+    refreshDeletedEntries();
+    try {
+        const synced = await saveData();
+        if (!synced && activeUserId === expectedUserId) {
+            alert("Удалено на этом устройстве, но сохранить удаление в аккаунте не удалось. Проверьте интернет. До синхронизации запись может появиться снова после входа, а напоминания — продолжить приходить.");
+        }
+        return Boolean(synced);
+    } catch (error) {
+        console.error("Не удалось сохранить удаление записи:", error);
+        if (activeUserId === expectedUserId) alert("Не удалось сохранить удаление. Проверьте подключение и повторите попытку.");
+        return false;
+    }
+}
+
+async function deleteHealthRecord(recordId, petId = getActivePetKey()) {
+    petId = String(petId);
+    if (!canDeleteEntry(petId)) return;
+    const record = appData.healthRecords.find(item =>
+        String(item.id) === String(recordId) && String(item.petId ?? petId) === petId
+    );
+    if (!record) return;
+    if (!window.confirm(`Удалить запись «${record.name}» вместе с фото и напоминанием о повторной процедуре?`)) return;
+
+    const userId = activeUserId;
+    const relatedReminders = appData.reminders.filter(reminder =>
+        String(reminder.petId ?? petId) === petId
+        && (String(reminder.sourceRecordId) === String(record.id) || String(reminder.id) === `health-followup-${record.id}`)
+    );
+    appData.healthRecords = appData.healthRecords.filter(item => item !== record);
+    appData.reminders = appData.reminders.filter(item => !relatedReminders.includes(item));
+    removeReminderActivity(relatedReminders, petId);
+    await saveEntryDeletion(userId);
+}
+
+async function deleteReminder(reminderId, petId = getActivePetKey()) {
+    petId = String(petId);
+    if (!canDeleteEntry(petId)) return;
+    const reminder = appData.reminders.find(item =>
+        String(item.id) === String(reminderId) && String(item.petId ?? petId) === petId
+    );
+    if (!reminder) return;
+    const question = ["daily", "weekly"].includes(reminder.repeat)
+        ? `Удалить напоминание «${reminder.name}» и все его будущие повторы?`
+        : `Удалить напоминание «${reminder.name}»?`;
+    if (!window.confirm(question)) return;
+
+    const userId = activeUserId;
+    appData.reminders = appData.reminders.filter(item => item !== reminder);
+    removeReminderActivity([reminder], petId);
+    await saveEntryDeletion(userId);
+}
+
+async function deleteWeightEntry(entryId, petId = getActivePetKey()) {
+    petId = String(petId);
+    if (!canDeleteEntry(petId)) return;
+    const pet = appData.pet;
+    const entry = (pet.weightHistory || []).find(item => String(item.id) === String(entryId));
+    if (!entry) return;
+    if (!window.confirm(`Удалить взвешивание ${entry.value} кг за ${formatHistoryDate(entry.date)}?`)) return;
+
+    const userId = activeUserId;
+    pet.weightHistory = pet.weightHistory.filter(item => item !== entry);
+    const remaining = pet.weightHistory.filter(item => Number(item.value) > 0)
+        .sort((left, right) => String(left.date || "").localeCompare(String(right.date || "")));
+    pet.weight = remaining.length ? Number(remaining[remaining.length - 1].value) : null;
+    const savedPet = appData.pets.find(item => getPetKey(item) === petId);
+    if (savedPet) {
+        savedPet.weightHistory = pet.weightHistory;
+        savedPet.weight = pet.weight;
+    }
+    appData.activityHistory = appData.activityHistory.filter(event =>
+        String(event.petId ?? petId) !== petId || String(event.id) !== `weight-${entry.id}`
+    );
+    const weight = pet.weight;
+    const synced = await saveEntryDeletion(userId);
+    const currentPet = appData.pets.find(item => getPetKey(item) === petId);
+    if (synced && pet.dbId != null && activeUserId === userId && currentPet?.weight === weight) {
+        try {
+            const { error } = await supabaseClient.from("pets").update({ weight })
+                .eq("id", pet.dbId).eq("user_id", userId);
+            if (error) console.warn("Вес сохранён в карточке аккаунта, но не обновлён в таблице питомцев:", error);
+        } catch (error) {
+            console.warn("Вес сохранён в карточке аккаунта:", error);
+        }
+    }
+}
+
+async function deleteActivityEntry(entryId, petId = getActivePetKey()) {
+    petId = String(petId);
+    if (!canDeleteEntry(petId)) return;
+    const entry = appData.activityHistory.find(item =>
+        String(item.id) === String(entryId) && String(item.petId ?? petId) === petId
+    );
+    if (!entry || !window.confirm(`Удалить событие «${entry.title}» из истории?`)) return;
+    const userId = activeUserId;
+    appData.activityHistory = appData.activityHistory.filter(item => item !== entry);
+    await saveEntryDeletion(userId);
+}
+
+async function deleteStory(storyId, petId = getActivePetKey()) {
+    petId = String(petId);
+    if (!canDeleteEntry(petId)) return;
+    const story = appData.storyProjects.find(item =>
+        String(item.id) === String(storyId) && String(item.petId) === petId
+    );
+    if (!story) return;
+    const userId = activeUserId;
+    const operationKey = `${userId}:${story.id}`;
+    if (storyOperationsInProgress.has(operationKey)) {
+        alert("Дождитесь сохранения фото или создания коллажа, затем удалите подборку.");
+        return;
+    }
+    if (!window.confirm(`Удалить подборку за ${formatStoryMonth(story.month)} вместе с фото, коллажем и напоминаниями о съёмке?`)) return;
+
+    storyOperationsInProgress.add(operationKey);
+    try {
+        const reminders = appData.reminders.filter(item =>
+            String(item.petId ?? petId) === petId && String(item.sourceStoryId) === String(story.id)
+        );
+        appData.storyProjects = appData.storyProjects.filter(item => item !== story);
+        appData.reminders = appData.reminders.filter(item => !reminders.includes(item));
+        removeReminderActivity(reminders, petId);
+        const synced = await saveEntryDeletion(userId);
+        if (!synced || activeUserId !== userId) return;
+
+        const prefix = `${userId}/${story.id}/`;
+        const photos = Array.isArray(story.photos) ? story.photos : [];
+        const paths = [...new Set([story.videoPath, story.collagePath, ...photos.map(photo => photo.path)])]
+            .filter(path => typeof path === "string" && path.startsWith(prefix) && !path.split("/").includes(".."));
+        if (paths.length) {
+            const { error } = await supabaseClient.storage.from(STORY_STORAGE_BUCKET).remove(paths);
+            paths.forEach(path => {
+                const cached = storyMediaUrlCache.get(path);
+                if (cached?.url?.startsWith("blob:")) URL.revokeObjectURL(cached.url);
+                storyMediaUrlCache.delete(path);
+                storyCollageBlobCache.delete(path);
+            });
+            if (error) throw error;
+        }
+    } catch (error) {
+        console.error("Не удалось очистить файлы удалённой истории:", error);
+        if (activeUserId === userId) alert("История удалена из списка, но часть её файлов не удалось удалить из хранилища.");
+    } finally {
+        storyOperationsInProgress.delete(operationKey);
+    }
+}
+
+async function withStoryOperation(storyId, operation) {
+    const userId = activeUserId;
+    const key = `${userId}:${storyId}`;
+    if (!userId || storyOperationsInProgress.has(key)) return;
+    if (!appData.storyProjects.some(story => String(story.id) === String(storyId) && String(story.petId) === getActivePetKey())) return;
+    storyOperationsInProgress.add(key);
+    setStoryControlsBusy(storyId, true);
+    try {
+        return await operation();
+    } finally {
+        storyOperationsInProgress.delete(key);
+        if (activeUserId === userId) setStoryControlsBusy(storyId, false);
+    }
+}
+
 function pushBase64UrlToBytes(base64Url) {
     const normalized = String(base64Url || "").replace(/-/g, "+").replace(/_/g, "/");
     const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
@@ -2090,60 +2473,76 @@ async function disablePushNotifications(options = {}) {
 }
 
 // ==============================
-// ИСТОРИИ ПИТОМЦА
+// КОЛЛАЖИ ПИТОМЦА
 // ==============================
 
 function formatStoryMonth(monthKey) {
-    if (!/^\d{4}-\d{2}$/.test(String(monthKey || ""))) return "История месяца";
-    const label = new Date(monthKey + "-01T12:00:00").toLocaleDateString("ru-RU", {
-        month: "long",
-        year: "numeric"
-    });
+    if (!/^\d{4}-\d{2}$/.test(String(monthKey || ""))) return "Подборка питомца";
+    const label = new Date(monthKey + "-01T12:00:00").toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
     return label.charAt(0).toLocaleUpperCase("ru-RU") + label.slice(1);
 }
 
 function getStorySignedUrl(path) {
     const cached = storyMediaUrlCache.get(path);
     if (cached && cached.expiresAt > Date.now() + 60000) return Promise.resolve(cached.url);
-
-    return supabaseClient.storage
-        .from(STORY_STORAGE_BUCKET)
-        .createSignedUrl(path, 3600)
-        .then(({ data, error }) => {
-            if (error || !data?.signedUrl) throw error || new Error("Не удалось открыть файл истории.");
-            storyMediaUrlCache.set(path, {
-                url: data.signedUrl,
-                expiresAt: Date.now() + 3500000
-            });
-            return data.signedUrl;
-        });
-}
-
-function setStoryMediaSource(element, path) {
-    const cached = storyMediaUrlCache.get(path);
-    if (cached && cached.expiresAt > Date.now() + 60000) {
-        element.src = cached.url;
-        return;
-    }
-    getStorySignedUrl(path).then(url => {
-        if (element.isConnected) element.src = url;
-    }).catch(error => {
-        console.warn("Не удалось загрузить файл истории:", error);
+    return supabaseClient.storage.from(STORY_STORAGE_BUCKET).createSignedUrl(path, 3600).then(({ data, error }) => {
+        if (error || !data?.signedUrl) throw error || new Error("Не удалось открыть фото.");
+        storyMediaUrlCache.set(path, { url: data.signedUrl, expiresAt: Date.now() + 3500000 });
+        return data.signedUrl;
     });
 }
 
+function setStoryMediaSource(element, path) {
+    const userId = activeUserId;
+    getStorySignedUrl(path).then(url => {
+        if (element.isConnected && activeUserId === userId) element.src = url;
+    }).catch(error => {
+        if (element.isConnected) element.alt = "Фото пока недоступно. Проверьте подключение.";
+        console.warn("Не удалось загрузить фото:", error);
+    });
+}
+
+function getStoryPhotos(story) {
+    return [1, 2, 3, 4].map(week => (story.photos || []).find(photo => Number(photo.week) === week && photo.path))
+        .filter(Boolean).sort((left, right) => String(left.date || "").localeCompare(String(right.date || "")) || Number(left.week) - Number(right.week));
+}
+
+function getStoryCollageSignature(story) {
+    const pet = appData.pets.find(item => getPetKey(item) === String(story.petId)) || appData.pet;
+    return JSON.stringify([pet?.name || "Питомец", story.month, story.collageLayout || "grid",
+        getStoryPhotos(story).map(photo => [photo.week, photo.path, photo.date])]);
+}
+
+function isStoryCollageCurrent(story) {
+    return Boolean(story.collagePath && story.collageSignature === getStoryCollageSignature(story));
+}
+
+function findCurrentStory(storyId) {
+    return appData.storyProjects.find(story => String(story.id) === String(storyId) && String(story.petId) === getActivePetKey());
+}
+
+function createStoryButton(label, action, story, week) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "story-week-button";
+    button.textContent = label;
+    button.dataset.pcClick = action;
+    button.dataset.storyId = story.id;
+    if (week) button.dataset.storyWeek = String(week);
+    return button;
+}
+
 function makeStoryWeekCard(story, week) {
-    const photo = (Array.isArray(story.photos) ? story.photos : [])
-        .find(item => Number(item.week) === week && item.path);
+    const photo = (story.photos || []).find(item => Number(item.week) === week && item.path);
     const slot = document.createElement("article");
     slot.className = "story-week";
-
     const imageWrap = document.createElement("div");
     imageWrap.className = "story-week-image-wrap";
     if (photo) {
         const image = document.createElement("img");
         image.className = "story-week-photo";
-        image.alt = "Фото " + (appData.pet?.name || "питомца") + ", неделя " + week;
+        image.alt = `Фото ${appData.pet?.name || "питомца"}, кадр ${week}`;
+        image.loading = "lazy";
         setStoryMediaSource(image, photo.path);
         imageWrap.appendChild(image);
     } else {
@@ -2152,618 +2551,474 @@ function makeStoryWeekCard(story, week) {
         placeholder.textContent = "📷";
         imageWrap.appendChild(placeholder);
     }
-
     const info = document.createElement("div");
     info.className = "story-week-info";
     const title = document.createElement("strong");
-    title.textContent = "Неделя " + week;
-    const date = document.createElement("small");
-    date.textContent = photo?.date ? formatHistoryDate(photo.date) : "Фото ещё нет";
-    const takeButton = document.createElement("button");
-    takeButton.type = "button";
-    takeButton.className = "story-week-button";
-    takeButton.dataset.pcClick = "story-take-photo";
-    takeButton.dataset.storyId = story.id;
-    takeButton.dataset.storyWeek = String(week);
-    takeButton.textContent = photo ? "↻ Переснять" : "📸 Сделать фото";
-    info.append(title, date, takeButton);
+    title.textContent = `Кадр ${week}`;
+    info.appendChild(title);
+    if (photo) {
+        const label = document.createElement("label");
+        label.className = "story-photo-date-label";
+        label.textContent = "Дата фото";
+        const date = document.createElement("input");
+        date.type = "date";
+        date.value = photo.date || "";
+        date.dataset.pcChange = "story-photo-date";
+        date.dataset.storyId = story.id;
+        date.dataset.storyWeek = String(week);
+        date.setAttribute("aria-label", `Дата фото, кадр ${week}`);
+        label.appendChild(date);
+        info.appendChild(label);
+    } else {
+        const empty = document.createElement("small");
+        empty.textContent = "Добавьте момент взросления";
+        info.appendChild(empty);
+    }
+    info.appendChild(createStoryButton(photo ? "↻ Заменить фото" : "＋ Загрузить фото", "story-take-photo", story, week));
+    const camera = createStoryButton("📸 Камера", "story-camera", story, week);
+    camera.classList.add("story-camera-button");
+    info.appendChild(camera);
     slot.append(imageWrap, info);
     return slot;
 }
 
 function setStoryStatus(storyId, text) {
-    const card = [...document.querySelectorAll("[data-story-card-id]")]
-        .find(item => item.dataset.storyCardId === String(storyId));
+    const card = [...document.querySelectorAll("[data-story-card-id]")].find(item => item.dataset.storyCardId === String(storyId));
     const status = card?.querySelector(".story-status");
     if (status) status.textContent = text;
+}
+
+function setStoryControlsBusy(storyId, busy) {
+    const story = findCurrentStory(storyId);
+    const card = [...document.querySelectorAll("[data-story-card-id]")].find(item => item.dataset.storyCardId === String(storyId));
+    if (!card || !story) return;
+    card.setAttribute("aria-busy", String(busy));
+    card.querySelectorAll("button, input, select").forEach(control => {
+        control.disabled = busy || Number(control.dataset.minPhotos || 0) > getStoryPhotos(story).length;
+    });
 }
 
 function renderStoryCard(story, container) {
     const card = document.createElement("article");
     card.className = "story-card";
     card.dataset.storyCardId = story.id;
-
-    const photos = Array.isArray(story.photos) ? story.photos : [];
-    const count = [1, 2, 3, 4].filter(week =>
-        photos.some(photo => Number(photo.week) === week && photo.path)
-    ).length;
-
+    const count = getStoryPhotos(story).length;
     const heading = document.createElement("div");
     heading.className = "story-card-heading";
     const titleBlock = document.createElement("div");
     const title = document.createElement("h3");
     title.textContent = formatStoryMonth(story.month);
     const subtitle = document.createElement("small");
-    subtitle.textContent = (appData.pet?.name || "Питомец") + " · " + count + " из 4 фото";
+    subtitle.textContent = `${appData.pet?.name || "Питомец"} · ${count} из 4 фото`;
     titleBlock.append(title, subtitle);
-    heading.appendChild(titleBlock);
-
+    heading.append(titleBlock, createEntryDeleteButton("story-delete", story.id, story.petId, `Удалить коллаж за ${formatStoryMonth(story.month)}`));
     const progressTrack = document.createElement("div");
     progressTrack.className = "story-progress-track";
     progressTrack.setAttribute("role", "progressbar");
+    progressTrack.setAttribute("aria-label", "Количество добавленных фотографий");
     progressTrack.setAttribute("aria-valuemin", "0");
     progressTrack.setAttribute("aria-valuemax", "4");
     progressTrack.setAttribute("aria-valuenow", String(count));
     const progress = document.createElement("div");
     progress.className = "story-progress-value";
-    progress.style.width = String(count * 25) + "%";
+    progress.style.width = `${count * 25}%`;
     progressTrack.appendChild(progress);
-
+    card.append(heading, progressTrack);
+    if (count < 4) {
+        const upload = createStoryButton("＋ Загрузить несколько фото", "story-upload-many", story);
+        upload.classList.add("story-batch-button");
+        card.appendChild(upload);
+    }
     const weekGrid = document.createElement("div");
     weekGrid.className = "story-week-grid";
     [1, 2, 3, 4].forEach(week => weekGrid.appendChild(makeStoryWeekCard(story, week)));
-
+    const layoutLabel = document.createElement("label");
+    layoutLabel.className = "story-layout-label";
+    layoutLabel.textContent = "Оформление коллажа";
+    const layout = document.createElement("select");
+    layout.dataset.pcChange = "story-layout";
+    layout.dataset.storyId = story.id;
+    [["grid", "Сетка · кадры рядом"], ["timeline", "Лента · история роста"]].forEach(([value, text]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = text;
+        layout.appendChild(option);
+    });
+    layout.value = story.collageLayout || "grid";
+    layoutLabel.appendChild(layout);
     const status = document.createElement("p");
     status.className = "story-status story-save-note";
-    status.textContent = story.videoPath
-        ? "История готова. Можно пересобрать видео после замены фото."
-        : count === 4
-            ? "Все четыре фото готовы к монтажу."
-            : "Напоминания о съёмке появятся на главной странице.";
-
-    card.append(heading, progressTrack, weekGrid, status);
-
-    if (count === 4) {
-        const generateButton = document.createElement("button");
-        generateButton.type = "button";
-        generateButton.className = "primary-button story-generate-button";
-        generateButton.dataset.pcClick = "story-generate";
-        generateButton.dataset.storyId = story.id;
-        generateButton.textContent = story.videoPath ? "↻ Пересобрать видео" : "✨ Собрать видео с музыкой";
-        card.appendChild(generateButton);
+    status.setAttribute("role", "status");
+    status.textContent = isStoryCollageCurrent(story) ? "Коллаж сохранён в аккаунте. Скачайте его или поделитесь."
+        : count >= 2 ? "Фото готовы. Проверьте даты и создайте коллаж. Ожидать конца месяца не нужно."
+            : "Добавьте хотя бы 2 фото. Можно выбрать до 4 снимков сразу.";
+    const generate = createStoryButton(story.collagePath ? "↻ Обновить коллаж" : "✨ Создать коллаж", "story-generate", story);
+    generate.className = "primary-button story-generate-button";
+    generate.dataset.minPhotos = "2";
+    card.append(weekGrid, layoutLabel, status, generate);
+    if (isStoryCollageCurrent(story)) {
+        const image = document.createElement("img");
+        image.className = "story-collage-preview";
+        image.alt = `Коллаж: как растёт ${appData.pet?.name || "питомец"}`;
+        image.loading = "lazy";
+        setStoryMediaSource(image, story.collagePath);
+        const save = createStoryButton("⬇ Скачать / поделиться", "story-save-collage", story);
+        save.className = "secondary-button story-save-button";
+        const note = document.createElement("p");
+        note.className = "story-save-note";
+        note.textContent = "На телефоне выберите сохранение изображения в меню «Поделиться». Если меню недоступно, коллаж скачается файлом JPEG.";
+        card.append(image, save, note);
     }
-
-    if (story.videoPath) {
-        const video = document.createElement("video");
-        video.className = "story-video";
-        video.controls = true;
-        video.playsInline = true;
-        video.preload = "metadata";
-        video.setAttribute("aria-label", "Видеоистория питомца за " + formatStoryMonth(story.month));
-        setStoryMediaSource(video, story.videoPath);
-        card.appendChild(video);
-
-        const saveButton = document.createElement("button");
-        saveButton.type = "button";
-        saveButton.className = "secondary-button story-save-button";
-        saveButton.dataset.pcClick = "story-save-video";
-        saveButton.dataset.storyId = story.id;
-        saveButton.textContent = "⬇ Сохранить видео";
-        card.appendChild(saveButton);
-
-        const saveNote = document.createElement("p");
-        saveNote.className = "story-save-note";
-        saveNote.textContent = "Откроется меню устройства: выберите «Сохранить видео» или скачайте файл.";
-        card.appendChild(saveNote);
-    }
-
     container.appendChild(card);
+    setStoryControlsBusy(story.id, storyOperationsInProgress.has(`${activeUserId}:${story.id}`));
 }
 
 function renderStories() {
     const container = document.getElementById("storiesList");
     if (!container) return;
     container.replaceChildren();
-
-    const stories = (Array.isArray(appData.storyProjects) ? appData.storyProjects : [])
-        .filter(story => String(story.petId) === getActivePetKey())
+    const stories = (appData.storyProjects || []).filter(story => String(story.petId) === getActivePetKey())
         .sort((left, right) => String(right.month || "").localeCompare(String(left.month || "")));
-
     if (!stories.length) {
         const empty = document.createElement("p");
         empty.className = "empty-state";
-        empty.textContent = "Начните историю и снимайте питомца раз в неделю в течение месяца.";
+        empty.textContent = "Здесь появятся коллажи вашего питомца. Начните с двух любимых фотографий.";
         container.appendChild(empty);
-        return;
     }
-
     stories.forEach(story => renderStoryCard(story, container));
 }
 
 function openStorySetup() {
-    if (!activeUserId) {
-        alert("Войдите в аккаунт, чтобы сохранять истории.");
+    if (!activeUserId || appData.pet?.isPlaceholder) {
+        alert("Войдите в аккаунт и добавьте питомца, чтобы сохранять коллажи.");
         return;
     }
-    if (appData.pet?.isPlaceholder) {
-        alert("Сначала добавьте питомца в профиль.");
-        return;
-    }
-    const today = new Date();
-    const month = document.getElementById("storyMonthInput");
-    const date = document.getElementById("storyStartDateInput");
-    const time = document.getElementById("storyReminderTimeInput");
-    if (month) month.value = getLocalDateInputValue(today).slice(0, 7);
-    if (date) date.value = getLocalDateInputValue(today);
-    if (time && !time.value) time.value = "09:00";
-    document.getElementById("storySetupDialog")?.showModal();
+    const today = getLocalDateInputValue();
+    document.getElementById("storyMonthInput").value = today.slice(0, 7);
+    document.getElementById("storyStartDateInput").value = today;
+    document.getElementById("storyRemindersEnabled").checked = false;
+    document.getElementById("storyReminderTimeInput").disabled = true;
+    const dialog = document.getElementById("storySetupDialog");
+    dialog.dataset.userId = activeUserId;
+    dialog.dataset.petId = getActivePetKey();
+    dialog.showModal();
 }
 
 async function createStoryPlan() {
-    const month = document.getElementById("storyMonthInput")?.value || "";
-    const startDate = document.getElementById("storyStartDateInput")?.value || "";
-    const time = document.getElementById("storyReminderTimeInput")?.value || "09:00";
-    if (!/^\d{4}-\d{2}$/.test(month) || !startDate || startDate.slice(0, 7) !== month) {
-        alert("Выберите месяц и дату первого фото внутри этого месяца.");
+    const dialog = document.getElementById("storySetupDialog");
+    if (!activeUserId || appData.pet?.isPlaceholder || dialog.dataset.userId !== activeUserId || dialog.dataset.petId !== getActivePetKey()) return;
+    const month = document.getElementById("storyMonthInput").value;
+    const startDate = document.getElementById("storyStartDateInput").value;
+    const time = document.getElementById("storyReminderTimeInput").value || "09:00";
+    const remindersEnabled = document.getElementById("storyRemindersEnabled").checked;
+    if (!/^\d{4}-\d{2}$/.test(month) || !startDate) {
+        alert("Укажите месяц подборки и дату начала наблюдения.");
         return;
     }
-    if (!activeUserId || !appData.pet || appData.pet.isPlaceholder) {
-        alert("Войдите в аккаунт и выберите питомца.");
-        return;
+    const userId = activeUserId;
+    const petId = getActivePetKey();
+    const storyId = createEntryId("story");
+    appData.storyProjects.push({ id: storyId, petId, month, startDate, createdAt: new Date().toISOString(), photos: [], collageLayout: "grid" });
+    if (remindersEnabled) {
+        for (let week = 1; week <= 4; week += 1) {
+            const dueDate = new Date(startDate + "T12:00:00");
+            dueDate.setDate(dueDate.getDate() + (week - 1) * 7);
+            appData.reminders.push({
+                id: `story-reminder-${storyId}-${week}`, type: "Фото питомца", name: `Фото для коллажа · неделя ${week}`,
+                date: getLocalDateInputValue(dueDate), time, repeat: "once", photos: [], petId, completed: false,
+                completedForDate: null, sourceStoryId: storyId, sourceStoryWeek: week
+            });
+        }
     }
-    const duplicate = appData.storyProjects.some(story =>
-        String(story.petId) === getActivePetKey() && story.month === month
-    );
-    if (duplicate) {
-        alert("Для этого питомца история за выбранный месяц уже создана.");
-        return;
-    }
-
-    const storyId = "story-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
-    const story = {
-        id: storyId,
-        petId: getActivePetKey(),
-        month,
-        startDate,
-        createdAt: new Date().toISOString(),
-        photos: [],
-        videoPath: null,
-        videoType: null,
-        videoCreatedAt: null
-    };
-    appData.storyProjects.push(story);
-
-    const firstDay = new Date(startDate + "T12:00:00");
-    for (let week = 1; week <= 4; week += 1) {
-        const dueDate = new Date(firstDay);
-        dueDate.setDate(firstDay.getDate() + (week - 1) * 7);
-        appData.reminders.push({
-            id: "story-reminder-" + storyId + "-" + week,
-            type: "Фото питомца",
-            name: "Фото для истории · неделя " + week,
-            date: getLocalDateInputValue(dueDate),
-            time,
-            repeat: "once",
-            photos: [],
-            petId: getActivePetKey(),
-            completed: false,
-            completedForDate: null,
-            sourceStoryId: storyId,
-            sourceStoryWeek: week
-        });
-    }
-
-    document.getElementById("storySetupDialog")?.close();
-    const synced = await saveData();
+    dialog.close();
     renderStories();
     renderReminders();
     renderHomeReminders();
     renderCalendar();
-    if (!synced) alert("План создан на этом устройстве, но не удалось сохранить его в облаке. Проверьте подключение.");
+    const synced = await saveData();
+    if (activeUserId === userId && !synced) alert("Подборка сохранена на устройстве. Для синхронизации с аккаунтом проверьте подключение.");
 }
 
-function requestStoryPhoto(button) {
-    const storyId = button?.dataset.storyId;
-    const week = Number(button?.dataset.storyWeek);
-    const story = appData.storyProjects.find(item =>
-        item.id === storyId && String(item.petId) === getActivePetKey()
-    );
-    if (!story || week < 1 || week > 4) return;
-    const input = document.getElementById("storyPhotoInput");
-    if (!input) return;
-    input.dataset.storyId = storyId;
-    input.dataset.storyWeek = String(week);
+function requestStoryPhoto(button, camera = false, multiple = false) {
+    const story = findCurrentStory(button?.dataset.storyId);
+    if (!activeUserId || !story || storyOperationsInProgress.has(`${activeUserId}:${story.id}`)) return;
+    const input = document.getElementById(camera ? "storyCameraInput" : "storyPhotoInput");
+    input.dataset.storyId = story.id;
+    input.dataset.storyWeek = multiple ? "" : button.dataset.storyWeek;
+    input.dataset.userId = activeUserId;
+    input.dataset.petId = getActivePetKey();
+    input.multiple = multiple;
     input.value = "";
     input.click();
 }
 
 function storyPhotoDataToBlob(dataUrl) {
     const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
-    if (!match) throw new Error("Не удалось подготовить выбранное фото.");
+    if (!match) throw new Error("Не удалось подготовить фото.");
     const binary = atob(match[2]);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    return new Blob([bytes], { type: match[1] });
+    return new Blob([Uint8Array.from(binary, char => char.charCodeAt(0))], { type: match[1] });
+}
+
+async function removeUnusedStoryFiles(paths, story, userId) {
+    if (activeUserId !== userId) return;
+    const prefix = `${userId}/${story.id}/`;
+    const safePaths = [...new Set(paths)].filter(path => typeof path === "string" && path.startsWith(prefix) && !path.split("/").includes(".."));
+    if (!safePaths.length) return;
+    const { error } = await supabaseClient.storage.from(STORY_STORAGE_BUCKET).remove(safePaths);
+    if (error) { console.warn("Не удалось удалить прежние файлы коллажа:", error); return; }
+    safePaths.forEach(path => {
+        const cached = storyMediaUrlCache.get(path);
+        if (cached?.url?.startsWith("blob:")) URL.revokeObjectURL(cached.url);
+        storyMediaUrlCache.delete(path);
+        storyCollageBlobCache.delete(path);
+    });
 }
 
 async function handleStoryPhotoSelection(input) {
-    const file = input.files?.[0];
-    const storyId = input.dataset.storyId;
+    const files = [...(input.files || [])];
     const week = Number(input.dataset.storyWeek);
+    const story = findCurrentStory(input.dataset.storyId);
+    const userId = activeUserId;
     input.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) {
-        alert("Выберите фотографию размером до 10 МБ.");
-        return;
-    }
-
-    const story = appData.storyProjects.find(item =>
-        item.id === storyId && String(item.petId) === getActivePetKey()
-    );
-    if (!story) {
-        alert("История больше не найдена. Откройте вкладку ещё раз.");
-        return;
-    }
-
+    if (!files.length || !story || !userId || input.dataset.userId !== userId || input.dataset.petId !== getActivePetKey()) return;
+    const slots = week >= 1 && week <= 4 ? [week] : [1, 2, 3, 4].filter(slot => !(story.photos || []).some(photo => Number(photo.week) === slot && photo.path));
+    if (!slots.length) { alert("Все четыре кадра заполнены. Замените нужное фото отдельно."); return; }
+    const isCurrent = () => activeUserId === userId && appData.storyProjects.includes(story);
+    let added = 0;
+    const errors = [];
+    if (files.length > slots.length) errors.push(`В подборке осталось мест: ${slots.length}. Лишние фото не добавлены.`);
     try {
-        const photoData = await compressPetPhoto(file);
-        const path = activeUserId + "/" + story.id + "/week-" + week + ".jpg";
-        const { error } = await supabaseClient.storage
-            .from(STORY_STORAGE_BUCKET)
-            .upload(path, storyPhotoDataToBlob(photoData), {
-                cacheControl: "3600",
-                contentType: "image/jpeg",
-                upsert: true
+        for (const file of files.slice(0, slots.length)) {
+            if (!isCurrent()) return;
+            if ((!file.type.startsWith("image/") && !/\.(jpe?g|png|webp|gif|heic|heif|avif)$/i.test(file.name)) || file.size > 20 * 1024 * 1024) {
+                errors.push(`${file.name}: выберите фотографию до 20 МБ.`);
+                continue;
+            }
+            const slot = slots[added];
+            setStoryStatus(story.id, `Загружаю фото ${added + 1} из ${Math.min(files.length, slots.length)}…`);
+            let photoData;
+            try { photoData = await compressPetPhoto(file, 1800, 0.88); }
+            catch { errors.push(`${file.name}: фото не открылось. Попробуйте JPEG, PNG или WebP.`); continue; }
+            if (!isCurrent()) return;
+            const path = `${userId}/${story.id}/photo-${slot}-${createEntryId("image")}.jpg`;
+            const { error } = await supabaseClient.storage.from(STORY_STORAGE_BUCKET).upload(path, storyPhotoDataToBlob(photoData), {
+                cacheControl: "3600", contentType: "image/jpeg", upsert: false
             });
-        if (error) throw error;
-
-        story.photos = (Array.isArray(story.photos) ? story.photos : [])
-            .filter(photo => Number(photo.week) !== week);
-        story.photos.push({
-            week,
-            path,
-            date: getLocalDateInputValue(),
-            takenAt: new Date().toISOString()
-        });
-        story.photos.sort((left, right) => Number(left.week) - Number(right.week));
-        storyMediaUrlCache.set(path, { url: photoData, expiresAt: Number.MAX_SAFE_INTEGER });
-        const oldVideoPath = story.videoPath;
-        story.videoPath = null;
-        story.videoType = null;
-        story.videoCreatedAt = null;
-
-        const photoReminder = appData.reminders.find(reminder =>
-            reminder.sourceStoryId === story.id && Number(reminder.sourceStoryWeek) === week
-        );
-        if (photoReminder) photoReminder.completed = true;
-
-        const synced = await saveData();
-        if (oldVideoPath) {
-            const { error: removeError } = await supabaseClient.storage
-                .from(STORY_STORAGE_BUCKET)
-                .remove([oldVideoPath]);
-            if (removeError) console.warn("Не удалось удалить старое видеоистории:", removeError);
-            storyMediaUrlCache.delete(oldVideoPath);
+            if (error) throw error;
+            if (!isCurrent()) return;
+            const previous = (story.photos || []).find(photo => Number(photo.week) === slot);
+            const oldCollage = story.collagePath;
+            story.photos = (story.photos || []).filter(photo => Number(photo.week) !== slot);
+            const fileDate = file.lastModified ? getLocalDateInputValue(new Date(file.lastModified)) : getLocalDateInputValue();
+            story.photos.push({ week: slot, path, date: previous?.date || fileDate, takenAt: new Date().toISOString() });
+            story.collagePath = null;
+            story.collageSignature = null;
+            storyMediaUrlCache.set(path, { url: photoData, expiresAt: Number.MAX_SAFE_INTEGER });
+            const reminder = appData.reminders.find(item => item.sourceStoryId === story.id && Number(item.sourceStoryWeek) === slot && String(item.petId) === String(story.petId));
+            if (reminder) reminder.completed = true;
+            added += 1;
+            const synced = await saveData();
+            if (!isCurrent()) return;
+            if (synced) await removeUnusedStoryFiles([previous?.path, oldCollage], story, userId);
+            else errors.push("Фото сохранено на устройстве, но синхронизация подборки ещё не завершена. Проверьте подключение.");
         }
-        renderStories();
-        renderReminders();
-        renderHomeReminders();
-        renderCalendar();
-        if (!synced) alert("Фото добавлено, но данные истории не удалось синхронизировать. Проверьте подключение.");
     } catch (error) {
-        console.error("Не удалось сохранить фото истории:", error);
-        alert("Не удалось сохранить фото. Проверьте подключение и попробуйте ещё раз.");
-    }
-}
-
-function loadStoryImage(path) {
-    return supabaseClient.storage.from(STORY_STORAGE_BUCKET).download(path).then(({ data, error }) => {
-        if (error || !data) throw error || new Error("Не удалось загрузить фото для монтажа.");
-        const objectUrl = URL.createObjectURL(data);
-        return new Promise((resolve, reject) => {
-            const image = new Image();
-            image.onload = () => resolve({ image, objectUrl });
-            image.onerror = () => {
-                URL.revokeObjectURL(objectUrl);
-                reject(new Error("Не удалось открыть одно из фото истории."));
-            };
-            image.src = objectUrl;
-        });
-    });
-}
-
-function scheduleStoryNote(audioContext, destination, frequency, start, duration, volume, waveform) {
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    oscillator.type = waveform || "sine";
-    oscillator.frequency.setValueAtTime(frequency, start);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.linearRampToValueAtTime(volume, start + 0.07);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-    oscillator.connect(gain);
-    gain.connect(destination);
-    oscillator.start(start);
-    oscillator.stop(start + duration + 0.03);
-}
-
-function drawStoryCover(context, canvas, image, progress) {
-    const zoom = 1.02 + progress * 0.06;
-    const scale = Math.max(canvas.width / image.width, canvas.height / image.height) * zoom;
-    const width = image.width * scale;
-    const height = image.height * scale;
-    const drift = (progress - 0.5) * 20;
-    context.drawImage(image, (canvas.width - width) / 2 + drift, (canvas.height - height) / 2, width, height);
-}
-
-async function recordPetStoryVideo(images, story, audioContext, onProgress) {
-    if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
-        throw new Error("В этом браузере запись видео недоступна. Откройте историю в актуальной версии Safari или Chrome.");
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = 720;
-    canvas.height = 1280;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Не удалось подготовить видеокадр.");
-
-    const destination = audioContext.createMediaStreamDestination();
-    const masterGain = audioContext.createGain();
-    masterGain.gain.value = 0.33;
-    masterGain.connect(destination);
-    const baseTime = audioContext.currentTime + 0.15;
-    const melody = [
-        523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 880.00, 698.46,
-        523.25, 659.25, 783.99, 1046.50, 880.00, 783.99, 659.25, 587.33,
-        523.25, 587.33, 659.25, 783.99, 698.46, 659.25, 587.33, 523.25,
-        587.33, 698.46, 783.99, 880.00, 783.99, 698.46, 659.25, 523.25,
-        587.33, 659.25
-    ];
-    melody.forEach((frequency, index) => {
-        scheduleStoryNote(audioContext, masterGain, frequency, baseTime + index * 0.4, 0.48, 0.16, "triangle");
-    });
-    const chords = [
-        [130.81, 164.81, 196.00],
-        [110.00, 130.81, 164.81],
-        [87.31, 130.81, 174.61],
-        [98.00, 146.83, 196.00]
-    ];
-    const slideDuration = 3400;
-    chords.forEach((chord, slideIndex) => {
-        chord.forEach(frequency => {
-            scheduleStoryNote(
-                audioContext,
-                masterGain,
-                frequency,
-                baseTime + slideIndex * slideDuration / 1000,
-                slideDuration / 1000,
-                0.09,
-                "sine"
-            );
-        });
-    });
-
-    const canvasStream = canvas.captureStream(24);
-    const stream = new MediaStream([
-        ...canvasStream.getVideoTracks(),
-        ...destination.stream.getAudioTracks()
-    ]);
-    const mimeCandidates = [
-        "video/mp4",
-        "video/webm;codecs=vp9,opus",
-        "video/webm;codecs=vp8,opus",
-        "video/webm"
-    ];
-    const mimeType = mimeCandidates.find(type => window.MediaRecorder.isTypeSupported?.(type));
-    let recorder;
-    try {
-        recorder = mimeType
-            ? new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1600000, audioBitsPerSecond: 128000 })
-            : new MediaRecorder(stream, { videoBitsPerSecond: 1600000, audioBitsPerSecond: 128000 });
-    } catch (error) {
-        stream.getTracks().forEach(track => track.stop());
-        throw new Error("Этот браузер не поддерживает подходящий формат видео.");
-    }
-
-    const monthLabel = formatStoryMonth(story.month);
-    const petName = appData.pet?.name || "Ваш питомец";
-    const totalDuration = slideDuration * images.length;
-    const recordedBlob = await new Promise((resolve, reject) => {
-        const chunks = [];
-        let animationId = 0;
-        recorder.ondataavailable = event => {
-            if (event.data && event.data.size) chunks.push(event.data);
-        };
-        recorder.onerror = event => {
-            cancelAnimationFrame(animationId);
-            reject(event.error || new Error("Не удалось записать видео."));
-        };
-        recorder.onstop = () => {
-            cancelAnimationFrame(animationId);
-            resolve(new Blob(chunks, { type: recorder.mimeType || mimeType || "video/webm" }));
-        };
-        recorder.start(500);
-
-        const startedAt = performance.now();
-        const drawFrame = now => {
-            const elapsed = now - startedAt;
-            const slideIndex = Math.min(images.length - 1, Math.floor(elapsed / slideDuration));
-            const withinSlide = elapsed - slideIndex * slideDuration;
-            const progress = Math.min(1, withinSlide / slideDuration);
-            context.fillStyle = "#203b2b";
-            context.fillRect(0, 0, canvas.width, canvas.height);
-            drawStoryCover(context, canvas, images[slideIndex].image, progress);
-            if (slideIndex < images.length - 1 && withinSlide > slideDuration - 350) {
-                context.save();
-                context.globalAlpha = Math.min(1, (withinSlide - slideDuration + 350) / 350);
-                drawStoryCover(context, canvas, images[slideIndex + 1].image, 0);
-                context.restore();
-            }
-
-            const shade = context.createLinearGradient(0, 720, 0, canvas.height);
-            shade.addColorStop(0, "rgba(12, 31, 21, 0)");
-            shade.addColorStop(1, "rgba(12, 31, 21, 0.82)");
-            context.fillStyle = shade;
-            context.fillRect(0, 0, canvas.width, canvas.height);
-            context.fillStyle = "rgba(255,255,255,0.9)";
-            context.font = "600 24px system-ui, sans-serif";
-            context.fillText("PETCARE  ·  ИСТОРИЯ МЕСЯЦА", 42, 76);
-            context.fillStyle = "#fff";
-            context.font = "700 54px system-ui, sans-serif";
-            context.fillText(petName.slice(0, 22), 42, 1090);
-            context.font = "500 29px system-ui, sans-serif";
-            context.fillText("Неделя " + (slideIndex + 1) + "  ·  " + monthLabel, 44, 1142);
-            context.fillStyle = "rgba(255,255,255,0.78)";
-            context.font = "500 22px system-ui, sans-serif";
-            context.fillText("Маленькие моменты, которые остаются", 44, 1200);
-
-            const percentage = Math.min(99, Math.round(elapsed / totalDuration * 100));
-            onProgress("Собираю видео… " + percentage + "%");
-            if (elapsed >= totalDuration) {
-                onProgress("Сохраняю готовый ролик…");
-                if (recorder.state !== "inactive") recorder.stop();
-            } else {
-                animationId = requestAnimationFrame(drawFrame);
-            }
-        };
-        animationId = requestAnimationFrame(drawFrame);
-    });
-
-    stream.getTracks().forEach(track => track.stop());
-    if (!recordedBlob.size) throw new Error("Видео получилось пустым. Попробуйте собрать историю ещё раз.");
-    return recordedBlob;
-}
-
-async function generatePetStoryVideo(button) {
-    const story = appData.storyProjects.find(item =>
-        item.id === button?.dataset.storyId && String(item.petId) === getActivePetKey()
-    );
-    if (!story) return;
-    const orderedPhotos = [1, 2, 3, 4].map(week =>
-        (story.photos || []).find(photo => Number(photo.week) === week && photo.path)
-    );
-    if (orderedPhotos.some(photo => !photo)) {
-        alert("Добавьте по одному фото для каждой из четырёх недель.");
-        return;
-    }
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass || !window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
-        alert("Создание видео не поддерживается этим браузером. Попробуйте открыть PetCare в актуальном Safari или Chrome.");
-        return;
-    }
-
-    button.disabled = true;
-    const originalLabel = button.textContent;
-    let audioContext;
-    let loadedImages = [];
-    try {
-        audioContext = new AudioContextClass();
-        await audioContext.resume();
-        setStoryStatus(story.id, "Подготавливаю фотографии…");
-        loadedImages = await Promise.all(orderedPhotos.map(photo => loadStoryImage(photo.path)));
-        const videoBlob = await recordPetStoryVideo(
-            loadedImages,
-            story,
-            audioContext,
-            message => {
-                button.textContent = message;
-                setStoryStatus(story.id, message);
-            }
-        );
-        const videoType = videoBlob.type.includes("mp4") ? "video/mp4" : "video/webm";
-        const extension = videoType === "video/mp4" ? "mp4" : "webm";
-        const videoPath = activeUserId + "/" + story.id + "/story-" + Date.now() + "." + extension;
-        const { error } = await supabaseClient.storage
-            .from(STORY_STORAGE_BUCKET)
-            .upload(videoPath, videoBlob, {
-                cacheControl: "3600",
-                contentType: videoType,
-                upsert: false
-            });
-        if (error) throw error;
-
-        const oldVideoPath = story.videoPath;
-        story.videoPath = videoPath;
-        story.videoType = videoType;
-        story.videoCreatedAt = new Date().toISOString();
-        storyMediaUrlCache.set(videoPath, { url: URL.createObjectURL(videoBlob), expiresAt: Number.MAX_SAFE_INTEGER });
-        storyVideoBlobCache.set(videoPath, videoBlob);
-        const synced = await saveData();
-        if (oldVideoPath) {
-            const { error: removeError } = await supabaseClient.storage
-                .from(STORY_STORAGE_BUCKET)
-                .remove([oldVideoPath]);
-            if (removeError) console.warn("Не удалось удалить старое видео истории:", removeError);
-            storyMediaUrlCache.delete(oldVideoPath);
-            storyVideoBlobCache.delete(oldVideoPath);
-        }
-        renderStories();
-        if (!synced) alert("Видео создано, но историю не удалось синхронизировать с аккаунтом. Проверьте подключение.");
-    } catch (error) {
-        console.error("Не удалось собрать видеоисторию:", error);
-        setStoryStatus(story.id, error?.message || "Не удалось собрать видео. Попробуйте ещё раз.");
-        alert(error?.message || "Не удалось собрать видео. Проверьте подключение и повторите попытку.");
+        console.error("Не удалось загрузить фото коллажа:", error);
+        errors.push("Загрузка прервана. Уже добавленные фото сохранены; остальные можно выбрать ещё раз.");
     } finally {
-        loadedImages.forEach(item => URL.revokeObjectURL(item.objectUrl));
-        if (audioContext && audioContext.state !== "closed") await audioContext.close().catch(() => {});
-        button.disabled = false;
-        button.textContent = originalLabel;
+        if (isCurrent()) {
+            if (getActivePetKey() === String(story.petId)) {
+                renderStories(); renderReminders(); renderHomeReminders(); renderCalendar();
+                setStoryStatus(story.id, errors.length ? errors.join(" ") : `Добавлено фото: ${added}. Проверьте даты снимков перед созданием коллажа.`);
+            }
+            if (errors.length) alert(errors.join("\n"));
+        }
     }
 }
 
-function triggerStoryVideoDownload(blob, filename) {
+async function updateStoryCollageSetting(input) {
+    const story = findCurrentStory(input.dataset.storyId);
+    if (!story || !activeUserId) return;
+    const userId = activeUserId;
+    if (input.dataset.pcChange === "story-layout") {
+        if (!["grid", "timeline"].includes(input.value)) return;
+        story.collageLayout = input.value;
+    } else {
+        if (!input.value || !input.validity.valid) { renderStories(); return; }
+        const photo = (story.photos || []).find(item => Number(item.week) === Number(input.dataset.storyWeek));
+        if (!photo) return;
+        photo.date = input.value;
+    }
+    renderStories();
+    const synced = await saveData();
+    if (activeUserId === userId && !synced) setStoryStatus(story.id, "Изменение сохранено на устройстве. Проверьте подключение для синхронизации.");
+}
+
+async function loadStoryImage(path) {
+    const { data, error } = await supabaseClient.storage.from(STORY_STORAGE_BUCKET).download(path);
+    if (error || !data) throw error || new Error("Не удалось загрузить фото для коллажа.");
+    const objectUrl = URL.createObjectURL(data);
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve({ image, objectUrl });
+        image.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("Не удалось открыть фото для коллажа.")); };
+        image.src = objectUrl;
+    });
+}
+
+function drawCollagePhoto(context, image, x, y, width, height) {
+    const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+    const sourceWidth = width / scale;
+    const sourceHeight = height / scale;
+    context.drawImage(image, (image.naturalWidth - sourceWidth) / 2, (image.naturalHeight - sourceHeight) / 2,
+        sourceWidth, sourceHeight, x, y, width, height);
+}
+
+function drawStoryCollage(story, photos, images, petName) {
+    const timeline = story.collageLayout === "timeline";
+    const width = 1600;
+    const margin = 64;
+    const gap = 28;
+    const top = 246;
+    const cellWidth = timeline ? width - margin * 2 : (width - margin * 2 - gap) / 2;
+    const photoHeight = timeline ? 690 : 650;
+    const captionHeight = 108;
+    const rows = timeline ? photos.length : Math.ceil(photos.length / 2);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = top + rows * (photoHeight + captionHeight + gap) - gap + 100;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Браузер не смог создать изображение коллажа.");
+    context.fillStyle = "#eff5ef";
+    context.fillRect(0, 0, width, canvas.height);
+    context.fillStyle = "#537c65";
+    context.font = "bold 23px Arial";
+    context.fillText("PETCARE · ИСТОРИЯ РОСТА", margin, 67);
+    context.fillStyle = "#174c3b";
+    context.font = "bold 66px Arial";
+    let name = petName;
+    while (context.measureText(name).width > width - margin * 2 && name.length > 1) name = name.slice(0, -1);
+    if (name !== petName) name = name.slice(0, -1) + "…";
+    context.fillText(name, margin, 148);
+    context.fillStyle = "#6b8173";
+    context.font = "28px Arial";
+    context.fillText(`Как растёт мой питомец · ${formatStoryMonth(story.month)}`, margin, 200);
+    photos.forEach((photo, index) => {
+        const row = timeline ? index : Math.floor(index / 2);
+        const col = timeline ? 0 : index % 2;
+        const loneLast = !timeline && photos.length % 2 && index === photos.length - 1;
+        const x = loneLast ? (width - cellWidth) / 2 : margin + col * (cellWidth + gap);
+        const y = top + row * (photoHeight + captionHeight + gap);
+        context.save();
+        context.beginPath();
+        if (context.roundRect) context.roundRect(x, y, cellWidth, photoHeight + captionHeight, 28);
+        else context.rect(x, y, cellWidth, photoHeight + captionHeight);
+        context.clip();
+        context.fillStyle = "#ffffff";
+        context.fillRect(x, y, cellWidth, photoHeight + captionHeight);
+        drawCollagePhoto(context, images[index].image, x, y, cellWidth, photoHeight);
+        context.fillStyle = "#174c3b";
+        context.font = "bold 27px Arial";
+        context.fillText(`${String(index + 1).padStart(2, "0")}  ·  ${formatHistoryDate(photo.date)}`, x + 26, y + photoHeight + 48);
+        context.fillStyle = "#7b8d80";
+        context.font = "22px Arial";
+        context.fillText(index === 0 ? "Начало нашей истории" : "Ещё один момент вместе", x + 26, y + photoHeight + 82);
+        context.restore();
+    });
+    context.fillStyle = "#7b8d80";
+    context.font = "23px Arial";
+    context.fillText("Маленькие моменты. Большая любовь.", margin, canvas.height - 38);
+    return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Не удалось сохранить изображение коллажа.")), "image/jpeg", 0.92));
+}
+
+async function generatePetStoryCollage(button) {
+    const story = findCurrentStory(button?.dataset.storyId);
+    const userId = activeUserId;
+    if (!story || !userId) return;
+    const photos = getStoryPhotos(story);
+    if (photos.length < 2) { alert("Добавьте хотя бы 2 фото питомца."); return; }
+    const signature = getStoryCollageSignature(story);
+    const petName = appData.pet?.name || "Мой питомец";
+    const isCurrent = () => activeUserId === userId && appData.storyProjects.includes(story);
+    const loaded = [];
+    try {
+        setStoryStatus(story.id, "Создаю коллаж…");
+        for (const photo of photos) {
+            loaded.push(await loadStoryImage(photo.path));
+            if (!isCurrent()) return;
+        }
+        const blob = await drawStoryCollage(story, photos, loaded, petName);
+        if (!isCurrent()) return;
+        if (signature !== getStoryCollageSignature(story)) {
+            setStoryStatus(story.id, "Данные подборки изменились. Создайте коллаж ещё раз.");
+            return;
+        }
+        const path = `${userId}/${story.id}/${createEntryId("collage")}.jpg`;
+        const { error } = await supabaseClient.storage.from(STORY_STORAGE_BUCKET).upload(path, blob, {
+            cacheControl: "3600", contentType: "image/jpeg", upsert: false
+        });
+        if (error) throw error;
+        if (!isCurrent()) return;
+        const oldPath = story.collagePath;
+        story.collagePath = path;
+        story.collageCreatedAt = new Date().toISOString();
+        story.collageSignature = signature;
+        storyMediaUrlCache.set(path, { url: URL.createObjectURL(blob), expiresAt: Number.MAX_SAFE_INTEGER });
+        storyCollageBlobCache.set(path, blob);
+        const synced = await saveData();
+        if (!isCurrent()) return;
+        if (synced) await removeUnusedStoryFiles([oldPath], story, userId);
+        if (getActivePetKey() === String(story.petId)) renderStories();
+        if (!synced) setStoryStatus(story.id, "Коллаж создан и доступен для скачивания. Данные подборки пока не синхронизированы — проверьте подключение.");
+    } catch (error) {
+        console.error("Не удалось создать коллаж:", error);
+        if (isCurrent()) setStoryStatus(story.id, "Не удалось создать коллаж. Проверьте подключение и повторите попытку.");
+    } finally {
+        loaded.forEach(item => URL.revokeObjectURL(item.objectUrl));
+    }
+}
+
+function triggerStoryCollageDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = filename;
-    link.style.display = "none";
     document.body.appendChild(link);
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-async function saveStoryVideo(button) {
-    const story = appData.storyProjects.find(item =>
-        item.id === button?.dataset.storyId && String(item.petId) === getActivePetKey()
-    );
-    if (!story?.videoPath) return;
-    const extension = story.videoType === "video/mp4" ? "mp4" : "webm";
-    const filename = "PetCare-" + story.month + "." + extension;
-
+async function saveStoryCollage(button) {
+    const story = findCurrentStory(button?.dataset.storyId);
+    const userId = activeUserId;
+    if (!userId || !story || !isStoryCollageCurrent(story)) return;
+    const path = story.collagePath;
+    const filename = `PetCare-${story.month}.jpg`;
     try {
-        let videoBlob = storyVideoBlobCache.get(story.videoPath);
-        if (!videoBlob) {
-            const { data, error } = await supabaseClient.storage
-                .from(STORY_STORAGE_BUCKET)
-                .download(story.videoPath);
-            if (error || !data) throw error || new Error("Не удалось загрузить сохранённое видео.");
-            videoBlob = data;
-            storyVideoBlobCache.set(story.videoPath, videoBlob);
+        let blob = storyCollageBlobCache.get(path);
+        if (!blob) {
+            const { data, error } = await supabaseClient.storage.from(STORY_STORAGE_BUCKET).download(path);
+            if (error || !data) throw error || new Error("Не удалось загрузить коллаж.");
+            blob = data;
+            storyCollageBlobCache.set(path, blob);
         }
-        const type = story.videoType || videoBlob.type || "video/webm";
-        const file = new File([videoBlob], filename, { type });
-        const shareData = { files: [file], title: "История " + formatStoryMonth(story.month) };
-        const canShareFile = navigator.share && navigator.canShare?.(shareData);
-        if (canShareFile) {
-            try {
-                await navigator.share(shareData);
-                return;
-            } catch (error) {
-                if (error?.name === "AbortError") return;
-                if (error?.name !== "NotAllowedError") throw error;
-            }
+        if (activeUserId !== userId || !appData.storyProjects.includes(story) || story.collagePath !== path) return;
+        const file = new File([blob], filename, { type: "image/jpeg" });
+        const shareData = { files: [file], title: "Как растёт мой питомец · PetCare" };
+        if (navigator.share && navigator.canShare?.(shareData)) {
+            try { await navigator.share(shareData); return; }
+            catch (error) { if (error?.name === "AbortError") return; }
         }
-        triggerStoryVideoDownload(videoBlob, filename);
-        alert("Видео скачано. На телефоне откройте файл и выберите сохранение в галерею или Фото.");
+        triggerStoryCollageDownload(blob, filename);
+        setStoryStatus(story.id, "Коллаж скачан в формате JPEG. На телефоне откройте файл и выберите сохранение в Фото / Галерею.");
     } catch (error) {
-        console.error("Не удалось сохранить видеоисторию:", error);
-        alert("Не удалось подготовить видео к сохранению. Попробуйте ещё раз.");
+        console.error("Не удалось сохранить коллаж:", error);
+        if (activeUserId === userId) setStoryStatus(story.id, "Не удалось скачать коллаж. Проверьте подключение и попробуйте ещё раз.");
     }
 }
 
 
-// ==============================
-// ЗАДАЧИ НА ГЛАВНОЙ
-// ==============================
 
 function isHomeTaskCompleted(taskId, date = getLocalDateInputValue()) {
     const petId = getActivePetKey();
@@ -3178,6 +3433,7 @@ document.getElementById("animalInput")?.addEventListener("change", event => {
 startApp();
 function showAssistant() {
     hideAllPages();
+    markActiveNavigation("nav-assistant");
     const assistantPage = document.getElementById("assistantPage");
 
     if (assistantPage) assistantPage.style.display = "block";
@@ -3208,7 +3464,18 @@ function addAssistantBubble(role, content, scroll = true) {
 
     const bubble = document.createElement("div");
     bubble.className = `assistant-message ${role === "user" ? "user-message" : "bot-message"}`;
-    bubble.textContent = content;
+    if (role === "assistant") {
+        const sender = document.createElement("div");
+        sender.className = "assistant-sender";
+        sender.textContent = "PetCare Ассистент";
+
+        const message = document.createElement("div");
+        message.className = "assistant-message-content";
+        message.textContent = content;
+        bubble.append(sender, message);
+    } else {
+        bubble.textContent = content;
+    }
     container.appendChild(bubble);
     if (scroll) scrollAssistantToBottom();
     return bubble;
@@ -3224,7 +3491,7 @@ function renderAssistantConversation() {
         : [];
 
     if (messages.length === 0) {
-        addAssistantBubble("assistant", "Привет! 🐾 Я бесплатный помощник PetCare. Спроси меня о кормлении, уходе, прогулках или здоровье питомца.", false);
+        addAssistantBubble("assistant", "Привет! 🐾 Я PetCare Ассистент. Спроси меня о кормлении, уходе, прогулках или здоровье питомца.", false);
         scrollAssistantToBottom(true);
         return;
     }
@@ -3256,7 +3523,7 @@ async function getAssistantErrorMessage(error) {
     if (error?.name === "FunctionsRelayError") {
         return "Supabase не смог запустить помощника. Обновите страницу и попробуйте позже.";
     }
-    return "Не удалось получить ответ GigaChat. Обновите страницу и попробуйте ещё раз.";
+    return "Не удалось получить ответ PetCare Ассистента. Обновите страницу и попробуйте ещё раз.";
 }
 
 async function sendAssistantMessage(event) {
@@ -3276,7 +3543,7 @@ async function sendAssistantMessage(event) {
     input.value = "";
     if (sendButton) sendButton.disabled = true;
 
-    const typingBubble = addAssistantBubble("assistant", "GigaChat готовит ответ…");
+    const typingBubble = addAssistantBubble("assistant", "Готовит ответ…");
 
     try {
         const { data: authData, error: authError } = await supabaseClient.auth.getSession();
@@ -3300,7 +3567,7 @@ async function sendAssistantMessage(event) {
 
         if (error) throw error;
         const answer = typeof data?.answer === "string" ? data.answer.trim() : "";
-        if (!answer) throw new Error("GigaChat вернул пустой ответ.");
+        if (!answer) throw new Error("PetCare Ассистент вернул пустой ответ.");
 
         typingBubble?.remove();
         appData.assistantConversation.push({ role: "assistant", content: answer });
@@ -3441,16 +3708,24 @@ const petCareClickActions = {
     "pet-photo-remove": () => removePetPhoto(),
     "pet-save": () => savePet(),
     "health-close": () => closeHealthForm(),
-    "health-export": () => exportPetHealthPdf(),
+    "health-export": () => openHealthExportDialog(),
+    "health-export-print": () => exportPetHealthPdf(),
+    "health-export-close": () => closeHealthExportDialog(),
+    "health-export-select-all": element => setHealthExportGroup(element.dataset.exportGroup, true),
+    "health-export-clear": element => setHealthExportGroup(element.dataset.exportGroup, false),
     "pet-weight-save": () => savePetWeight(),
     "health-add": () => openHealthForm(),
     "health-save": () => saveHealthRecord(),
+    "health-delete": element => deleteHealthRecord(element.dataset.entryId, element.dataset.petId),
+    "weight-delete": element => deleteWeightEntry(element.dataset.entryId, element.dataset.petId),
+    "activity-delete": element => deleteActivityEntry(element.dataset.entryId, element.dataset.petId),
     "history-filter": () => renderEventHistory(),
     "calendar-previous": () => changeCalendarMonth(-1),
     "calendar-next": () => changeCalendarMonth(1),
     "reminder-add": () => openReminderForm(),
     "reminder-close": () => closeReminderForm(),
     "reminder-save": () => saveReminder(),
+    "reminder-delete": element => deleteReminder(element.dataset.entryId, element.dataset.petId),
     "install-close": () => closeInstallHelp(),
     "logout": () => logoutUser(),
     "nav-home": () => showHome(),
@@ -3465,8 +3740,11 @@ const petCareClickActions = {
     "story-close": () => document.getElementById("storySetupDialog")?.close(),
     "story-create": () => createStoryPlan(),
     "story-take-photo": element => requestStoryPhoto(element),
-    "story-generate": element => generatePetStoryVideo(element),
-    "story-save-video": element => saveStoryVideo(element),
+    "story-camera": element => requestStoryPhoto(element, true),
+    "story-upload-many": element => requestStoryPhoto(element, false, true),
+    "story-generate": element => withStoryOperation(element.dataset.storyId, () => generatePetStoryCollage(element)),
+    "story-delete": element => deleteStory(element.dataset.entryId, element.dataset.petId),
+    "story-save-collage": element => withStoryOperation(element.dataset.storyId, () => saveStoryCollage(element)),
     "nav-profile": () => showProfile(),
     "nav-assistant": () => showAssistant()
 };
@@ -3492,8 +3770,14 @@ function bindPetCareActions() {
             switchPet(element.value);
         } else if (element.dataset.pcChange === "history-filter") {
             renderEventHistory();
-        } else if (element.id === "storyPhotoInput") {
-            handleStoryPhotoSelection(element);
+        } else if (element.dataset.pcChange === "health-export-selection") {
+            updateHealthExportSelection();
+        } else if (element.id === "storyPhotoInput" || element.id === "storyCameraInput") {
+            withStoryOperation(element.dataset.storyId, () => handleStoryPhotoSelection(element));
+        } else if (["story-photo-date", "story-layout"].includes(element.dataset.pcChange)) {
+            withStoryOperation(element.dataset.storyId, () => updateStoryCollageSetting(element));
+        } else if (element.id === "storyRemindersEnabled") {
+            document.getElementById("storyReminderTimeInput").disabled = !element.checked;
         }
     });
 
@@ -3514,4 +3798,3 @@ function bindAuthControls() {
 
 bindAuthControls();
 bindPetCareActions();
-

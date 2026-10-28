@@ -14,7 +14,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="PetCare">
     <script src="/frameguard.js"></script>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20261028-collages">
 </head>
 <body>
 <div class="app">
@@ -230,7 +230,7 @@
                 <div><small>Клиника</small><strong id="healthVetClinic">Не указана</strong></div>
                 <div><small>Телефон</small><strong id="healthVetPhone">Не указан</strong></div>
             </div>
-            <button type="button" class="secondary-button export-button" data-pc-click="health-export">📄 Скачать карточку в PDF</button>
+            <button type="button" class="secondary-button export-button" data-pc-click="health-export">📄 PDF / печать здоровья</button>
         </section>
 
         <section class="weight-section">
@@ -438,27 +438,28 @@
     <section class="page" id="storiesPage">
         <div class="page-header">
             <button type="button" data-pc-click="home">←</button>
-            <h2>Истории питомца ✨</h2>
+            <h2>Коллажи питомца 📸</h2>
         </div>
 
         <section class="stories-intro">
-            <span class="stories-intro-icon">🎞️</span>
+            <span class="stories-intro-icon" aria-hidden="true">🖼️</span>
             <div>
                 <span class="welcome-tag">ОДИН МЕСЯЦ В ЧЕТЫРЁХ КАДРАХ</span>
                 <h3>Как растёт ваш питомец</h3>
-                <p>Снимайте по одному фото в неделю. Через месяц соберём их в видео с мягкой мелодией.</p>
+                <p>Сохраните, как меняется ваш любимец: добавьте 2–4 фото, укажите даты и соберите коллаж. Можно загрузить готовые снимки сразу или добавлять по одному каждую неделю.</p>
             </div>
         </section>
 
         <div class="pet-switcher compact-pet-switcher">
             <label for="storyPetSwitcher">Питомец</label>
-            <select id="storyPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для истории"></select>
+            <select id="storyPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для коллажа"></select>
         </div>
 
-        <button class="primary-button" type="button" data-pc-click="story-add">＋ Начать историю месяца</button>
-        <p class="stories-storage-note">Фото и готовые истории хранятся в вашем аккаунте.</p>
+        <button class="primary-button" type="button" data-pc-click="story-add">＋ Новый коллаж</button>
+        <p class="stories-storage-note">Фото и коллажи сохраняются в вашем аккаунте. Выбирайте до 4 снимков из галереи телефона или с компьютера, до 20 МБ каждый. Укажите даты съёмки: по ним кадры будут расположены в коллаже.</p>
         <div id="storiesList" class="stories-list" aria-live="polite"></div>
-        <input id="storyPhotoInput" type="file" accept="image/*" capture="environment" aria-label="Сделать фото для истории">
+        <input id="storyPhotoInput" class="story-file-input" type="file" accept="image/*,.heic,.heif" multiple aria-label="Загрузить фотографии питомца">
+        <input id="storyCameraInput" class="story-file-input" type="file" accept="image/*" capture="environment" aria-label="Сфотографировать питомца">
     </section>
 
     <!-- ПРОФИЛЬ -->
@@ -570,11 +571,11 @@
 
     <div class="page-header">
         <button data-pc-click="home">←</button>
-        <h2>Помощник PetCare 🐾</h2>
+        <h2>PetCare Ассистент 🐾</h2>
     </div>
 
-    <p class="assistant-disclaimer">Ответы готовит GigaChat. Сообщения и основные данные питомца отправляются в GigaChat. Помощник не заменяет ветеринара.</p>
-    <div id="assistantMessages" aria-live="polite" aria-label="Переписка с помощником"></div>
+    <p class="assistant-disclaimer">Отвечает PetCare Ассистент. Сообщения и основные данные питомца отправляются в GigaChat. Помощник не заменяет ветеринара.</p>
+    <div id="assistantMessages" aria-live="polite" aria-label="Переписка с PetCare Ассистентом"></div>
 
     <form class="assistant-input" id="assistantForm">
         <input
@@ -590,7 +591,7 @@
     </form>
 
 </section>
-    <nav class="bottom-menu" style="display: none;">
+    <nav class="bottom-menu" aria-label="Разделы PetCare" style="display: none;">
         <a href="#" data-pc-click="nav-home">
             <span>🏠</span>
             Главная
@@ -612,8 +613,8 @@
         </a>
 
         <a href="#" data-pc-click="nav-stories">
-            <span>🎞️</span>
-            Истории
+            <span>🖼️</span>
+            Коллажи
         </a>
 
         <a href="#" data-pc-click="nav-profile">
@@ -635,24 +636,70 @@
         <button type="button" class="primary-button" data-pc-click="install-close">Понятно</button>
     </dialog>
 
+    <dialog class="health-export-dialog" id="healthExportDialog" aria-labelledby="healthExportTitle" aria-describedby="healthExportPetName">
+        <h2 id="healthExportTitle">Что напечатать о здоровье?</h2>
+        <p id="healthExportPetName"></p>
+        <fieldset class="health-export-group">
+            <legend>Данные карточки</legend>
+            <label class="health-export-option">
+                <input type="checkbox" name="healthExportField" value="basic" data-pc-change="health-export-selection" checked>
+                <span><strong>Данные питомца</strong><small>Вид, порода, возраст и текущий вес</small></span>
+            </label>
+            <label class="health-export-option">
+                <input type="checkbox" name="healthExportField" value="allergies" data-pc-change="health-export-selection">
+                <span><strong>Аллергии</strong></span>
+            </label>
+            <label class="health-export-option">
+                <input type="checkbox" name="healthExportField" value="medications" data-pc-change="health-export-selection">
+                <span><strong>Постоянные лекарства</strong></span>
+            </label>
+            <label class="health-export-option">
+                <input type="checkbox" name="healthExportField" value="vet" data-pc-change="health-export-selection">
+                <span><strong>Клиника и телефон ветеринара</strong></span>
+            </label>
+        </fieldset>
+        <fieldset class="health-export-group">
+            <legend>Медицинские записи</legend>
+            <div class="health-export-group-actions">
+                <button type="button" data-pc-click="health-export-select-all" data-export-group="healthExportRecords">Выбрать все записи</button>
+                <button type="button" data-pc-click="health-export-clear" data-export-group="healthExportRecords">Снять выбор</button>
+            </div>
+            <div id="healthExportRecords" class="health-export-list"></div>
+        </fieldset>
+        <fieldset class="health-export-group">
+            <legend>Взвешивания</legend>
+            <div class="health-export-group-actions">
+                <button type="button" data-pc-click="health-export-select-all" data-export-group="healthExportWeights">Выбрать все взвешивания</button>
+                <button type="button" data-pc-click="health-export-clear" data-export-group="healthExportWeights">Снять выбор</button>
+            </div>
+            <div id="healthExportWeights" class="health-export-list"></div>
+        </fieldset>
+        <div class="health-export-footer">
+            <p id="healthExportSelectionStatus" role="status" aria-live="polite"></p>
+            <p class="health-export-hint">Откроется окно печати. Для сохранения файла выберите «Сохранить в PDF».</p>
+            <button type="button" class="primary-button" id="healthExportPrintButton" data-pc-click="health-export-print" disabled>Напечатать / сохранить PDF</button>
+            <button type="button" class="story-dialog-cancel" data-pc-click="health-export-close">Отмена</button>
+        </div>
+    </dialog>
+
     <dialog class="story-setup-dialog" id="storySetupDialog" aria-labelledby="storySetupTitle">
         <div class="install-help-mark">📸</div>
-        <h2 id="storySetupTitle">Новая история месяца</h2>
-        <p>Выберите месяц и день первого фото. PetCare напомнит о следующих трёх снимках каждую неделю.</p>
-        <label for="storyMonthInput">Месяц истории</label>
+        <h2 id="storySetupTitle">Новый коллаж питомца</h2>
+        <p>Добавьте снимки разного возраста или соберите четыре кадра за месяц. Коллаж можно создать сразу, начиная с двух фото.</p>
+        <label for="storyMonthInput">Месяц подборки</label>
         <input id="storyMonthInput" type="month">
-        <label for="storyStartDateInput">Первое фото</label>
+        <label for="storyStartDateInput">Начало наблюдения</label>
         <input id="storyStartDateInput" type="date">
+        <label class="story-reminder-choice"><input id="storyRemindersEnabled" type="checkbox"> Напоминать о новом фото раз в неделю</label>
         <label for="storyReminderTimeInput">Время напоминания</label>
-        <input id="storyReminderTimeInput" type="time" value="09:00">
-        <button type="button" class="primary-button" data-pc-click="story-create">Создать план съёмки</button>
+        <input id="storyReminderTimeInput" type="time" value="09:00" disabled>
+        <button type="button" class="primary-button" data-pc-click="story-create">Создать подборку</button>
         <button type="button" class="story-dialog-cancel" data-pc-click="story-close">Отмена</button>
     </dialog>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
-<script src="script.js?v=20261022-auth-fix"></script>
+<script src="script.js?v=20261028-collages"></script>
 </body>
 </html>
-
