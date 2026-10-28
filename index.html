@@ -14,7 +14,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="PetCare">
     <script src="/frameguard.js"></script>
-    <link rel="stylesheet" href="style.css?v=20261028-history-design">
+    <link rel="stylesheet" href="style.css?v=20261028-profile-history">
 </head>
 <body>
 <div class="app">
@@ -256,27 +256,10 @@
             </div>
         </section>
 
-        <h3 class="section-title">Медицинские записи</h3>
-
-        <div id="healthRecords">
-            <div class="health-record">
-                <div class="record-icon">💉</div>
-                <div class="record-info">
-                    <h3>Прививка от бешенства</h3>
-                    <p>12 октября 2026</p>
-                    <small>Следующая: 12 октября 2027</small>
-                </div>
-            </div>
-
-            <div class="health-record">
-                <div class="record-icon">🩺</div>
-                <div class="record-info">
-                    <h3>Посещение ветеринара</h3>
-                    <p>20 сентября 2026</p>
-                    <small>Плановый осмотр</small>
-                </div>
-            </div>
-        </div>
+        <section class="history-access-card">
+            <div><h3>Медицинские записи</h3><p>Прививки, визиты, заметки и прикреплённые фото собраны в истории.</p></div>
+            <button type="button" class="secondary-button" data-pc-click="history-open" data-history-type="health">↺ История здоровья</button>
+        </section>
 
         <button class="primary-button" data-pc-click="health-add">
             + Добавить запись
@@ -394,7 +377,11 @@
             <small>В назначенное время придёт текст напоминания. Звук зависит от настроек уведомлений телефона.</small>
         </section>
 
-        <h3 class="section-title">Все напоминания</h3>
+        <section class="history-access-card">
+            <div><h3>Выполненные напоминания</h3><p>Отмеченные дела хранятся в истории. Здесь остаются только активные напоминания.</p></div>
+            <button type="button" class="secondary-button" data-pc-click="history-open" data-history-type="reminder">↺ История напоминаний</button>
+        </section>
+        <h3 class="section-title">Активные напоминания</h3>
         <div id="remindersList">
             <div class="reminder">
                 <div class="reminder-icon">🍖</div>
@@ -604,7 +591,12 @@
         <h2>PetCare ассистент 🐾</h2>
     </div>
 
-    <p class="assistant-disclaimer">Отвечает PetCare ассистент. Сообщения и основные данные питомца отправляются в GigaChat. Помощник не заменяет ветеринара.</p>
+    <p class="assistant-disclaimer">Отвечает PetCare ассистент. Для ответа в GigaChat передаются ваш вопрос и текстовые записи выбранного питомца: карточка, здоровье, вес и уход. Фото не анализируются. Помощник не заменяет ветеринара.</p>
+    <div class="pet-switcher compact-pet-switcher assistant-pet-context">
+        <label for="assistantPetSwitcher">О каком питомце поговорим?</label>
+        <select id="assistantPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для PetCare ассистента"></select>
+        <p id="assistantProfileStatus" class="assistant-profile-status" role="status" aria-live="polite">При отправке вопроса будут прочитаны сохранённые текстовые записи выбранного питомца.</p>
+    </div>
     <div id="assistantMessages" aria-live="polite" aria-label="Переписка с PetCare ассистентом"></div>
 
     <form class="assistant-input" id="assistantForm">
@@ -730,6 +722,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
-<script src="script.js?v=20261028-history-design"></script>
+<script src="script.js?v=20261028-profile-history"></script>
 </body>
 </html>

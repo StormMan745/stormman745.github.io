@@ -26,6 +26,7 @@ let activeDataLoadToken = 0;
 const storyMediaUrlCache = new Map();
 const storyCollageBlobCache = new Map();
 const storyOperationsInProgress = new Set();
+let activeAssistantRequest = null;
 
 function createInitialAppData() {
     return {
@@ -54,6 +55,7 @@ let selectedCalendarDate = getLocalDateInputValue();
 let historyReturnPageId = "homePage";
 
 function resetActiveAccountData() {
+    cancelAssistantRequest();
     activeDataLoadToken += 1;
     activeUserId = null;
     storyMediaUrlCache.forEach(item => {
@@ -62,6 +64,9 @@ function resetActiveAccountData() {
     storyMediaUrlCache.clear();
     storyCollageBlobCache.clear();
     appData = createInitialAppData();
+    document.getElementById("assistantMessages")?.replaceChildren();
+    const assistantInput = document.getElementById("assistantQuestion");
+    if (assistantInput) assistantInput.value = "";
 }
 
 function getPetKey(pet) {
@@ -269,6 +274,7 @@ function applyAccountData(savedData) {
 }
 
 async function loadDataFromDatabase(userId) {
+    cancelAssistantRequest();
     const loadToken = ++activeDataLoadToken;
     activeUserId = userId;
     appData = createInitialAppData();
@@ -1039,6 +1045,7 @@ function renderPetSwitcher() {
 async function switchPet(petId) {
     const selectedPet = appData.pets.find(pet => getPetKey(pet) === String(petId));
     if (!selectedPet) return;
+    cancelAssistantRequest();
 
     appData.pet = selectedPet;
     appData.activePetId = getPetKey(selectedPet);
@@ -1051,6 +1058,10 @@ async function switchPet(petId) {
     renderCalendar();
     renderHomeReminders();
     renderStories();
+    if (document.getElementById("assistantPage")?.style.display === "block") {
+        renderAssistantConversation();
+        updateAssistantProfileStatus();
+    }
     await saveData();
 }
 
@@ -1291,26 +1302,6 @@ function addHealthRecordToScreen(record) {
 // ==============================
 
 function renderHealthRecords() {
-    const container = document.getElementById("healthRecords");
-
-    if (!container) {
-        return;
-    }
-
-    container.innerHTML = "";
-
-    const records = appData.healthRecords.filter(record =>
-        String(record.petId ?? getActivePetKey()) === getActivePetKey()
-    );
-
-    if (records.length === 0) {
-        const empty = document.createElement("p");
-        empty.className = "empty-state";
-        empty.textContent = "Пока нет медицинских записей";
-        container.appendChild(empty);
-    } else {
-        records.forEach(record => addHealthRecordToScreen(record));
-    }
     renderEventHistory();
 }
 
@@ -1365,7 +1356,7 @@ function buildPetEventHistory() {
             kind: "health",
             date: record.date || getLocalDateInputValue(),
             title: record.name,
-            note: [record.type, record.note].filter(Boolean).join(" · "),
+            note: [record.type, record.note, record.nextDate ? `Следующая процедура: ${formatHistoryDate(record.nextDate)}` : ""].filter(Boolean).join(" · "),
             icon: record.type === "Прививка" ? "💉" : record.type === "Лекарство" ? "💊" : record.type === "Ветеринар" ? "🩺" : "❤️"
         }));
     const weights = (appData.pet?.weightHistory || []).map(entry => ({
@@ -1379,6 +1370,7 @@ function buildPetEventHistory() {
         note: "Изменение веса",
         icon: "⚖️"
     }));
+    const scopedReminders = appData.reminders.filter(reminder => String(reminder.petId ?? petId) === petId);
     const activities = appData.activityHistory
         .filter(event => String(event.petId ?? petId) === petId && ["reminder", "task"].includes(event.kind))
         .map(event => ({
@@ -1390,9 +1382,17 @@ function buildPetEventHistory() {
             date: event.date,
             title: event.title,
             note: event.note || "",
+            reminderId: event.kind === "reminder" ? scopedReminders.find(reminder => String(event.id) === `reminder-${reminder.id}-${event.date}`)?.id : null,
             icon: event.kind === "task" ? "✓" : "🔔"
         }));
-    return [...health, ...weights, ...activities].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const completedReminders = scopedReminders.filter(reminder => reminder.repeat === "once" ? Boolean(reminder.completed) : Boolean(reminder.completedForDate))
+        .filter(reminder => !activities.some(event => String(event.reminderId) === String(reminder.id) && event.date === (reminder.completedForDate || reminder.date)))
+        .map(reminder => ({
+            id: `completed-reminder-${reminder.id}`, entryType: "reminder", entryId: reminder.id, reminderId: reminder.id, petId, kind: "reminder",
+            date: reminder.completedForDate || reminder.date || getLocalDateInputValue(), title: `Выполнено: ${reminder.name}`,
+            note: [reminder.type, reminder.time].filter(Boolean).join(" · "), icon: "✓"
+        }));
+    return [...health, ...weights, ...activities, ...completedReminders].sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
 function renderEventHistory() {
@@ -1401,6 +1401,8 @@ function renderEventHistory() {
     container.replaceChildren();
     const query = (document.getElementById("historySearch")?.value || "").trim().toLocaleLowerCase("ru-RU");
     const kind = document.getElementById("historyTypeFilter")?.value || "all";
+    const historyTitle = document.getElementById("entryHistoryTitle");
+    if (historyTitle) historyTitle.textContent = ({ health: "История здоровья", reminder: "История напоминаний", weight: "История взвешиваний", task: "История задач" })[kind] || "История записей";
     const fromDate = document.getElementById("historyFromDate")?.value || "";
     const toDate = document.getElementById("historyToDate")?.value || "";
     const allEvents = buildPetEventHistory();
@@ -1432,7 +1434,16 @@ function renderEventHistory() {
         const meta = document.createElement("small");
         meta.textContent = [formatHistoryDate(event.date), event.note].filter(Boolean).join(" · ");
         content.append(title, meta);
-        card.append(icon, content, createEntryDeleteButton(
+        if (event.kind === "health") {
+            const record = appData.healthRecords.find(item => String(item.id) === String(event.entryId) && String(item.petId ?? event.petId) === event.petId);
+            if (record) appendAttachmentPhotos(content, record, `Фото к записи «${record.name}»`);
+        }
+        const reminder = event.reminderId == null ? null : appData.reminders.find(item => String(item.id) === String(event.reminderId) && String(item.petId ?? event.petId) === event.petId);
+        if (reminder) appendAttachmentPhotos(content, reminder, `Фото к напоминанию «${reminder.name}»`);
+        card.append(icon, content);
+        if (reminder && isReminderCompleted(reminder) && event.date === (reminder.completedForDate || reminder.date)) {
+            card.appendChild(createReminderActions(reminder, true));
+        } else card.appendChild(createEntryDeleteButton(
             `${event.entryType}-delete`, event.entryId, event.petId, `Удалить: ${event.title}`
         ));
         container.appendChild(card);
@@ -1881,18 +1892,24 @@ async function toggleReminderCompletion(reminderId) {
     if (!reminder) return;
 
     let completedDate = null;
+    let uncompletedDate = null;
     if (reminder.repeat === "once") {
+        if (reminder.completed) uncompletedDate = reminder.date || getLocalDateInputValue();
         reminder.completed = !reminder.completed;
         if (reminder.completed) completedDate = reminder.date || getLocalDateInputValue();
     } else {
         const dueDate = getNextReminderDate(reminder);
         const dueDateKey = dueDate ? getLocalDateInputValue(dueDate) : getLocalDateInputValue();
+        if (reminder.completedForDate === dueDateKey) uncompletedDate = dueDateKey;
         reminder.completedForDate = reminder.completedForDate === dueDateKey ? null : dueDateKey;
         if (reminder.completedForDate) completedDate = dueDateKey;
     }
 
     if (completedDate) {
         addActivityEvent("reminder", `Выполнено: ${reminder.name}`, completedDate, reminder.time || reminder.type || "Напоминание", `reminder-${reminder.id}-${completedDate}`);
+    }
+    if (uncompletedDate) {
+        appData.activityHistory = appData.activityHistory.filter(event => !(String(event.petId ?? getActivePetKey()) === getActivePetKey() && String(event.id) === `reminder-${reminder.id}-${uncompletedDate}`));
     }
 
     await saveData();
@@ -2009,35 +2026,37 @@ function renderCalendar() {
         eventsByDate.get(key).push({ title, icon, kind });
     };
     const activeId = getActivePetKey();
-    appData.healthRecords.filter(record => String(record.petId ?? activeId) === activeId).forEach(record => {
-        addEvent(record.date, `${record.type || "Запись"}: ${record.name}`, record.type === "Прививка" ? "💉" : "❤️", "health");
-    });
+    const completedReminderIds = new Set(appData.activityHistory
+        .filter(event => String(event.petId ?? activeId) === activeId && event.kind === "reminder")
+        .map(event => String(event.id)));
+    const addPlannedReminder = (date, reminder) => {
+        const key = typeof date === "string" ? date : getLocalDateInputValue(date);
+        if (reminder.completedForDate === key || completedReminderIds.has(`reminder-${reminder.id}-${key}`)) return;
+        addEvent(date, reminder.name, getReminderIcon(reminder), "reminder");
+    };
     const monthStart = new Date(year, month, 1);
     const monthEnd = new Date(year, month + 1, 0);
     appData.reminders.filter(item => String(item.petId ?? activeId) === activeId).forEach(reminder => {
+        if ((reminder.repeat === "once" || !reminder.repeat) && reminder.completed) return;
         const start = parseReminderDate(reminder.date);
         if (!start) return;
         start.setHours(0, 0, 0, 0);
         if (reminder.repeat === "daily") {
             const cursor = new Date(Math.max(start.getTime(), monthStart.getTime()));
             while (cursor <= monthEnd) {
-                addEvent(cursor, reminder.name, getReminderIcon(reminder), "reminder");
+                addPlannedReminder(cursor, reminder);
                 cursor.setDate(cursor.getDate() + 1);
             }
         } else if (reminder.repeat === "weekly") {
             const cursor = new Date(start);
             while (cursor < monthStart) cursor.setDate(cursor.getDate() + 7);
             while (cursor <= monthEnd) {
-                addEvent(cursor, reminder.name, getReminderIcon(reminder), "reminder");
+                addPlannedReminder(cursor, reminder);
                 cursor.setDate(cursor.getDate() + 7);
             }
         } else {
-            addEvent(reminder.date, reminder.name, getReminderIcon(reminder), "reminder");
+            addPlannedReminder(reminder.date, reminder);
         }
-    });
-    (appData.pet?.weightHistory || []).forEach(entry => addEvent(entry.date, `Взвешивание · ${entry.value} кг`, "⚖️", "weight"));
-    appData.activityHistory.filter(event => String(event.petId ?? activeId) === activeId).forEach(event => {
-        if (event.kind === "task" || event.kind === "reminder") addEvent(event.date, event.title, event.kind === "task" ? "✓" : "🔔", event.kind);
     });
 
     grid.replaceChildren();
@@ -2118,12 +2137,12 @@ function renderReminders() {
 
     const reminders = appData.reminders.filter(reminder =>
         String(reminder.petId ?? getActivePetKey()) === getActivePetKey()
-    );
+    ).filter(reminder => !isReminderCompleted(reminder));
 
     if (reminders.length === 0) {
         container.innerHTML = `
             <p style="text-align:center;color:#888;">
-                Пока нет напоминаний
+                Активных напоминаний нет. Выполненные доступны по кнопке «История напоминаний».
             </p>
         `;
 
@@ -3412,6 +3431,17 @@ async function loadUserProfile(expectedUserId = activeUserId) {
 supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log("Auth event:", event);
 
+    if (session?.user?.id && activeUserId && session.user.id !== activeUserId) {
+        resetActiveAccountData();
+        hideAllPages();
+        const authPage = document.getElementById("authPage");
+        if (authPage) authPage.style.display = "flex";
+        const menu = document.querySelector(".bottom-menu");
+        if (menu) menu.style.display = "none";
+        window.setTimeout(() => checkAuth(), 0);
+        return;
+    }
+
     if (event === "SIGNED_OUT") {
         const authPage = document.getElementById("authPage");
         const bottomMenu = document.querySelector(".bottom-menu");
@@ -3463,7 +3493,33 @@ function showAssistant() {
 
     if (assistantPage) assistantPage.style.display = "block";
 
+    renderPetSwitcher();
+    updateAssistantProfileStatus();
     renderAssistantConversation();
+}
+
+function cancelAssistantRequest() {
+    const request = activeAssistantRequest;
+    activeAssistantRequest = null;
+    if (request) {
+        request.controller.abort();
+        window.clearTimeout(request.timeoutId);
+        request.typingBubble?.remove();
+    }
+    const button = document.querySelector("#assistantForm button[type='submit']");
+    if (button) button.disabled = false;
+}
+
+function updateAssistantProfileStatus(context) {
+    const status = document.getElementById("assistantProfileStatus");
+    if (!status) return;
+    if (appData.pet?.isPlaceholder) {
+        status.textContent = "Добавьте питомца в профиль, чтобы я мог учитывать его записи.";
+    } else if (context?.source === "account" && String(context.petId) === getActivePetKey()) {
+        status.textContent = `Профиль: ${context.petName || appData.pet?.name || "питомец"}. Учтено записей: ${context.includedEntries} из ${context.availableEntries}.${context.partial ? " Большая история подобрана по вопросу; некоторые тексты сокращены." : ""}`;
+    } else {
+        status.textContent = `Выбран питомец: ${appData.pet?.name || "без имени"}. При отправке вопроса прочитаю его сохранённые текстовые записи.`;
+    }
 }
 
 function scrollAssistantToBottom(instant = false) {
@@ -3522,7 +3578,7 @@ function renderAssistantConversation() {
     }
 
     messages.forEach(message => {
-        if (message && ["user", "assistant"].includes(message.role) && typeof message.content === "string") {
+        if (message && (!message.petId || String(message.petId) === getActivePetKey()) && ["user", "assistant"].includes(message.role) && typeof message.content === "string") {
             addAssistantBubble(message.role, message.content, false);
         }
     });
@@ -3542,6 +3598,12 @@ async function getAssistantErrorMessage(error) {
     if (error?.message === "PETCARE_AUTH_REQUIRED") {
         return "Войдите в аккаунт PetCare, чтобы пользоваться помощником.";
     }
+    if (error?.message === "PETCARE_PROFILE_SYNC_FAILED") {
+        return "Не удалось синхронизировать записи профиля. Проверьте подключение и попробуйте снова — для ответа нужны актуальные данные.";
+    }
+    if (error?.name === "AbortError") {
+        return "Ответ занял слишком много времени. Попробуйте задать вопрос ещё раз.";
+    }
     if (error?.name === "FunctionsFetchError" || error?.name === "TypeError") {
         return "Не удалось подключиться к серверу помощника. Проверьте интернет и попробуйте ещё раз.";
     }
@@ -3556,56 +3618,78 @@ async function sendAssistantMessage(event) {
     const input = document.getElementById("assistantQuestion");
     const sendButton = document.querySelector("#assistantForm button[type='submit']");
     const question = input?.value.trim();
-    if (!question || sendButton?.disabled) return;
+    if (!question || sendButton?.disabled || activeAssistantRequest) return;
+    if (!activeUserId || appData.pet?.isPlaceholder) {
+        addAssistantBubble("assistant", "Войдите в аккаунт и выберите питомца с заполненным профилем.");
+        return;
+    }
 
-    const conversation = Array.isArray(appData.assistantConversation)
-        ? appData.assistantConversation
-        : [];
-    appData.assistantConversation = conversation;
-    conversation.push({ role: "user", content: question });
-    appData.assistantConversation = conversation.slice(-30);
+    const accountData = appData;
+    const userId = activeUserId;
+    const petId = getActivePetKey();
+    const loadToken = activeDataLoadToken;
+    const request = { controller: new AbortController(), timeoutId: null, typingBubble: null };
+    activeAssistantRequest = request;
+    const isCurrent = () => activeAssistantRequest === request && activeUserId === userId
+        && appData === accountData && activeDataLoadToken === loadToken && getActivePetKey() === petId;
+    const conversation = Array.isArray(accountData.assistantConversation) ? accountData.assistantConversation : [];
+    accountData.assistantConversation = [...conversation, { id: createEntryId("chat"), role: "user", content: question, petId }].slice(-30);
+    const messages = accountData.assistantConversation.filter(message => message.petId === petId && ["user", "assistant"].includes(message.role))
+        .slice(-12).map(message => ({ role: message.role, content: message.content }));
     addAssistantBubble("user", question);
     input.value = "";
     if (sendButton) sendButton.disabled = true;
 
     const typingBubble = addAssistantBubble("assistant", `${ASSISTANT_DISPLAY_NAME} отвечает…`);
+    request.typingBubble = typingBubble;
 
     try {
+        const synced = await saveData();
+        if (!isCurrent()) return;
+        if (!synced) throw new Error("PETCARE_PROFILE_SYNC_FAILED");
         const { data: authData, error: authError } = await supabaseClient.auth.getSession();
+        if (!isCurrent()) return;
         if (authError) throw authError;
         const accessToken = authData?.session?.access_token;
-        if (!accessToken) throw new Error("PETCARE_AUTH_REQUIRED");
+        if (!accessToken || authData.session.user?.id !== userId) throw new Error("PETCARE_AUTH_REQUIRED");
 
-        const activePet = appData.pet || {};
-        const { data, error } = await supabaseClient.functions.invoke("petcare-assistant", {
-            body: {
-                messages: appData.assistantConversation.slice(-12),
-                pet: {
-                    name: activePet.name,
-                    breed: activePet.breed,
-                    animal: activePet.animal,
-                    weight: activePet.weight
-                }
-            },
-            headers: { Authorization: `Bearer ${accessToken}` }
+        request.timeoutId = window.setTimeout(() => request.controller.abort(), 85000);
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/petcare-assistant`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ messages, petId, today: getLocalDateInputValue() }),
+            signal: request.controller.signal
         });
-
-        if (error) throw error;
+        const errorResponse = response.clone();
+        const data = await response.json().catch(() => null);
+        if (!isCurrent()) return;
+        if (!response.ok) {
+            const error = new Error("PETCARE_ASSISTANT_HTTP_ERROR");
+            error.context = errorResponse;
+            throw error;
+        }
         const answer = typeof data?.answer === "string" ? data.answer.trim() : "";
         if (!answer) throw new Error(`${ASSISTANT_DISPLAY_NAME} вернул пустой ответ.`);
+        if (data.profileContext && String(data.profileContext.petId) !== petId) throw new Error("PETCARE_PROFILE_MISMATCH");
 
         typingBubble?.remove();
-        appData.assistantConversation.push({ role: "assistant", content: answer });
-        appData.assistantConversation = appData.assistantConversation.slice(-30);
+        accountData.assistantConversation.push({ id: createEntryId("chat"), role: "assistant", content: answer, petId });
+        accountData.assistantConversation = accountData.assistantConversation.slice(-30);
         renderAssistantConversation();
+        updateAssistantProfileStatus(data.profileContext);
         await saveData();
     } catch (error) {
         typingBubble?.remove();
-        appData.assistantConversation.pop();
-        addAssistantBubble("assistant", await getAssistantErrorMessage(error))?.classList.add("assistant-error");
+        if (!isCurrent()) return;
+        const message = await getAssistantErrorMessage(error);
+        if (isCurrent()) addAssistantBubble("assistant", message)?.classList.add("assistant-error");
     } finally {
-        if (sendButton) sendButton.disabled = false;
-        input?.focus();
+        window.clearTimeout(request.timeoutId);
+        if (activeAssistantRequest === request) {
+            activeAssistantRequest = null;
+            if (sendButton) sendButton.disabled = false;
+            if (activeUserId === userId && document.getElementById("assistantPage")?.style.display === "block") input?.focus();
+        }
     }
 }
 
