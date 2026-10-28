@@ -5,6 +5,7 @@
 const SUPABASE_URL = "https://qexiyikdmdbdxgusqnee.supabase.co";
 const SUPABASE_KEY = "sb_publishable_HSR87zEuGFNjwEYoa-zrSw_cTWchorw";
 const STORY_STORAGE_BUCKET = "petcare-stories";
+const ASSISTANT_DISPLAY_NAME = "PetCare ассистент";
 const PUSH_VAPID_PUBLIC_KEY = "BNYHRT4U9ZG-jFDEBAR2MVz0Z-4-4W3BWaCNpR-tMqnlXZ2OHH3DavEBOyyC1Ph5VLbsakWuewhUpwCiZwciKd8";
 
 const supabaseClient = supabase.createClient(
@@ -3467,7 +3468,7 @@ function addAssistantBubble(role, content, scroll = true) {
     if (role === "assistant") {
         const sender = document.createElement("div");
         sender.className = "assistant-sender";
-        sender.textContent = "PetCare Ассистент";
+        sender.textContent = ASSISTANT_DISPLAY_NAME;
 
         const message = document.createElement("div");
         message.className = "assistant-message-content";
@@ -3491,7 +3492,7 @@ function renderAssistantConversation() {
         : [];
 
     if (messages.length === 0) {
-        addAssistantBubble("assistant", "Привет! 🐾 Я PetCare Ассистент. Спроси меня о кормлении, уходе, прогулках или здоровье питомца.", false);
+        addAssistantBubble("assistant", `Привет! 🐾 Я ${ASSISTANT_DISPLAY_NAME}. Спроси меня о кормлении, уходе, прогулках или здоровье питомца.`, false);
         scrollAssistantToBottom(true);
         return;
     }
@@ -3523,7 +3524,7 @@ async function getAssistantErrorMessage(error) {
     if (error?.name === "FunctionsRelayError") {
         return "Supabase не смог запустить помощника. Обновите страницу и попробуйте позже.";
     }
-    return "Не удалось получить ответ PetCare Ассистента. Обновите страницу и попробуйте ещё раз.";
+    return "Не удалось получить ответ PetCare ассистента. Обновите страницу и попробуйте ещё раз.";
 }
 
 async function sendAssistantMessage(event) {
@@ -3543,7 +3544,7 @@ async function sendAssistantMessage(event) {
     input.value = "";
     if (sendButton) sendButton.disabled = true;
 
-    const typingBubble = addAssistantBubble("assistant", "Готовит ответ…");
+    const typingBubble = addAssistantBubble("assistant", `${ASSISTANT_DISPLAY_NAME} отвечает…`);
 
     try {
         const { data: authData, error: authError } = await supabaseClient.auth.getSession();
@@ -3567,7 +3568,7 @@ async function sendAssistantMessage(event) {
 
         if (error) throw error;
         const answer = typeof data?.answer === "string" ? data.answer.trim() : "";
-        if (!answer) throw new Error("PetCare Ассистент вернул пустой ответ.");
+        if (!answer) throw new Error(`${ASSISTANT_DISPLAY_NAME} вернул пустой ответ.`);
 
         typingBubble?.remove();
         appData.assistantConversation.push({ role: "assistant", content: answer });
