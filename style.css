@@ -3232,6 +3232,10 @@ body { background: radial-gradient(ellipse at 3% 6%, #d9ece1 0, transparent 38re
 .assistant-pet-context { padding: 13px 15px; margin-bottom: 15px; }
 .assistant-pet-context > label { margin: 0 0 7px; }
 .assistant-profile-status { margin-top: 9px; color: #6e826c; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.assistant-live-badge { display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; padding: 6px 10px; border: 1px solid #e7dfc8; border-radius: 999px; background: #fff8e8; color: #8e7c43; font-size: 11px; font-weight: 700; line-height: 1.4; }
+.assistant-live-badge::before { content: ""; flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.assistant-live-badge[data-state="ready"] { border-color: #d3e4d3; background: #edf7e9; color: #54834e; }
+.assistant-live-badge[data-state="offline"] { border-color: #eadbcf; background: #fbf1e8; color: #9c795b; }
 #assistantPage .assistant-disclaimer { line-height: 1.55; }
 #assistantPage #assistantMessages { height: clamp(250px, calc(100dvh - 480px), 620px); }
 .primary-button { background: linear-gradient(150deg, #398665, #245e49); box-shadow: 0 4px 0 #174b38, 0 11px 18px rgba(30, 85, 58, .14), inset 0 1px rgba(255,255,255,.35); }

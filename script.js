@@ -27,6 +27,13 @@ const storyMediaUrlCache = new Map();
 const storyCollageBlobCache = new Map();
 const storyOperationsInProgress = new Set();
 let activeAssistantRequest = null;
+let assistantLiveChannel = null;
+let assistantLiveTimer = null;
+let assistantLiveController = null;
+let assistantLiveRefresh = null;
+let assistantLiveGeneration = 0;
+let assistantLive = { userId: null, petId: null, snapshot: null, answerContext: null, localKey: null, cloudKey: null, localDirty: false, phase: "loading", connected: false, refreshAgain: false };
+const profilePendingWrites = new Map();
 
 function createInitialAppData() {
     return {
@@ -56,6 +63,7 @@ let historyReturnPageId = "homePage";
 
 function resetActiveAccountData() {
     cancelAssistantRequest();
+    stopAssistantProfileLive();
     activeDataLoadToken += 1;
     activeUserId = null;
     storyMediaUrlCache.forEach(item => {
@@ -206,6 +214,8 @@ function saveData() {
     }
 
     localStorage.setItem(`${STORAGE_KEY}:${userId}`, JSON.stringify(snapshot));
+    notifyAssistantLocalChange(snapshot, userId);
+    profilePendingWrites.set(userId, (profilePendingWrites.get(userId) || 0) + 1);
 
     cloudSaveQueue = cloudSaveQueue
         .catch(() => {})
@@ -224,6 +234,21 @@ function saveData() {
         .catch(error => {
             console.error("Не удалось сохранить данные в Supabase. Локальная копия сохранена:", error);
             return false;
+        })
+        .then(synced => {
+            const remaining = Math.max(0, (profilePendingWrites.get(userId) || 1) - 1);
+            if (remaining) profilePendingWrites.set(userId, remaining);
+            else profilePendingWrites.delete(userId);
+            if (activeUserId === userId && assistantLive.userId === userId && !remaining) {
+                const savedKey = getAssistantLocalProfileKey(snapshot, assistantLive.petId);
+                const profileChanged = synced && savedKey !== assistantLive.cloudKey;
+                if (synced) assistantLive.cloudKey = savedKey;
+                if (synced && assistantLive.localKey === savedKey) assistantLive.localDirty = false;
+                assistantLive.phase = synced ? (assistantLive.snapshot ? "ready" : "loading") : "error";
+                updateAssistantProfileStatus();
+                if (profileChanged) scheduleAssistantProfileRefresh(0);
+            }
+            return synced;
         });
 
     return cloudSaveQueue;
@@ -275,6 +300,7 @@ function applyAccountData(savedData) {
 
 async function loadDataFromDatabase(userId) {
     cancelAssistantRequest();
+    stopAssistantProfileLive();
     const loadToken = ++activeDataLoadToken;
     activeUserId = userId;
     appData = createInitialAppData();
@@ -1063,6 +1089,7 @@ async function switchPet(petId) {
         updateAssistantProfileStatus();
     }
     await saveData();
+    startAssistantProfileLive();
 }
 
 
@@ -3326,6 +3353,7 @@ async function openMainAfterLogin() {
 
     await loadUserProfile(userId);
     if (activeUserId !== userId) return;
+    startAssistantProfileLive();
 
     if (authPage) authPage.style.display = "none";
     if (bottomMenu) bottomMenu.style.display = "flex";
@@ -3494,6 +3522,7 @@ function showAssistant() {
     if (assistantPage) assistantPage.style.display = "block";
 
     renderPetSwitcher();
+    startAssistantProfileLive();
     updateAssistantProfileStatus();
     renderAssistantConversation();
 }
@@ -3510,17 +3539,240 @@ function cancelAssistantRequest() {
     if (button) button.disabled = false;
 }
 
-function updateAssistantProfileStatus(context) {
-    const status = document.getElementById("assistantProfileStatus");
-    if (!status) return;
-    if (appData.pet?.isPlaceholder) {
-        status.textContent = "Добавьте питомца в профиль, чтобы я мог учитывать его записи.";
-    } else if (context?.source === "account" && String(context.petId) === getActivePetKey()) {
-        status.textContent = `Профиль: ${context.petName || appData.pet?.name || "питомец"}. Учтено записей: ${context.includedEntries} из ${context.availableEntries}.${context.partial ? " Большая история подобрана по вопросу; некоторые тексты сокращены." : ""}`;
-    } else {
-        status.textContent = `Выбран питомец: ${appData.pet?.name || "без имени"}. При отправке вопроса прочитаю его сохранённые текстовые записи.`;
+function getAssistantLocalProfileKey(data = appData, petId = getActivePetKey()) {
+    const savedPet = (data.pets || []).find(item => getPetKey(item) === petId) || {};
+    const pet = getPetKey(data.pet) === petId ? { ...savedPet, ...data.pet } : savedPet;
+    const values = (row, keys) => keys.map(key => row?.[key] ?? null);
+    const own = row => String(row.petId ?? getPetKey(data.pet)) === petId;
+    return JSON.stringify([
+        petId, values(pet, ["name", "animal", "breed", "birthDate", "weight", "allergies", "medications", "vetClinic", "vetPhone"]),
+        (pet.weightHistory || []).map(row => values(row, ["id", "date", "value"])),
+        (data.healthRecords || []).filter(own).map(row => [...values(row, ["id", "name", "type", "date", "nextDate", "note"]), getAttachmentPhotos(row).length]),
+        (data.reminders || []).filter(own).map(row => values(row, ["id", "name", "type", "date", "time", "repeat", "completed", "completedForDate", "note"])),
+        (data.activityHistory || []).filter(own).map(row => values(row, ["id", "title", "kind", "date", "note"])),
+        (data.completedTasks || []).filter(own).map(row => values(row, ["id", "date"])),
+        (data.storyProjects || []).filter(own).map(row => [row.id, row.month, row.startDate, Boolean(row.collagePath), (row.photos || []).map(photo => [photo.week, photo.date])])
+    ]);
+}
+
+function stopAssistantProfileLive() {
+    assistantLiveGeneration += 1;
+    window.clearTimeout(assistantLiveTimer);
+    assistantLiveController?.abort();
+    assistantLiveController = null;
+    assistantLiveRefresh = null;
+    assistantLiveTimer = null;
+    const channel = assistantLiveChannel;
+    assistantLiveChannel = null;
+    if (channel) supabaseClient.removeChannel(channel).catch(() => {});
+    assistantLive = { userId: null, petId: null, snapshot: null, answerContext: null, localKey: null, cloudKey: null, localDirty: false, phase: "loading", connected: false, refreshAgain: false };
+}
+
+function startAssistantProfileLive() {
+    const userId = activeUserId;
+    const petId = getActivePetKey();
+    if (!userId || appData.pet?.isPlaceholder) { updateAssistantProfileStatus(); return; }
+    if (assistantLive.userId === userId && assistantLive.petId === petId && assistantLiveChannel) {
+        return;
+    }
+    stopAssistantProfileLive();
+    const profileKey = getAssistantLocalProfileKey();
+    assistantLive = { ...assistantLive, userId, petId, localKey: profileKey, cloudKey: profileKey, phase: "loading" };
+    const generation = assistantLiveGeneration;
+    assistantLiveChannel = supabaseClient.channel(`petcare-profile-${userId}-${generation}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: CLOUD_TABLE, filter: `user_id=eq.${userId}` }, payload => {
+            if (activeUserId !== userId || generation !== assistantLiveGeneration) return;
+            const saved = payload.new?.data;
+            if (payload.new?.user_id !== userId || !saved || typeof saved !== "object") return;
+            const key = getAssistantLocalProfileKey(saved, petId);
+            if (key === assistantLive.cloudKey) return;
+            assistantLive.cloudKey = key;
+            assistantLive.answerContext = null;
+            // Chat-only updates never reload the profile or delay an answer.
+            scheduleAssistantProfileRefresh();
+        })
+        .subscribe(status => {
+            if (activeUserId !== userId || generation !== assistantLiveGeneration) return;
+            assistantLive.connected = status === "SUBSCRIBED";
+            updateAssistantProfileStatus();
+        });
+    scheduleAssistantProfileRefresh(0);
+    updateAssistantProfileStatus();
+}
+
+function scheduleAssistantProfileRefresh(delay = 200) {
+    if (!activeUserId || assistantLive.userId !== activeUserId) return;
+    window.clearTimeout(assistantLiveTimer);
+    assistantLiveTimer = window.setTimeout(() => refreshAssistantProfile(), delay);
+}
+
+function notifyAssistantLocalChange(snapshot, userId) {
+    if (activeUserId !== userId || assistantLive.userId !== userId || assistantLive.petId !== getActivePetKey()) return;
+    const key = getAssistantLocalProfileKey(snapshot, assistantLive.petId);
+    if (key !== assistantLive.localKey) {
+        assistantLive.localKey = key;
+        assistantLive.localDirty = true;
+        assistantLive.phase = "saving";
+        assistantLive.answerContext = null;
+        updateAssistantProfileStatus();
     }
 }
+
+async function requestAssistantEndpoint(body, signal) {
+    const userId = activeUserId;
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    const session = data?.session;
+    if (!userId || activeUserId !== userId || !session?.access_token || session.user?.id !== userId) throw new Error("PETCARE_AUTH_REQUIRED");
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/petcare-assistant`, {
+        method: "POST", headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify(body), signal
+    });
+    const errorResponse = response.clone();
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+        const failure = new Error(payload?.code || "PETCARE_ASSISTANT_HTTP_ERROR");
+        failure.context = errorResponse;
+        failure.profileContext = payload?.profileContext;
+        throw failure;
+    }
+    return payload;
+}
+
+function refreshAssistantProfile() {
+    const userId = activeUserId;
+    const petId = getActivePetKey();
+    if (!userId || assistantLive.userId !== userId || assistantLive.petId !== petId || appData.pet?.isPlaceholder) return Promise.resolve(null);
+    if (assistantLiveRefresh) { assistantLive.refreshAgain = true; return assistantLiveRefresh; }
+    const generation = assistantLiveGeneration;
+    const controller = new AbortController();
+    assistantLiveController = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 25000);
+    const current = () => activeUserId === userId && getActivePetKey() === petId && assistantLiveGeneration === generation;
+    if (!assistantLive.localDirty) assistantLive.phase = assistantLive.snapshot ? "refreshing" : "loading";
+    updateAssistantProfileStatus();
+    const operation = (async () => {
+        try {
+            const result = await requestAssistantEndpoint({ action: "profile-status", petId }, controller.signal);
+            if (!current()) return null;
+            const snapshot = result?.profileContext;
+            if (snapshot?.source !== "account" || String(snapshot.petId) !== petId || typeof snapshot.signature !== "string") throw new Error("PETCARE_PROFILE_MISMATCH");
+            if (assistantLive.snapshot?.signature !== snapshot.signature) assistantLive.answerContext = null;
+            assistantLive.snapshot = snapshot;
+            assistantLive.phase = assistantLive.localDirty ? "saving" : "ready";
+            return snapshot;
+        } catch (error) {
+            if (current()) assistantLive.phase = navigator.onLine === false ? "offline" : "error";
+            return null;
+        } finally {
+            window.clearTimeout(timeout);
+            if (current()) {
+                assistantLiveRefresh = null;
+                assistantLiveController = null;
+                updateAssistantProfileStatus();
+                if (assistantLive.refreshAgain) { assistantLive.refreshAgain = false; scheduleAssistantProfileRefresh(); }
+            }
+        }
+    })();
+    assistantLiveRefresh = operation;
+    return operation;
+}
+
+function mergeAssistantMessages(remote, incoming) {
+    const merged = [];
+    const keys = new Set();
+    [remote, incoming].forEach(list => {
+        const occurrences = new Map();
+        (Array.isArray(list) ? list : []).forEach(message => {
+            if (!message || !["user", "assistant"].includes(message.role) || typeof message.content !== "string") return;
+            const signature = JSON.stringify([message.petId || "", message.role, message.content]);
+            const occurrence = (occurrences.get(signature) || 0) + 1;
+            occurrences.set(signature, occurrence);
+            const key = message.id ? `id:${message.id}` : `legacy:${signature}:${occurrence}`;
+            if (!keys.has(key)) { keys.add(key); merged.push(message); }
+        });
+    });
+    return merged.slice(-30);
+}
+
+function saveAssistantConversation() {
+    const userId = activeUserId;
+    const account = appData;
+    if (!userId) return Promise.resolve(false);
+    const messages = JSON.parse(JSON.stringify(account.assistantConversation || []));
+    localStorage.setItem(`${STORAGE_KEY}:${userId}`, JSON.stringify(account));
+    cloudSaveQueue = cloudSaveQueue.catch(() => {}).then(async () => {
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+            if (activeUserId !== userId) return false;
+            const { data: row, error } = await supabaseClient.from(CLOUD_TABLE).select("data,updated_at").eq("user_id", userId).maybeSingle();
+            if (error) throw error;
+            if (activeUserId !== userId) return false;
+            if (!row?.data || !row.updated_at) return false;
+            const merged = mergeAssistantMessages(row.data.assistantConversation, messages);
+            const stamp = new Date(Math.max(Date.now(), Date.parse(row.updated_at) + 1)).toISOString();
+            const { data: updated, error: saveError } = await supabaseClient.from(CLOUD_TABLE)
+                .update({ data: { ...row.data, assistantConversation: merged }, updated_at: stamp })
+                .eq("user_id", userId).eq("updated_at", row.updated_at).select("updated_at");
+            if (saveError) throw saveError;
+            if (updated?.length) {
+                if (activeUserId === userId && appData === account) {
+                    account.assistantConversation = mergeAssistantMessages(merged, account.assistantConversation);
+                    localStorage.setItem(`${STORAGE_KEY}:${userId}`, JSON.stringify(account));
+                }
+                return true;
+            }
+        }
+        return false;
+    }).catch(error => { console.error("Не удалось синхронизировать переписку:", error); return false; });
+    return cloudSaveQueue;
+}
+
+function updateAssistantProfileStatus(context) {
+    const status = document.getElementById("assistantProfileStatus");
+    const badge = document.getElementById("assistantLiveBadge");
+    if (!status) return;
+    if (context?.source === "account" && String(context.petId) === getActivePetKey()) assistantLive.answerContext = context;
+    const live = assistantLive;
+    let text;
+    let label = "Обновляю записи";
+    let state = "loading";
+    if (appData.pet?.isPlaceholder) {
+        text = "Добавьте питомца в профиль, чтобы я мог учитывать его записи.";
+        label = "Выберите питомца";
+    } else if (["offline", "error"].includes(live.phase)) {
+        text = live.localDirty ? "Изменения сохранены на устройстве, но ещё не синхронизированы. При восстановлении подключения записи обновятся автоматически." : "Не удалось обновить записи. Проверьте подключение; при восстановлении связи данные обновятся автоматически.";
+        label = "Ожидаю подключение";
+        state = "offline";
+    } else if (live.localDirty || live.phase === "saving") {
+        text = "Сохраняю изменения записей. Они будут учтены в следующем ответе сразу после синхронизации.";
+        label = "Сохраняю записи";
+    } else if (live.snapshot && live.petId === getActivePetKey()) {
+        text = `Питомец: ${live.snapshot.petName}. Записей в профиле: ${live.snapshot.availableEntries}. Новые записи учитываются автоматически.`;
+        if (live.answerContext?.signature === live.snapshot.signature && live.answerContext.includedEntries != null) {
+            text += ` В последнем ответе учтено: ${live.answerContext.includedEntries}.${live.answerContext.partial ? " Для большой истории выбраны записи по вопросу." : ""}`;
+        }
+        label = live.connected ? "Записи актуальны · онлайн" : "Записи актуальны · автообновление";
+        state = "ready";
+    } else {
+        text = `Выбран питомец: ${appData.pet?.name || "без имени"}. Получаю актуальные записи профиля…`;
+    }
+    if (status.textContent !== text) status.textContent = text;
+    if (badge) { badge.textContent = label; badge.dataset.state = state; }
+}
+
+window.addEventListener("online", () => {
+    if (assistantLive.localDirty && activeUserId) saveData();
+    else scheduleAssistantProfileRefresh(0);
+});
+window.addEventListener("storage", event => {
+    if (!activeUserId || event.key !== `${STORAGE_KEY}:${activeUserId}` || !event.newValue) return;
+    try {
+        const key = getAssistantLocalProfileKey(JSON.parse(event.newValue), assistantLive.petId);
+        const previousKey = event.oldValue ? getAssistantLocalProfileKey(JSON.parse(event.oldValue), assistantLive.petId) : null;
+        if (key !== previousKey && key !== assistantLive.cloudKey) scheduleAssistantProfileRefresh();
+    } catch (_) { /* Ignore invalid or unrelated browser storage. */ }
+});
+
 
 function scrollAssistantToBottom(instant = false) {
     const container = document.getElementById("assistantMessages");
@@ -3582,6 +3834,9 @@ function renderAssistantConversation() {
             addAssistantBubble(message.role, message.content, false);
         }
     });
+    if (activeAssistantRequest?.phase === "waiting" && activeAssistantRequest.petId === getActivePetKey()) {
+        activeAssistantRequest.typingBubble = addAssistantBubble("assistant", activeAssistantRequest.typingText, false);
+    }
     scrollAssistantToBottom(true);
 }
 
@@ -3628,57 +3883,50 @@ async function sendAssistantMessage(event) {
     const userId = activeUserId;
     const petId = getActivePetKey();
     const loadToken = activeDataLoadToken;
-    const request = { controller: new AbortController(), timeoutId: null, typingBubble: null };
+    const request = { controller: new AbortController(), timeoutId: null, typingBubble: null, phase: "waiting", petId, typingText: `${ASSISTANT_DISPLAY_NAME} отвечает…` };
     activeAssistantRequest = request;
     const isCurrent = () => activeAssistantRequest === request && activeUserId === userId
         && appData === accountData && activeDataLoadToken === loadToken && getActivePetKey() === petId;
     const conversation = Array.isArray(accountData.assistantConversation) ? accountData.assistantConversation : [];
-    accountData.assistantConversation = [...conversation, { id: createEntryId("chat"), role: "user", content: question, petId }].slice(-30);
+    accountData.assistantConversation = [...conversation, { id: createEntryId("chat"), role: "user", content: question, petId, createdAt: new Date().toISOString() }].slice(-30);
     const messages = accountData.assistantConversation.filter(message => message.petId === petId && ["user", "assistant"].includes(message.role))
         .slice(-12).map(message => ({ role: message.role, content: message.content }));
     addAssistantBubble("user", question);
     input.value = "";
     if (sendButton) sendButton.disabled = true;
 
-    const typingBubble = addAssistantBubble("assistant", `${ASSISTANT_DISPLAY_NAME} отвечает…`);
+    const typingBubble = addAssistantBubble("assistant", request.typingText);
     request.typingBubble = typingBubble;
 
     try {
-        const synced = await saveData();
-        if (!isCurrent()) return;
-        if (!synced) throw new Error("PETCARE_PROFILE_SYNC_FAILED");
-        const { data: authData, error: authError } = await supabaseClient.auth.getSession();
-        if (!isCurrent()) return;
-        if (authError) throw authError;
-        const accessToken = authData?.session?.access_token;
-        if (!accessToken || authData.session.user?.id !== userId) throw new Error("PETCARE_AUTH_REQUIRED");
-
         request.timeoutId = window.setTimeout(() => request.controller.abort(), 85000);
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/petcare-assistant`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${accessToken}`, apikey: SUPABASE_KEY, "Content-Type": "application/json" },
-            body: JSON.stringify({ messages, petId, today: getLocalDateInputValue() }),
-            signal: request.controller.signal
-        });
-        const errorResponse = response.clone();
-        const data = await response.json().catch(() => null);
+        // Only a newly changed profile needs to finish saving before the question.
+        if (profilePendingWrites.get(userId)) await cloudSaveQueue;
         if (!isCurrent()) return;
-        if (!response.ok) {
-            const error = new Error("PETCARE_ASSISTANT_HTTP_ERROR");
-            error.context = errorResponse;
-            throw error;
-        }
+        if (assistantLive.localDirty && !await saveData()) throw new Error("PETCARE_PROFILE_SYNC_FAILED");
+        if (!isCurrent()) return;
+        saveAssistantConversation();
+        const data = await requestAssistantEndpoint({ messages, petId, today: getLocalDateInputValue() }, request.controller.signal);
+        if (!isCurrent()) return;
         const answer = typeof data?.answer === "string" ? data.answer.trim() : "";
         if (!answer) throw new Error(`${ASSISTANT_DISPLAY_NAME} вернул пустой ответ.`);
         if (data.profileContext && String(data.profileContext.petId) !== petId) throw new Error("PETCARE_PROFILE_MISMATCH");
 
+        request.phase = "done";
+        request.typingBubble?.remove();
         typingBubble?.remove();
-        accountData.assistantConversation.push({ id: createEntryId("chat"), role: "assistant", content: answer, petId });
+        accountData.assistantConversation.push({ id: createEntryId("chat"), role: "assistant", content: answer, petId, createdAt: new Date().toISOString() });
         accountData.assistantConversation = accountData.assistantConversation.slice(-30);
         renderAssistantConversation();
         updateAssistantProfileStatus(data.profileContext);
-        await saveData();
+        saveAssistantConversation().then(saved => {
+            if (!saved && activeUserId === userId && appData === accountData && getActivePetKey() === petId) {
+                addAssistantBubble("assistant", "Ответ сохранён на этом устройстве, но пока не синхронизирован с аккаунтом. Проверьте подключение.")?.classList.add("assistant-error");
+            }
+        });
     } catch (error) {
+        request.phase = "done";
+        request.typingBubble?.remove();
         typingBubble?.remove();
         if (!isCurrent()) return;
         const message = await getAssistantErrorMessage(error);

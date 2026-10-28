@@ -14,7 +14,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="PetCare">
     <script src="/frameguard.js"></script>
-    <link rel="stylesheet" href="style.css?v=20261028-profile-history">
+    <link rel="stylesheet" href="style.css?v=20261028-profile-events">
 </head>
 <body>
 <div class="app">
@@ -595,7 +595,8 @@
     <div class="pet-switcher compact-pet-switcher assistant-pet-context">
         <label for="assistantPetSwitcher">О каком питомце поговорим?</label>
         <select id="assistantPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для PetCare ассистента"></select>
-        <p id="assistantProfileStatus" class="assistant-profile-status" role="status" aria-live="polite">При отправке вопроса будут прочитаны сохранённые текстовые записи выбранного питомца.</p>
+        <span id="assistantLiveBadge" class="assistant-live-badge" data-state="loading">Обновляю записи</span>
+        <p id="assistantProfileStatus" class="assistant-profile-status" role="status" aria-live="polite">Записи обновляются автоматически после сохранения. Перед каждым ответом я проверю актуальные данные питомца.</p>
     </div>
     <div id="assistantMessages" aria-live="polite" aria-label="Переписка с PetCare ассистентом"></div>
 
@@ -722,6 +723,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
-<script src="script.js?v=20261028-profile-history"></script>
+<script src="script.js?v=20261028-profile-events"></script>
 </body>
 </html>

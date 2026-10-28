@@ -1,4 +1,4 @@
-const CACHE_NAME = "petcare-shell-v17";
+const CACHE_NAME = "petcare-shell-v19";
 const SHELL_FILES = [
     "/",
     "/index.html",

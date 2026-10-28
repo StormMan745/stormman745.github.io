@@ -109,14 +109,44 @@ async function readOwnProfile(request: Request) {
   const user = await userResponse.json();
   if (typeof user.id !== "string" || !/^[0-9a-f-]{36}$/i.test(user.id)) throw new ProfileAccessError(401, "Не удалось подтвердить аккаунт.");
   const dataUrl = new URL(`${url}/rest/v1/petcare_data`);
-  dataUrl.searchParams.set("select", "data");
+  dataUrl.searchParams.set("select", "data,updated_at");
   dataUrl.searchParams.set("user_id", `eq.${user.id}`);
   dataUrl.searchParams.set("limit", "1");
   // The user's JWT and ordinary anon key keep the existing RLS ownership rules in force.
   const response = await fetch(dataUrl, { headers, signal: AbortSignal.timeout(12_000) });
   if (!response.ok) throw new ProfileAccessError(503, "Не удалось прочитать записи профиля. Попробуйте ещё раз.");
   const rows = await response.json();
-  return asObject(Array.isArray(rows) ? rows[0]?.data : null);
+  const row = Array.isArray(rows) ? rows[0] : null;
+  return { saved: asObject(row?.data), updatedAt: cleanText(row?.updated_at, 64) };
+}
+
+async function getLiveProfileMeta(saved: DataRow, requestedPetId: string, updatedAt: string) {
+  const current = asObject(saved.pet);
+  const byId = new Map<string, DataRow>();
+  asRows(saved.pets).forEach(pet => { if (petKey(pet)) byId.set(petKey(pet), pet); });
+  if (petKey(current)) byId.set(petKey(current), { ...byId.get(petKey(current)), ...current });
+  const id = requestedPetId || scalarText(saved.activePetId) || petKey(current);
+  const pet = byId.get(id);
+  if (!pet || pet.isPlaceholder) throw new ProfileAccessError(404, "Выберите питомца с заполненным профилем.");
+  const belongs = (row: DataRow) => scalarText(row.petId ?? petKey(current)) === id;
+  const fields = (row: DataRow, keys: string[]) => keys.map(key => row[key] ?? null);
+  const health = asRows(saved.healthRecords).filter(belongs).map(row => [
+    ...fields(row, ["id", "type", "name", "date", "nextDate", "note"]), Array.isArray(row.photos) ? row.photos.length : row.photoData ? 1 : 0,
+  ]);
+  const reminders = asRows(saved.reminders).filter(belongs).map(row => fields(row, ["id", "type", "name", "date", "time", "repeat", "completed", "completedForDate", "note"]));
+  const weights = asRows(pet.weightHistory).map(row => fields(row, ["id", "date", "value"]));
+  const activities = asRows(saved.activityHistory).filter(belongs).map(row => fields(row, ["id", "kind", "title", "date", "note"]));
+  const tasks = asRows(saved.completedTasks).filter(belongs).map(row => fields(row, ["id", "date"]));
+  const stories = asRows(saved.storyProjects).filter(belongs).map(row => [
+    ...fields(row, ["id", "month", "startDate"]), Boolean(row.collagePath), asRows(row.photos).map(photo => fields(photo, ["week", "date"])),
+  ]);
+  const facts = [id, fields(pet, ["name", "animal", "breed", "birthDate", "weight", "allergies", "medications", "vetClinic", "vetPhone"]), health, weights, reminders, activities, tasks, stories];
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(facts)));
+  const signature = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+  return {
+    petId: id, petName: scalarText(pet.name, 160) || "Питомец", source: "account", signature, updatedAt,
+    availableEntries: health.length + weights.length + reminders.length + activities.length + tasks.length + stories.length,
+  };
 }
 
 function buildProfileContext(saved: DataRow, requestedPetId: string, question: string, requestedDate: unknown) {
@@ -299,7 +329,7 @@ Deno.serve(async (request) => {
     return jsonResponse(request, { error: "В Supabase не настроен ключ GigaChat (GIGACHAT_AUTH_KEY)." }, 503);
   }
 
-  let body: { messages?: unknown; pet?: Record<string, unknown>; petId?: unknown; today?: unknown };
+  let body: { messages?: unknown; pet?: Record<string, unknown>; petId?: unknown; today?: unknown; action?: unknown };
   try {
     const parsed = await readJsonBody(request);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -324,13 +354,17 @@ Deno.serve(async (request) => {
         .filter((item) => item.content.length > 0)
     : [];
 
-  if (!messages.length || messages[messages.length - 1].role !== "user") {
+  const isProfileStatus = body.action === "profile-status";
+  if (!isProfileStatus && (!messages.length || messages[messages.length - 1].role !== "user")) {
     return jsonResponse(request, { error: "Напиши вопрос, чтобы начать разговор." }, 400);
   }
 
   let profile: ReturnType<typeof buildProfileContext>;
+  let profileMeta: Awaited<ReturnType<typeof getLiveProfileMeta>>;
   try {
-    const saved = await readOwnProfile(request);
+    const { saved, updatedAt } = await readOwnProfile(request);
+    profileMeta = await getLiveProfileMeta(saved, scalarText(body.petId), updatedAt);
+    if (isProfileStatus) return jsonResponse(request, { profileContext: profileMeta });
     const query = messages.filter(message => message.role === "user").slice(-3).map(message => message.content).join("\n");
     profile = buildProfileContext(saved, scalarText(body.petId), query, body.today);
   } catch (error) {
@@ -399,7 +433,8 @@ Deno.serve(async (request) => {
       return jsonResponse(request, { error: "GigaChat не вернул текстовый ответ. Попробуй задать вопрос иначе." }, 502);
     }
 
-    return jsonResponse(request, { answer, profileContext: { petId: profile.petId, petName: profile.petName, source: "account", ...profile.coverage } });
+    // A completed answer uses the snapshot read at the start. Later edits apply to the next question.
+    return jsonResponse(request, { answer, profileContext: { ...profileMeta, ...profile.coverage } });
   } catch (error) {
     if (error instanceof GigaChatApiError) {
       console.error(`GigaChat ${error.stage} request failed with status:`, error.status);
