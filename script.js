@@ -62,6 +62,7 @@ let selectedCalendarDate = getLocalDateInputValue();
 let historyReturnPageId = "homePage";
 
 function resetActiveAccountData() {
+    window.dispatchEvent(new Event('petcare:account-reset'));
     cancelAssistantRequest();
     stopAssistantProfileLive();
     activeDataLoadToken += 1;
@@ -360,12 +361,61 @@ async function loadDataFromDatabase(userId) {
 // ==============================
 
 function hideAllPages() {
+    window.dispatchEvent(new Event('petcare:clinics-close'));
     const pages = document.querySelectorAll(".page");
 
     pages.forEach(page => {
         page.style.display = "none";
     });
     document.querySelectorAll('.bottom-menu [aria-current="page"]').forEach(link => link.removeAttribute("aria-current"));
+}
+
+let clinicsReturnPage = 'homePage';
+async function showClinics() {
+    const currentPage = Array.from(document.querySelectorAll('.page')).find(page => page.offsetParent);
+    if (currentPage && currentPage.id !== 'clinicsPage') clinicsReturnPage = currentPage.id;
+    hideAllPages();
+    document.getElementById('clinicsPage').style.display = 'block';
+    markActiveNavigation(clinicsReturnPage === 'healthPage' ? 'nav-health' : clinicsReturnPage === 'profilePage' ? 'nav-profile' : 'nav-home');
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    try {
+        const clinics = await import('./clinics.js?v=20261029-clinics');
+        if (document.getElementById('clinicsPage').offsetParent) clinics.open({ requestDirectory: requestClinicDirectory });
+    } catch {
+        const status = document.getElementById('clinicStatus');
+        status.textContent = 'Не удалось загрузить поиск клиник. Проверьте интернет и откройте раздел ещё раз.';
+        status.dataset.kind = 'error';
+    }
+}
+async function requestClinicDirectory(body, signal) {
+    const userId = activeUserId;
+    const { data, error } = await supabaseClient.auth.getSession();
+    const session = data?.session;
+    if (error || !userId || activeUserId !== userId || !session?.access_token || session.user?.id !== userId) throw new Error('PETCARE_AUTH_REQUIRED');
+    const timeout = new AbortController();
+    const cancel = () => timeout.abort();
+    signal.addEventListener('abort', cancel, { once: true });
+    if (signal.aborted) timeout.abort();
+    const deadline = setTimeout(cancel, 40000);
+    try {
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/petcare-clinics`, {
+            method: 'POST', signal: timeout.signal,
+            headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!response.ok) {
+            const error = new Error('CLINIC_DIRECTORY_UNAVAILABLE');
+            error.status = response.status;
+            throw error;
+        }
+        return await response.json();
+    } finally { clearTimeout(deadline); signal.removeEventListener('abort', cancel); }
+}
+
+function closeClinics() {
+    if (clinicsReturnPage === 'healthPage') showHealth();
+    else if (clinicsReturnPage === 'profilePage') showProfile();
+    else showHome();
 }
 
 function markActiveNavigation(action) {
@@ -3964,6 +4014,8 @@ document.getElementById("assistantForm")?.addEventListener("submit", sendAssista
 
 // Keep event behavior in this file so the page can use a strict script CSP.
 const petCareClickActions = {
+    "clinics-open": () => showClinics(),
+    "clinics-close": () => closeClinics(),
     "home": () => showHome(),
     "pet": () => showPet(),
     "task-feeding": element => completeTask(element, "feeding"),

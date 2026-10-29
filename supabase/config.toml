@@ -5,3 +5,6 @@ verify_jwt = true
 
 [functions.petcare-push-reminders]
 verify_jwt = false
+
+[functions.petcare-clinics]
+verify_jwt = true
