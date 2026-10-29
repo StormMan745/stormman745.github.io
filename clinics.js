@@ -2,13 +2,13 @@ import tzlookup from './assets/vendor/tz-lookup/tz.js';
 import { hoursStatus, readableHours, clinicsFrom, addressCandidates, nominatimElements } from './clinic-data.js';
 
 const $ = id => document.getElementById(id);
-const INITIAL_MESSAGE = 'Введите город и улицу или нажмите «Рядом со мной».';
+const INITIAL_MESSAGE = 'Введите город и улицу или нажмите «Разрешить геопозицию».';
 const cache = new Map();
 let initialized = false, center = null, records = [], searched = false, busy = false;
 let generation = 0, controller = null, lastGeocode = 0, fetchedAt = 0, dataTimestamp = '';
-let map = null, markers = null, originLayer = null, leafletPromise = null, timer = null;
+let mapFrame = null, selectedMapId = null, mapRadius = 5, timer = null;
 let requestDirectory = null;
-const pinById = new Map();
+let locationPermission = null;
 
 function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -94,10 +94,29 @@ async function searchAddress(event) {
             $('clinicCandidates').append(button);
         });
     } catch {
-        if (op.id === generation) status(navigator.onLine ? 'Сервис адресов временно недоступен. Попробуйте ещё раз или используйте «Рядом со мной».' : 'Нет интернета. Для поиска клиник нужно подключение к сети.', 'error');
+        if (op.id === generation) status(navigator.onLine ? 'Сервис адресов временно недоступен. Попробуйте ещё раз или разрешите геопозицию.' : 'Нет интернета. Для поиска клиник нужно подключение к сети.', 'error');
     } finally { if (op.id === generation) setBusy(false); }
 }
 
+function showLocationPermission(state) {
+    $('clinicLocateButton').textContent = state === 'granted' ? '⌖ Обновить геопозицию' : '⌖ Разрешить геопозицию';
+    $('clinicLocationStatus').textContent = state === 'granted' ? 'Доступ к геопозиции разрешён.' : state === 'denied'
+        ? 'Доступ запрещён. Разрешите геопозицию в настройках сайта в браузере или введите адрес.'
+        : 'Разрешите доступ, чтобы показать ваше местоположение и клиники рядом.';
+}
+async function checkLocationPermission() {
+    if (!navigator.permissions?.query) return;
+    try {
+        const permission = locationPermission || await navigator.permissions.query({ name: 'geolocation' });
+        locationPermission = permission;
+        const changed = () => {
+            showLocationPermission(permission.state);
+            if (permission.state === 'granted' && !center && !busy && $('clinicsPage').offsetParent) locate();
+        };
+        permission.onchange = changed;
+        changed();
+    } catch { /* Safari and local-file modes can lack the Permissions API. The button still works. */ }
+}
 function locate() {
     if (busy) return;
     if (!navigator.geolocation || !window.isSecureContext) { status('Определение местоположения здесь недоступно. Введите адрес вручную.', 'error'); return; }
@@ -105,8 +124,10 @@ function locate() {
     navigator.geolocation.getCurrentPosition(position => {
         if (op.id !== generation) return;
         setBusy(false);
+        $('clinicLocateButton').textContent = '⌖ Обновить геопозицию';
+        $('clinicLocationStatus').textContent = `Геопозиция определена. Точность — около ${Math.round(position.coords.accuracy)} м.`;
         searchClinics({ lat: position.coords.latitude, lon: position.coords.longitude,
-            label: 'Рядом с вами', accuracy: position.coords.accuracy });
+            label: 'Рядом с вами', accuracy: position.coords.accuracy, fromGeolocation: true });
     }, error => {
         if (op.id !== generation) return;
         setBusy(false);
@@ -159,8 +180,12 @@ async function searchClinics(point = center) {
     $('clinicAreaLabel').textContent = `${point.label} · радиус ${radius} км${point.accuracy > 1000 ? ' · местоположение определено приблизительно' : ''}`;
     $('clinicRefresh').hidden = false;
     updateAlternative();
-    markers?.clearLayers();
-    showMap(point, radius, op.id);
+    mapRadius = radius;
+    selectedMapId = point.fromGeolocation ? '__location__' : null;
+    mapFrame?.remove(); mapFrame = null;
+    $('clinicMapControls').hidden = true;
+    $('clinicMap').replaceChildren(element('div', 'clinic-map-empty', 'Ищу клиники для отображения на карте…'));
+    if (point.fromGeolocation) renderMap();
     try {
         const data = await getClinics(point, radius, op.signal);
         if (op.id !== generation) return;
@@ -176,66 +201,62 @@ async function searchClinics(point = center) {
     } finally { if (op.id === generation) setBusy(false); }
 }
 
-function loadLeaflet() {
-    if (window.L) return Promise.resolve(window.L);
-    if (!leafletPromise) leafletPromise = new Promise((resolve, reject) => {
-        const css = document.createElement('link');
-        css.rel = 'stylesheet'; css.href = './assets/vendor/leaflet/leaflet.css'; document.head.append(css);
-        const script = document.createElement('script');
-        script.src = './assets/vendor/leaflet/leaflet.js';
-        script.onload = () => resolve(window.L);
-        script.onerror = () => { script.remove(); css.remove(); leafletPromise = null; reject(new Error('Map library unavailable')); };
-        document.head.append(script);
-    });
-    return leafletPromise;
-}
-async function showMap(point, radius, id) {
-    try {
-        const L = await loadLeaflet();
-        if (id !== generation || !$('clinicsPage').offsetParent) return;
-        if (!map) {
-            $('clinicMap').replaceChildren();
-            map = L.map('clinicMap', { scrollWheelZoom: false, zoomControl: true });
-            const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
-            }).addTo(map);
-            let errors = 0;
-            tiles.on('tileerror', () => { if (++errors > 2) $('clinicMapNote').textContent = 'Подложка карты не загрузилась. Список клиник и кнопки маршрута доступны ниже.'; });
-            tiles.on('tileload', () => { errors = 0; $('clinicMapNote').textContent = 'Нажмите на отметку, чтобы увидеть телефон и график.'; });
-            markers = L.layerGroup().addTo(map);
-            originLayer = L.layerGroup().addTo(map);
-        }
-        map.invalidateSize();
-        originLayer.clearLayers();
-        L.circle([point.lat, point.lon], { radius: radius * 1000, color: '#7c9569', weight: 1, dashArray: '5 7', fillOpacity: .035 }).addTo(originLayer);
-        L.circleMarker([point.lat, point.lon], { radius: 7, color: '#fff', weight: 3, fillColor: '#657db0', fillOpacity: 1 }).bindTooltip('Центр поиска').addTo(originLayer);
-        map.fitBounds(L.latLng(point.lat, point.lon).toBounds(radius * 2000), { padding: [14, 14], animate: false });
-        renderPins();
-    } catch (error) {
-        console.warn('Clinic map could not be loaded:', error);
-        $('clinicMapNote').textContent = 'Карта не загрузилась. Телефоны, часы работы и маршруты доступны в списке.';
+function showMap(point, radius, clinicName = '') {
+    const zoom = clinicName ? 16 : radius <= 5 ? 13 : 12;
+    const url = new URL('https://yandex.ru/map-widget/v1/');
+    url.searchParams.set('ll', `${point.lon},${point.lat}`);
+    url.searchParams.set('z', String(zoom));
+    url.searchParams.set('lang', 'ru_RU');
+    url.searchParams.set('mode', 'whatshere');
+    url.searchParams.set('whatshere[point]', `${point.lon},${point.lat}`);
+    url.searchParams.set('whatshere[zoom]', String(zoom));
+    if (!mapFrame) {
+        const frame = element('iframe', 'clinic-yandex-map');
+        frame.loading = 'lazy';
+        frame.referrerPolicy = 'strict-origin-when-cross-origin';
+        frame.allowFullscreen = true;
+        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation');
+        frame.addEventListener('error', () => {
+            if (mapFrame === frame) $('clinicMapNote').textContent = 'Карта не загрузилась. Телефоны и маршруты доступны в карточках ниже.';
+        });
+        $('clinicMap').replaceChildren(frame);
+        mapFrame = frame;
     }
+    mapFrame.title = clinicName ? `Яндекс Карты: ${clinicName}` : point.fromGeolocation ? 'Яндекс Карты: моя геопозиция' : 'Яндекс Карты: область поиска';
+    if (mapFrame.getAttribute('src') !== url.href) mapFrame.src = url.href;
+    $('clinicMapNote').textContent = clinicName ? `На карте: ${clinicName}. Выберите другую клинику в списке над картой или кнопкой «На карте».`
+        : point.fromGeolocation ? `Ваша геопозиция. Точность — около ${Math.round(point.accuracy)} м. Клиники рядом появятся в списке.` : 'Яндекс Карты · центр области поиска.';
 }
+
+function renderMap() {
+    if (!center) return;
+    const visible = filtered();
+    const ownPosition = center.fromGeolocation && selectedMapId === '__location__';
+    const selected = ownPosition ? null : visible.find(clinic => clinic.id === selectedMapId) || visible[0];
+    selectedMapId = ownPosition ? '__location__' : selected?.id || null;
+    const select = $('clinicMapSelect');
+    const choices = visible.map((clinic, index) => {
+        const option = element('option', '', `${index + 1}. ${clinic.name}`);
+        option.value = clinic.id;
+        option.selected = clinic.id === selectedMapId;
+        return option;
+    });
+    if (center.fromGeolocation) {
+        const ownOption = element('option', '', 'Моя геопозиция');
+        ownOption.value = '__location__'; ownOption.selected = ownPosition;
+        choices.unshift(ownOption);
+    }
+    select.replaceChildren(...choices);
+    $('clinicMapControls').hidden = !choices.length;
+    showMap(selected || center, mapRadius, selected?.name || '');
+}
+
 function filtered() {
     return records.map(clinic => ({ ...clinic, state: hoursStatus(clinic.hours, clinic.timeZone) }))
         .filter(c => (!$('clinicOpenOnly').checked || c.state === 'open') && (!$('clinicPhoneOnly').checked || c.phones.length));
 }
 const stateLabel = state => state === 'open' ? 'Открыто по графику' : state === 'closed' ? 'Закрыто по графику' : 'Уточните часы работы';
 const routeUrl = c => `https://yandex.ru/maps/?rtext=~${c.lat},${c.lon}&rtt=auto`;
-function renderPins() {
-    if (!map) return;
-    markers.clearLayers(); pinById.clear();
-    filtered().forEach((c, index) => {
-        const popup = element('div');
-        popup.append(element('strong', '', c.name), element('div', '', stateLabel(c.state)), element('div', '', readableHours(c.hours)));
-        c.phones.forEach(phone => popup.append(link(phone.label, phone.href)));
-        if (!c.phones.length) popup.append(element('div', '', 'Телефон не указан'));
-        popup.append(link('Проложить маршрут ↗', routeUrl(c)));
-        const icon = window.L.divIcon({ className: `clinic-map-pin is-${c.state}`, html: `<span><b>${index + 1}</b></span>`, iconSize: [30, 36], iconAnchor: [15, 33], popupAnchor: [0, -30] });
-        const marker = window.L.marker([c.lat, c.lon], { icon, title: c.name, alt: c.name }).bindPopup(popup).addTo(markers);
-        pinById.set(c.id, marker);
-    });
-}
 function render() {
     if (!searched) return;
     const visible = filtered();
@@ -260,10 +281,9 @@ function render() {
         const actions = element('div', 'clinic-card-actions');
         const onMap = element('button', '', 'На карте'); onMap.type = 'button';
         onMap.addEventListener('click', () => {
-            const marker = pinById.get(c.id);
-            if (!map || !marker) { status('Карта пока недоступна. Воспользуйтесь кнопкой «Маршрут».'); return; }
+            selectedMapId = c.id;
+            renderMap();
             $('clinicMap').scrollIntoView({ block: 'center', behavior: 'instant' });
-            map.setView([c.lat, c.lon], 16, { animate: false }); marker.openPopup();
         });
         actions.append(onMap, link('Маршрут ↗', routeUrl(c)), link('В справочнике ↗', `https://www.openstreetmap.org/${c.id}`));
         card.append(actions); $('clinicResults').append(card);
@@ -279,7 +299,7 @@ function render() {
         }
         $('clinicResults').append(empty);
     }
-    renderPins();
+    renderMap();
     const date = new Date(dataTimestamp);
     $('clinicDataDate').textContent = Number.isNaN(date.getTime()) ? '' : ` Состояние базы: ${date.toLocaleDateString('ru-RU')}.`;
 }
@@ -298,6 +318,7 @@ export function open(options = {}) {
         $('clinicCancel').addEventListener('click', cancel);
         $('clinicRefresh').addEventListener('click', () => searchClinics());
         $('clinicRadius').addEventListener('change', () => { if (center) searchClinics(); });
+        $('clinicMapSelect').addEventListener('change', event => { selectedMapId = event.target.value; renderMap(); });
         ['clinicOpenOnly', 'clinicPhoneOnly'].forEach(id => $(id).addEventListener('change', render));
         document.addEventListener('visibilitychange', () => { if (!document.hidden && $('clinicsPage').offsetParent && !busy) render(); });
         window.addEventListener('petcare:clinics-close', close);
@@ -305,15 +326,16 @@ export function open(options = {}) {
     }
     clearInterval(timer);
     timer = setInterval(() => { if (!document.hidden && $('clinicsPage').offsetParent && !busy) render(); }, 60000);
-    if (map) { requestAnimationFrame(() => map.invalidateSize()); render(); }
-    else if (center) showMap(center, Number($('clinicRadius').value), generation);
+    if (searched) render();
     $('clinicAddress').focus({ preventScroll: true });
+    checkLocationPermission();
 }
 function close() { cancel(); clearInterval(timer); timer = null; }
 function reset() {
     close(); cache.clear(); center = null; records = []; searched = false; fetchedAt = 0; dataTimestamp = '';
-    if (map) { map.remove(); map = null; markers = null; originLayer = null; }
-    pinById.clear();
+    mapFrame?.remove(); mapFrame = null; selectedMapId = null; mapRadius = 5;
+    $('clinicMapControls').hidden = true;
+    $('clinicMapSelect').replaceChildren();
     $('clinicAddress').value = '';
     $('clinicRadius').value = '5';
     $('clinicOpenOnly').checked = true; $('clinicPhoneOnly').checked = true;
@@ -323,4 +345,5 @@ function reset() {
     const placeholder = element('div', 'clinic-map-empty', 'Выберите место для поиска клиник');
     $('clinicMap').replaceChildren(placeholder);
     status(INITIAL_MESSAGE); updateAlternative();
+    showLocationPermission(locationPermission?.state || 'prompt');
 }

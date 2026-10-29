@@ -1,7 +1,8 @@
 // Public clinic search grants. Policy: https://operations.osmfoundation.org/policies/nominatim/
 // A DB lease serializes requests; browsers load and cache public listings for 15 minutes.
 function allowedOrigin(origin: string) {
-  if (origin === 'https://stormman745.github.io') return true;
+  // Local index.html has an opaque "null" origin; the gateway still requires a JWT.
+  if (origin === 'https://stormman745.github.io' || origin === 'null') return true;
   try { return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname); } catch { return false; }
 }
 function response(req: Request, body: unknown, status = 200) {

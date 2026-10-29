@@ -1,4 +1,4 @@
-const CACHE_NAME = "petcare-shell-v27";
+const CACHE_NAME = "petcare-shell-v28";
 const SHELL_FILES = [
     "/",
     "/index.html",
@@ -8,8 +8,7 @@ const SHELL_FILES = [
     "/experience.js",
     "/experience.css",
     "/clinics.css",
-    "/clinics.js",
-    "/clinic-data.js",
+    "/clinics.bundle.js",
     "/pet-scene.js",
     "/frameguard.js",
     "/manifest.webmanifest",

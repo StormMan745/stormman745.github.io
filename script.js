@@ -371,6 +371,23 @@ function hideAllPages() {
 }
 
 let clinicsReturnPage = 'homePage';
+let clinicsRuntimePromise = null;
+function loadClinicsRuntime() {
+    if (window.PetCareClinics?.open) return Promise.resolve(window.PetCareClinics);
+    if (!clinicsRuntimePromise) clinicsRuntimePromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'clinics.bundle.js?v=20261029-local-yandex';
+        const fail = () => {
+            script.remove();
+            clinicsRuntimePromise = null;
+            reject(new Error('CLINICS_LOAD_FAILED'));
+        };
+        script.onerror = fail;
+        script.onload = () => window.PetCareClinics?.open ? resolve(window.PetCareClinics) : fail();
+        document.head.append(script);
+    });
+    return clinicsRuntimePromise;
+}
 async function showClinics() {
     const currentPage = Array.from(document.querySelectorAll('.page')).find(page => page.offsetParent);
     if (currentPage && currentPage.id !== 'clinicsPage') clinicsReturnPage = currentPage.id;
@@ -379,7 +396,7 @@ async function showClinics() {
     markActiveNavigation(clinicsReturnPage === 'healthPage' ? 'nav-health' : clinicsReturnPage === 'profilePage' ? 'nav-profile' : 'nav-home');
     window.scrollTo({ top: 0, behavior: 'instant' });
     try {
-        const clinics = await import('./clinics.js?v=20261029-clinics');
+        const clinics = await loadClinicsRuntime();
         if (document.getElementById('clinicsPage').offsetParent) clinics.open({ requestDirectory: requestClinicDirectory });
     } catch {
         const status = document.getElementById('clinicStatus');
@@ -391,7 +408,11 @@ async function requestClinicDirectory(body, signal) {
     const userId = activeUserId;
     const { data, error } = await supabaseClient.auth.getSession();
     const session = data?.session;
-    if (error || !userId || activeUserId !== userId || !session?.access_token || session.user?.id !== userId) throw new Error('PETCARE_AUTH_REQUIRED');
+    if (error || !userId || activeUserId !== userId || !session?.access_token || session.user?.id !== userId) {
+        const authError = new Error('PETCARE_AUTH_REQUIRED');
+        authError.status = 401;
+        throw authError;
+    }
     const timeout = new AbortController();
     const cancel = () => timeout.abort();
     signal.addEventListener('abort', cancel, { once: true });
@@ -4074,6 +4095,16 @@ const petCareClickActions = {
 };
 
 function bindPetCareActions() {
+    // Always stop native submission, including before the optional clinic UI loads.
+    document.addEventListener('submit', event => {
+        if (event.target instanceof HTMLFormElement && event.target.id === 'clinicSearchForm') {
+            event.preventDefault();
+            if (!window.PetCareClinics) {
+                const status = document.getElementById('clinicStatus');
+                if (status && status.dataset.kind !== 'error') status.textContent = 'Поиск ещё загружается. Попробуйте через несколько секунд.';
+            }
+        }
+    }, true);
     document.addEventListener("click", event => {
         const element = event.target instanceof Element
             ? event.target.closest("[data-pc-click]")

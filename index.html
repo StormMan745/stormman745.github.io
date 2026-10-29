@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org https://qexiyikdmdbdxgusqnee.supabase.co; media-src 'self' blob: https://qexiyikdmdbdxgusqnee.supabase.co; connect-src 'self' https://photon.komoot.io https://nominatim.openstreetmap.org https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://qexiyikdmdbdxgusqnee.supabase.co; media-src 'self' blob: https://qexiyikdmdbdxgusqnee.supabase.co; connect-src 'self' https://photon.komoot.io https://nominatim.openstreetmap.org https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; frame-src https://yandex.ru https://api-maps.yandex.ru; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>PetCare</title>
@@ -17,7 +17,7 @@
     <script src="install.js?v=20261028-studio"></script>
     <link rel="stylesheet" href="style.css?v=20261028-studio">
     <link rel="stylesheet" href="experience.css?v=20261028-profile-photo">
-    <link rel="stylesheet" href="clinics.css?v=20261029-clinics">
+    <link rel="stylesheet" href="clinics.css?v=20261029-local-yandex">
 </head>
 <body>
 <div class="app">
@@ -511,15 +511,16 @@
                 <label for="clinicAddress">Город, улица или адрес</label>
                 <div class="clinic-search-row"><input type="search" id="clinicAddress" placeholder="Например: Москва, Тверская 10" maxlength="200" autocomplete="off" enterkeyhint="search"><button type="submit" id="clinicSearchButton" class="clinic-button clinic-button-primary">Найти</button></div>
             </form>
-            <div class="clinic-search-options"><button type="button" id="clinicLocateButton" class="clinic-button">⌖ Рядом со мной</button><label class="clinic-radius" for="clinicRadius">В радиусе <select id="clinicRadius"><option value="3">3 км</option><option value="5" selected>5 км</option><option value="10">10 км</option><option value="15">15 км</option></select></label><button type="button" id="clinicCancel" class="clinic-button" hidden>Отменить</button></div>
+            <div class="clinic-search-options"><button type="button" id="clinicLocateButton" class="clinic-button">⌖ Разрешить геопозицию</button><label class="clinic-radius" for="clinicRadius">В радиусе <select id="clinicRadius"><option value="3">3 км</option><option value="5" selected>5 км</option><option value="10">10 км</option><option value="15">15 км</option></select></label><button type="button" id="clinicCancel" class="clinic-button" hidden>Отменить</button></div>
+            <p id="clinicLocationStatus" class="clinic-map-note" role="status">Разрешите доступ, чтобы показать ваше местоположение и клиники рядом.</p>
             <div id="clinicCandidates" aria-label="Найденные адреса"></div>
             <div class="clinic-filters"><label><input type="checkbox" id="clinicOpenOnly" checked>Открыто сейчас</label><label><input type="checkbox" id="clinicPhoneOnly" checked>Есть телефон</label></div>
             <p class="clinic-privacy">Адрес или координаты передаются картографическим сервисам только при поиске. В профиле местоположение не сохраняется.</p>
         </div>
-        <div id="clinicStatus" class="clinic-status" role="status" aria-live="polite">Введите город и улицу или нажмите «Рядом со мной».</div>
+        <div id="clinicStatus" class="clinic-status" role="status" aria-live="polite">Введите город и улицу или нажмите «Разрешить геопозицию».</div>
         <div class="clinic-results-heading"><div><h3>Помощь поблизости</h3><p id="clinicAreaLabel"></p><p id="clinicResultSummary"></p></div><button type="button" class="clinic-button" id="clinicRefresh" hidden>Повторить поиск</button></div>
         <div class="clinic-layout">
-            <div class="clinic-map-wrap"><div id="clinicMap" aria-label="Карта ветеринарных клиник"><div class="clinic-map-empty"><span aria-hidden="true">⌖</span>Здесь появятся клиники.<br>Выберите место для поиска.</div></div><p class="clinic-map-note" id="clinicMapNote">Нажмите на отметку, чтобы увидеть телефон и график.</p></div>
+            <div class="clinic-map-wrap"><div id="clinicMapControls" class="clinic-map-controls" hidden><label for="clinicMapSelect">Показать на карте</label><select id="clinicMapSelect" aria-label="Выбрать клинику или свою геопозицию на карте"></select></div><div id="clinicMap" aria-label="Яндекс Карты — ветеринарные клиники"><div class="clinic-map-empty"><span aria-hidden="true">⌖</span>Здесь появится карта.<br>Выберите место для поиска.</div></div><p class="clinic-map-note" id="clinicMapNote">Разрешите геопозицию или выберите клинику из результатов поиска.</p></div>
             <div id="clinicResults" aria-label="Список ветеринарных клиник"></div>
         </div>
         <a id="clinicExternalSearch" class="clinic-alternative" href="https://yandex.ru/maps/?text=%D0%B2%D0%B5%D1%82%D0%B5%D1%80%D0%B8%D0%BD%D0%B0%D1%80%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BB%D0%B8%D0%BD%D0%B8%D0%BA%D0%B8" target="_blank" rel="noopener noreferrer">Также посмотреть в Яндекс Картах ↗</a>
@@ -785,7 +786,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
 <script src="experience.js?v=20261028-studio"></script>
-<script src="script.js?v=20261029-clinics"></script>
+<script src="script.js?v=20261029-local-yandex"></script>
 <script type="module" src="pet-scene.js?v=20261028-studio"></script>
 </body>
 </html>

@@ -34,20 +34,13 @@
 #clinicAreaLabel, #clinicResultSummary { margin: 0; color: #78866e; font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
 .clinic-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 .clinic-map-wrap { position: sticky; top: 20px; min-width: 0; }
-#clinicMap { height: 495px; background: #e9efde; border: 1px solid #dce4d0; border-radius: 20px; isolation: isolate; z-index: 0; }
+#clinicMap { height: 495px; overflow: hidden; background: #e9efde; border: 1px solid #dce4d0; border-radius: 20px; isolation: isolate; z-index: 0; }
+.clinic-yandex-map { display: block; width: 100%; height: 100%; border: 0; }
+.clinic-map-controls { margin-bottom: 10px; }
+.clinic-map-controls label { display: block; margin: 0 0 7px; font-size: 12px; color: #587348; }
+#clinicMapSelect { width: 100%; min-width: 0; margin: 0; padding: 12px; background: #fffefa; border: 1px solid #dce3d3; border-radius: 12px; color: #36543d; font: inherit; font-size: 13px; }
 .clinic-map-empty { display: grid; place-content: center; gap: 14px; height: 100%; padding: 28px; text-align: center; color: #81916f; font-size: 13px; line-height: 1.7; background-image: linear-gradient(30deg, transparent 46%, #ffffff85 47%, #ffffff85 50%, transparent 51%), linear-gradient(100deg, transparent 46%, #ffffff80 47%, #ffffff80 49%, transparent 50%); }
 .clinic-map-empty span { font-size: 42px; }
-#clinicMap .leaflet-control-attribution { font-size: 10px; background: #ffffffed; }
-#clinicMap .leaflet-control-attribution a { color: #286847; }
-#clinicMap .leaflet-bar a { color: #315837; }
-#clinicMap .leaflet-popup-content { margin: 16px; min-width: 170px; font: 13px/1.6 'Segoe UI', sans-serif; color: #2d4936; }
-#clinicMap .leaflet-popup-content strong { display: block; font-size: 15px; }
-#clinicMap .leaflet-popup-content a { display: block; padding-top: 8px; color: #1c6747; }
-.clinic-map-pin { border: 0; background: none; }
-.clinic-map-pin span { display: grid; place-items: center; width: 30px; height: 30px; border: 2px solid #fff; border-radius: 50% 50% 50% 7px; transform: rotate(-45deg); box-shadow: 0 3px 6px #1c3d2430; background: #738268; color: white; }
-.clinic-map-pin b { transform: rotate(45deg); font: 700 11px 'Segoe UI', sans-serif; }
-.clinic-map-pin.is-open span { background: #287853; }
-.clinic-map-pin.is-closed span { background: #ab7457; }
 .clinic-map-note { margin: 9px 3px; font-size: 11px; line-height: 1.6; color: #89937e; }
 #clinicResults { display: grid; gap: 12px; min-width: 0; }
 .clinic-card { border: 1px solid #e1e6d8; border-radius: 20px; background: #fffefa; padding: 20px; min-width: 0; }
