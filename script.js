@@ -376,7 +376,7 @@ function loadClinicsRuntime() {
     if (window.PetCareClinics?.open) return Promise.resolve(window.PetCareClinics);
     if (!clinicsRuntimePromise) clinicsRuntimePromise = new Promise((resolve, reject) => {
         const script = document.createElement('script');
-        script.src = 'clinics.bundle.js?v=20261029-local-yandex';
+        script.src = 'clinics.bundle.js?v=20261029-russian-maps';
         const fail = () => {
             script.remove();
             clinicsRuntimePromise = null;

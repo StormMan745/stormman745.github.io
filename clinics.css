@@ -34,6 +34,11 @@
 #clinicAreaLabel, #clinicResultSummary { margin: 0; color: #78866e; font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
 .clinic-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 .clinic-map-wrap { position: sticky; top: 20px; min-width: 0; }
+.clinic-map-provider { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; padding: 12px 14px; border: 1px solid #e4e7db; border-radius: 14px; background: #fffefa; }
+.clinic-map-provider > span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: #ffebe7; color: #cf3530; font-size: 24px; font-weight: 650; }
+.clinic-map-provider strong { display: block; font-size: 14px; color: #3d503d; }
+.clinic-map-provider small { display: block; margin-top: 3px; font-size: 11px; color: #87917a; }
+.clinic-map-provider a { margin-left: auto; padding: 5px; color: #6c8259; font-size: 21px; text-decoration: none; }
 #clinicMap { height: 495px; overflow: hidden; background: #e9efde; border: 1px solid #dce4d0; border-radius: 20px; isolation: isolate; z-index: 0; }
 .clinic-yandex-map { display: block; width: 100%; height: 100%; border: 0; }
 .clinic-map-controls { margin-bottom: 10px; }

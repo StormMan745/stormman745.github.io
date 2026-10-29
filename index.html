@@ -17,7 +17,7 @@
     <script src="install.js?v=20261028-studio"></script>
     <link rel="stylesheet" href="style.css?v=20261028-studio">
     <link rel="stylesheet" href="experience.css?v=20261028-profile-photo">
-    <link rel="stylesheet" href="clinics.css?v=20261029-local-yandex">
+    <link rel="stylesheet" href="clinics.css?v=20261029-russian-maps">
 </head>
 <body>
 <div class="app">
@@ -520,11 +520,11 @@
         <div id="clinicStatus" class="clinic-status" role="status" aria-live="polite">Введите город и улицу или нажмите «Разрешить геопозицию».</div>
         <div class="clinic-results-heading"><div><h3>Помощь поблизости</h3><p id="clinicAreaLabel"></p><p id="clinicResultSummary"></p></div><button type="button" class="clinic-button" id="clinicRefresh" hidden>Повторить поиск</button></div>
         <div class="clinic-layout">
-            <div class="clinic-map-wrap"><div id="clinicMapControls" class="clinic-map-controls" hidden><label for="clinicMapSelect">Показать на карте</label><select id="clinicMapSelect" aria-label="Выбрать клинику или свою геопозицию на карте"></select></div><div id="clinicMap" aria-label="Яндекс Карты — ветеринарные клиники"><div class="clinic-map-empty"><span aria-hidden="true">⌖</span>Здесь появится карта.<br>Выберите место для поиска.</div></div><p class="clinic-map-note" id="clinicMapNote">Разрешите геопозицию или выберите клинику из результатов поиска.</p></div>
+            <div class="clinic-map-wrap"><div class="clinic-map-provider"><span aria-hidden="true">Я</span><div><strong>Яндекс Карты</strong><small>Карта и маршруты</small></div><a href="https://yandex.ru/maps/" target="_blank" rel="noopener noreferrer" aria-label="Открыть Яндекс Карты">↗</a></div><div id="clinicMapControls" class="clinic-map-controls" hidden><label for="clinicMapSelect">Показать на карте</label><select id="clinicMapSelect" aria-label="Выбрать клинику или свою геопозицию на карте"></select></div><div id="clinicMap" aria-label="Яндекс Карты — ветеринарные клиники"><div class="clinic-map-empty"><span aria-hidden="true">⌖</span>Яндекс Карты<br>Разрешите геопозицию или укажите адрес.</div></div><p class="clinic-map-note" id="clinicMapNote">Разрешите геопозицию или выберите клинику из результатов поиска.</p></div>
             <div id="clinicResults" aria-label="Список ветеринарных клиник"></div>
         </div>
         <a id="clinicExternalSearch" class="clinic-alternative" href="https://yandex.ru/maps/?text=%D0%B2%D0%B5%D1%82%D0%B5%D1%80%D0%B8%D0%BD%D0%B0%D1%80%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BB%D0%B8%D0%BD%D0%B8%D0%BA%D0%B8" target="_blank" rel="noopener noreferrer">Также посмотреть в Яндекс Картах ↗</a>
-        <p class="clinic-footnote">«Открыто сейчас» — по указанному графику и местному времени клиники. Перед поездкой позвоните: приём и праздничные часы могут отличаться. Клиники без понятного графика не включаются в этот фильтр.<br>Данные: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · Поиск адресов: <a href="https://photon.komoot.io/" target="_blank" rel="noopener noreferrer">Photon</a> · Поиск клиник: <a href="https://operations.osmfoundation.org/policies/nominatim/" target="_blank" rel="noopener noreferrer">Nominatim</a>. Показано до 40 подходящих мест; список может быть неполным. Не у всех клиник указан телефон и график.<span id="clinicDataDate"></span></p>
+        <p class="clinic-footnote">«Открыто сейчас» — по указанному графику и местному времени клиники. Перед поездкой позвоните: приём и праздничные часы могут отличаться. Клиники без понятного графика не включаются в этот фильтр.<br>Карта и маршруты: <a href="https://yandex.ru/maps/" target="_blank" rel="noopener noreferrer">Яндекс Карты</a>. Сведения о клиниках: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>. Поиск адресов: <a href="https://photon.komoot.io/" target="_blank" rel="noopener noreferrer">Photon</a> · Поиск клиник: <a href="https://operations.osmfoundation.org/policies/nominatim/" target="_blank" rel="noopener noreferrer">Nominatim</a>. Показано до 40 подходящих мест; список может быть неполным. Не у всех клиник указан телефон и график.<span id="clinicDataDate"></span></p>
     </section>
 
     <section class="page" id="profilePage">
@@ -786,7 +786,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
 <script src="experience.js?v=20261028-studio"></script>
-<script src="script.js?v=20261029-local-yandex"></script>
+<script src="script.js?v=20261029-russian-maps"></script>
 <script type="module" src="pet-scene.js?v=20261028-studio"></script>
 </body>
 </html>
