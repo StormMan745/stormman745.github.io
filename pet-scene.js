@@ -1,4 +1,19 @@
-// Local, lazily loaded Three.js. A single canvas is shared by the visible pet card.
+// Classic script so animated pets also work when opening index.html directly.
+(() => {
+const rendererUrl = new URL('./assets/vendor/three/three.runtime.min.js?v=20261029-animated-pets', document.currentScript.src).href;
+let rendererPromise;
+function loadRenderer() {
+    if (window.PetCareThree) return Promise.resolve(window.PetCareThree);
+    if (!rendererPromise) rendererPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = rendererUrl;
+        script.onload = () => window.PetCareThree ? resolve(window.PetCareThree) : reject(new Error('Renderer unavailable'));
+        script.onerror = () => { script.remove(); reject(new Error('Renderer unavailable')); };
+        document.head.appendChild(script);
+    }).catch(error => { rendererPromise = null; throw error; });
+    return rendererPromise;
+}
+// A single canvas is shared by the visible pet card.
 const slots = [...document.querySelectorAll('[data-pet-scene]')];
 let enginePromise;
 let activeSlot;
@@ -13,7 +28,7 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const kinds = { '🐶': 'dog', '🐕': 'puppy', '🐱': 'cat', '🐰': 'rabbit', '🐹': 'hamster', '🐦': 'bird', '🦜': 'parrot', '🐢': 'turtle', '🐠': 'fish' };
 
 async function createEngine() {
-    const T = await import('./assets/vendor/three/three.module.min.js');
+    const T = await loadRenderer();
     const renderer = new T.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power' });
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.7));
     renderer.setClearColor(0x000000, 0);
@@ -256,13 +271,14 @@ async function chooseSlot() {
     const slot = slots.find(item => !item.hidden && item.getClientRects().length && item.closest('.page')?.style.display !== 'none');
     if (!slot) { visible = false; cancelAnimationFrame(animationId); return; }
     const animal = kinds[slot.dataset.animal] || 'dog';
-    if (activeSlot === slot && currentAnimal === animal && enginePromise) return;
+    const sameModel = activeSlot === slot && currentAnimal === animal;
     activeSlot = slot;
     currentAnimal = animal;
     const rect = slot.getBoundingClientRect();
     visible = rect.bottom > 0 && rect.top < innerHeight;
+    if (sameModel && enginePromise) { resume(); return; }
     if (!enginePromise && !visible) return;
-    if (!enginePromise) enginePromise = createEngine().catch(error => { console.warn('PetCare 3D unavailable:', error.name); return null; });
+    if (!enginePromise) enginePromise = createEngine().catch(error => { enginePromise = null; console.warn('PetCare 3D unavailable:', error.name); return null; });
     const engine = await enginePromise;
     if (!engine || activeSlot !== slot || currentAnimal !== animal) return;
     rotation = tilt = 0;
@@ -297,3 +313,4 @@ document.querySelectorAll('.page').forEach(page => mutationObserver.observe(page
 document.addEventListener('visibilitychange', resume);
 reducedMotion.addEventListener('change', resume);
 chooseSlot();
+})();

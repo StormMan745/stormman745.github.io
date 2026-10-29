@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "scripts": {
+    "build:pet-scene": "node build-pet-scene.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.5"
+  }
+}
