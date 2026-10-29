@@ -72,3 +72,7 @@
 @media (max-width: 1199px) { .clinic-layout { grid-template-columns: 1fr; } .clinic-map-wrap { position: static; } #clinicMap { height: 310px; } #clinicResults { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 599px) { .clinic-search-panel { padding: 17px; } .clinic-search-row { flex-wrap: wrap; } #clinicAddress { flex-basis: 180px; } #clinicSearchButton { flex: 1; } .clinic-search-options { gap: 10px; } .clinic-search-options > button { flex: 1; } #clinicResults { grid-template-columns: 1fr; } #clinicMap { height: 280px; } .clinic-entry { padding: 17px; gap: 14px; } .clinic-entry strong { font-size: 15px; } .clinic-entry small { font-size: 11px; } .clinic-results-heading { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .clinic-status[data-kind="loading"]::before { animation: none; } .clinic-entry:hover { transform: none; } }
+.clinic-layout.clinic-native-layout { display: block; }
+.clinic-native-layout .clinic-map-wrap { position: static; }
+#clinicsPage .clinic-native-layout #clinicMap { height: 680px; }
+@media (max-width: 599px) { #clinicsPage .clinic-native-layout #clinicMap { height: 650px; } }

@@ -376,7 +376,7 @@ function loadClinicsRuntime() {
     if (window.PetCareClinics?.open) return Promise.resolve(window.PetCareClinics);
     if (!clinicsRuntimePromise) clinicsRuntimePromise = new Promise((resolve, reject) => {
         const script = document.createElement('script');
-        script.src = 'clinics.bundle.js?v=20261029-russian-maps';
+        script.src = 'clinics.bundle.js?v=20261029-yandex-directory';
         const fail = () => {
             script.remove();
             clinicsRuntimePromise = null;
@@ -397,42 +397,13 @@ async function showClinics() {
     window.scrollTo({ top: 0, behavior: 'instant' });
     try {
         const clinics = await loadClinicsRuntime();
-        if (document.getElementById('clinicsPage').offsetParent) clinics.open({ requestDirectory: requestClinicDirectory });
+        if (document.getElementById('clinicsPage').offsetParent) clinics.open();
     } catch {
         const status = document.getElementById('clinicStatus');
         status.textContent = 'Не удалось загрузить поиск клиник. Проверьте интернет и откройте раздел ещё раз.';
         status.dataset.kind = 'error';
     }
 }
-async function requestClinicDirectory(body, signal) {
-    const userId = activeUserId;
-    const { data, error } = await supabaseClient.auth.getSession();
-    const session = data?.session;
-    if (error || !userId || activeUserId !== userId || !session?.access_token || session.user?.id !== userId) {
-        const authError = new Error('PETCARE_AUTH_REQUIRED');
-        authError.status = 401;
-        throw authError;
-    }
-    const timeout = new AbortController();
-    const cancel = () => timeout.abort();
-    signal.addEventListener('abort', cancel, { once: true });
-    if (signal.aborted) timeout.abort();
-    const deadline = setTimeout(cancel, 40000);
-    try {
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/petcare-clinics`, {
-            method: 'POST', signal: timeout.signal,
-            headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        if (!response.ok) {
-            const error = new Error('CLINIC_DIRECTORY_UNAVAILABLE');
-            error.status = response.status;
-            throw error;
-        }
-        return await response.json();
-    } finally { clearTimeout(deadline); signal.removeEventListener('abort', cancel); }
-}
-
 function closeClinics() {
     if (clinicsReturnPage === 'healthPage') showHealth();
     else if (clinicsReturnPage === 'profilePage') showProfile();
