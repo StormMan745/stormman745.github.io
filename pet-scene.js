@@ -105,6 +105,24 @@ async function createEngine() {
         ring.rotation.x = Math.PI / 2;
         ball(parent, 0xe8bf72, 0, y - 0.105, radius + 0.055, 0.07, 0.09, 0.035);
     };
+    // Wag around the attachment inside the body, not around the model origin.
+    const tailJoint = (parent, x, y, z) => {
+        const joint = new T.Group();
+        joint.name = 'tail-joint';
+        joint.position.set(x, y, z);
+        parent.add(joint);
+        return joint;
+    };
+    const roundedTail = (parent, color, points, radius) => {
+        const [rootX, rootY, rootZ] = points[0];
+        const joint = tailJoint(parent, rootX, rootY, rootZ);
+        const localPoints = points.map(([x, y, z]) => [x - rootX, y - rootY, z - rootZ]);
+        curve(joint, color, localPoints, radius);
+        // TubeGeometry has open ends. Rounded caps keep the tip and root closed.
+        ball(joint, color, 0, 0, 0, radius);
+        ball(joint, color, ...localPoints[localPoints.length - 1], radius);
+        return joint;
+    };
 
     function buildAnimal(kind) {
         if (pet) {
@@ -159,17 +177,17 @@ async function createEngine() {
             if (kind === 'dog' || puppy) ball(head, 0xdc8b91, 0.07, -0.27, 0.57, 0.075, 0.09, 0.045);
             if (cat) {
                 for (let i = -1; i <= 1; i++) { const stripe = ball(head, dark, i * 0.13, 0.32, 0.381, 0.035, 0.12, 0.022); stripe.rotation.z = i * -0.25; }
-                tail = curve(pet, fur, [[-0.32, 0.30, -0.25], [-0.73, 0.30, -0.2], [-0.87, 0.85, -0.15], [-0.77, 1.13, -0.13]], 0.11);
+                tail = roundedTail(pet, fur, [[-0.18, 0.38, -0.25], [-0.64, 0.34, -0.33], [-0.83, 0.78, -0.26], [-0.74, 1.10, -0.20]], 0.11);
                 collar(pet, 1.04, 0.31, 0x899cb4);
             } else if (rabbit || hamster) {
-                ball(pet, cream, 0.36, 0.35, -0.40, 0.18);
+                ball(pet, cream, 0.23, 0.39, -0.34, 0.19);
                 if (hamster) {
                     ball(pet, fur, -0.21, 0.6, 0.43, 0.13, 0.16, 0.12);
                     ball(pet, fur, 0.21, 0.6, 0.43, 0.13, 0.16, 0.12);
                     ball(pet, 0xb68b51, 0, 0.57, 0.51, 0.15, 0.18, 0.1);
                 }
             } else {
-                tail = curve(pet, fur, [[-0.28, 0.40, -0.28], [-0.66, 0.63, -0.38], [-0.74, 0.96, -0.32]], 0.12);
+                tail = roundedTail(pet, fur, [[-0.16, 0.44, -0.25], [-0.56, 0.61, -0.42], [-0.69, 0.94, -0.35]], 0.12);
                 collar(pet, 1.01);
             }
             if (rabbit) pet.scale.setScalar(0.87);
@@ -189,8 +207,9 @@ async function createEngine() {
             const beak = ball(pet, parrot ? 0xe2aa58 : 0xf2c15b, 0, 1.35, 0.50, 0.15, 0.18, 0.20); beak.rotation.x = -0.35;
             ball(pet, 0xac764c, 0, 1.25, 0.51, 0.09, 0.09, 0.12);
             for (let i = -1; i <= 1; i++) { const plume = ball(pet, parrot ? 0x81b7a0 : body, i * 0.10, 1.94 + (i === 0 ? 0.07 : 0), -0.03, 0.07, 0.19, 0.10); plume.rotation.z = -i * 0.26; }
-            tail = new T.Group(); pet.add(tail);
-            for (let i = -1; i <= 1; i++) { const feather = ball(tail, wing, i * 0.12, 0.46, -0.44, 0.09, 0.45, 0.12); feather.rotation.x = -0.55; }
+            tail = tailJoint(pet, 0, 0.64, -0.22);
+            ball(tail, body, 0, 0, 0, 0.18, 0.20, 0.17);
+            for (let i = -1; i <= 1; i++) { const feather = ball(tail, wing, i * 0.10, -0.22, -0.20, 0.10, 0.45, 0.12); feather.rotation.x = 0.55; }
         } else if (kind === 'turtle') {
             const green = 0x91b492;
             for (const x of [-0.5, 0.5]) for (const z of [-0.35, 0.4]) ball(pet, green, x, 0.18, z, 0.21, 0.18, 0.25);
@@ -206,7 +225,8 @@ async function createEngine() {
         } else {
             ball(pet, 0xf0af71, 0, 1.0, 0, 0.63, 0.48, 0.38);
             ball(pet, 0xffddb4, 0.12, 0.88, 0.12, 0.46, 0.26, 0.28);
-            tail = new T.Group(); tail.position.set(-0.55, 1, 0); pet.add(tail);
+            tail = tailJoint(pet, -0.48, 1, 0);
+            ball(tail, 0xf0af71, -0.04, 0, 0, 0.20, 0.14, 0.13);
             for (const y of [-1, 1]) { const fin = ball(tail, 0xdf8767, -0.18, y * 0.20, 0, 0.27, 0.29, 0.06); fin.rotation.z = y * -0.42; }
             ball(pet, 0xe88f6b, 0, 1.42, -0.02, 0.3, 0.14, 0.07);
             const fin = ball(pet, 0xdd8869, 0, 0.98, 0.37, 0.22, 0.16, 0.06); fin.rotation.z = -0.5;
