@@ -94,10 +94,10 @@ function petKey(pet: DataRow) {
 }
 
 class ProfileAccessError extends Error {
-  constructor(readonly status: number, message: string) { super(message); }
+  constructor(readonly status: number, message: string, readonly retryAfter = 0) { super(message); }
 }
 
-async function readOwnProfile(request: Request) {
+async function readOwnProfile(request: Request, action: "chat" | "profile-status") {
   const authorization = request.headers.get("authorization") || "";
   if (!/^Bearer\s+\S+$/i.test(authorization)) throw new ProfileAccessError(401, "Войдите в аккаунт PetCare.");
   const url = Deno.env.get("SUPABASE_URL");
@@ -108,6 +108,14 @@ async function readOwnProfile(request: Request) {
   if (!userResponse.ok) throw new ProfileAccessError(userResponse.status === 401 || userResponse.status === 403 ? 401 : 503, "Не удалось подтвердить сессию. Войдите в PetCare снова.");
   const user = await userResponse.json();
   if (typeof user.id !== "string" || !/^[0-9a-f-]{36}$/i.test(user.id)) throw new ProfileAccessError(401, "Не удалось подтвердить аккаунт.");
+  const quotaResponse = await fetch(`${url}/rest/v1/rpc/petcare_consume_request`, {
+    method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_action: action }), signal: AbortSignal.timeout(5000),
+  });
+  if (!quotaResponse.ok) throw new ProfileAccessError(503, "Помощник временно недоступен. Попробуйте немного позже.");
+  const quota = await quotaResponse.json();
+  if (quota?.allowed === false) throw new ProfileAccessError(429, "Слишком много запросов к помощнику. Попробуйте позже.", Math.max(1, Math.min(86400, Number(quota.retryAfter) || 60)));
+  if (quota?.allowed !== true) throw new ProfileAccessError(503, "Помощник временно недоступен. Попробуйте немного позже.");
   const dataUrl = new URL(`${url}/rest/v1/petcare_data`);
   dataUrl.searchParams.set("select", "data,updated_at");
   dataUrl.searchParams.set("user_id", `eq.${user.id}`);
@@ -319,6 +327,10 @@ Deno.serve(async (request) => {
     return jsonResponse(request, { error: "Разрешены только POST-запросы." }, 405);
   }
 
+  if (request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
+    return jsonResponse(request, { error: "Ожидается JSON-запрос." }, 415);
+  }
+
   const authKey = (
     Deno.env.get("GIGACHAT_AUTH_KEY") ||
     Deno.env.get("GIGACHAT_API_KEY") ||
@@ -362,13 +374,17 @@ Deno.serve(async (request) => {
   let profile: ReturnType<typeof buildProfileContext>;
   let profileMeta: Awaited<ReturnType<typeof getLiveProfileMeta>>;
   try {
-    const { saved, updatedAt } = await readOwnProfile(request);
+    const { saved, updatedAt } = await readOwnProfile(request, isProfileStatus ? "profile-status" : "chat");
     profileMeta = await getLiveProfileMeta(saved, scalarText(body.petId), updatedAt);
     if (isProfileStatus) return jsonResponse(request, { profileContext: profileMeta });
     const query = messages.filter(message => message.role === "user").slice(-3).map(message => message.content).join("\n");
     profile = buildProfileContext(saved, scalarText(body.petId), query, body.today);
   } catch (error) {
-    if (error instanceof ProfileAccessError) return jsonResponse(request, { error: error.message }, error.status);
+    if (error instanceof ProfileAccessError) {
+      const response = jsonResponse(request, { error: error.message }, error.status);
+      if (error.retryAfter) response.headers.set("Retry-After", String(error.retryAfter));
+      return response;
+    }
     console.error("PetCare profile read failed:", error instanceof Error ? error.name : "UnknownError");
     return jsonResponse(request, { error: "Не удалось прочитать записи профиля. Попробуйте ещё раз." }, 503);
   }

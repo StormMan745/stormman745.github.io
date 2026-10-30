@@ -2536,6 +2536,7 @@ async function enablePushNotifications() {
         alert("Сначала войдите в аккаунт PetCare.");
         return;
     }
+    const userId = activeUserId;
     if (!isPetCareInstalled()) {
         openInstallHelp(isAppleMobileDevice() ? "ios" : "android");
         return;
@@ -2559,14 +2560,25 @@ async function enablePushNotifications() {
 
         const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
         await navigator.serviceWorker.ready;
+        if (activeUserId !== userId) return;
         let subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+            const { data: linked, error } = await supabaseClient.rpc("petcare_has_push_subscription", {
+                p_endpoint: subscription.endpoint
+            });
+            if (error) throw error;
+            if (activeUserId !== userId) return;
+            if (!linked) {
+                await subscription.unsubscribe();
+                subscription = null;
+            }
+        }
         if (!subscription) {
             subscription = await registration.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: pushBase64UrlToBytes(PUSH_VAPID_PUBLIC_KEY)
             });
         }
-        const userId = activeUserId;
         await savePushSubscription(subscription, userId);
         if (activeUserId !== userId) return;
         const status = document.getElementById("pushSettingsStatus");

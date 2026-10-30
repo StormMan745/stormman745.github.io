@@ -31,6 +31,21 @@ function constantTimeEqual(left: string, right: string) {
   return difference === 0;
 }
 
+// Only browser push providers may receive server-side requests. Never follow
+// user-supplied URLs to arbitrary hosts, local networks, or metadata endpoints.
+function isAllowedPushEndpoint(value: unknown) {
+  if (typeof value !== "string" || value.length > 2048 || /\s/.test(value)) return false;
+  try {
+    const url = new URL(value);
+    const host = url.hostname;
+    return url.protocol === "https:" && !url.username && !url.password && !url.port && !url.hash && (
+      host === "fcm.googleapis.com" || host === "updates.push.services.mozilla.com" ||
+      /^(?:[a-z0-9-]+\.)+push\.apple\.com$/.test(host) ||
+      /^(?:[a-z0-9-]+\.)+notify\.windows\.com$/.test(host)
+    );
+  } catch { return false; }
+}
+
 function localTimeParts(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -129,6 +144,8 @@ function formatPushError(error: unknown) {
 
 Deno.serve(async request => {
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
+  const suppliedToken = request.headers.get("x-petcare-cron-token") || "";
+  if (suppliedToken.length < 24 || suppliedToken.length > 256) return jsonResponse({ error: "Unauthorized" }, 401);
 
   try {
     const { data: runtimeSecrets, error: secretError } = await admin.rpc("petcare_get_push_runtime_secrets");
@@ -168,7 +185,8 @@ Deno.serve(async request => {
       const userId = String(device.user_id);
       const account = accountById.get(userId);
       const subscription = device.subscription;
-      if (!account || !subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+      if (!account || !subscription?.endpoint || subscription.endpoint !== device.endpoint ||
+          !isAllowedPushEndpoint(subscription.endpoint) || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
         skipped += 1;
         continue;
       }
@@ -235,6 +253,7 @@ Deno.serve(async request => {
             urgency: "high",
             topic: notificationTag,
             vapidDetails,
+            timeout: 10000,
           });
           const { error: updateError } = await admin
             .from("petcare_push_delivery_log")
