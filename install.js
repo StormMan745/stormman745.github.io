@@ -1,5 +1,6 @@
 /* Capture the browser's installation offer before the rest of the application loads. */
 (() => {
+    if (window.PetCareNative) return;
     let offer = null;
     let busy = false;
     let installedThisVisit = false;

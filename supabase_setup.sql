@@ -1,5 +1,6 @@
 -- Run this once in Supabase Dashboard > SQL Editor.
 -- Stores each signed-in user's PetCare application data in a row protected by RLS.
+-- For the document library, also apply supabase/migrations/20261031114822_petcare_documents.sql once.
 
 create table if not exists public.petcare_data (
     user_id uuid primary key references auth.users (id) on delete cascade,

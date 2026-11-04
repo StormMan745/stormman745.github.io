@@ -98,8 +98,7 @@
         const sequence = ++loadSequence;
         status('Загружаю документы…');
         try {
-            const { data, error } = await supabaseClient.from(TABLE).select('*')
-                .eq('user_id', ctx.userId).eq('pet_id', ctx.petId).order('document_date', { ascending: false });
+            const data = await PetCareFiles.documentRows(ctx.userId); const error = null;
             if (!current(ctx) || sequence !== loadSequence) return;
             if (error) throw error;
             rows = (data || []).filter(row => row.user_id === ctx.userId && row.pet_id === ctx.petId);
@@ -149,6 +148,8 @@
                 if (row.record_id && !record) info.append(node('small', '', 'Медицинская запись удалена. Документ сохранён.'));
                 const actions = node('div', 'document-actions');
                 actions.append(button('Печать', 'print', row.id), button('Открыть ↗', 'open', row.id), button('Скачать', 'download', row.id), button('Изменить', 'edit', row.id), button('Удалить', 'delete', row.id));
+                if(row.pending)info.append(node('small','','Ожидает отправки'));
+                if(row.pendingConflict)actions.prepend(button('Разобрать конфликт','resolve-sync',row.id));
                 card.append(node('span', 'document-file-icon', row.mime_type === 'application/pdf' ? 'PDF' : 'СКАН'), info, actions);
                 group.append(card);
             });
@@ -214,38 +215,22 @@
         status(editId ? 'Сохраняю изменения…' : 'Загружаю оригинал…');
         try {
             if (editId) {
-                const { error } = await supabaseClient.from(TABLE).update(fields)
-                    .eq('id', editId).eq('user_id', ctx.userId).eq('pet_id', ctx.petId).select('id').single();
-                if (error) throw new Error('Изменения не сохранены. Проверьте интернет и повторите попытку.');
+                const row=rows.find(r=>r.id===editId);
+                if(!row)throw new Error('Документ не найден. Обновите список.');
+                await PetCareFiles.editDocument(row,fields);
             } else {
-                const { mime, extension } = await inspectFile(file);
-                if (!current(ctx)) return;
-                const id = crypto.randomUUID();
-                const row = { ...fields, id, user_id: ctx.userId, pet_id: ctx.petId,
-                    file_name: file.name.slice(0, 255), mime_type: mime, file_size: file.size,
-                    storage_path: `${ctx.userId}/${id}/original.${extension}` };
-                const { error: uploadError } = await supabaseClient.storage.from(BUCKET).upload(row.storage_path, file, { contentType: mime, upsert: false, cacheControl: '60' });
-                if (uploadError) throw new Error('Файл не загружен. Проверьте интернет и повторите попытку.');
-                if (!current(ctx)) {
-                    if (activeUserId === ctx.userId) await supabaseClient.storage.from(BUCKET).remove([row.storage_path]);
-                    return;
-                }
-                const { error } = await supabaseClient.from(TABLE).insert(row).select('id').single();
-                if (error && activeUserId === ctx.userId) {
-                    // A lost response can follow a successful INSERT. Never delete that file.
-                    const confirmation = await supabaseClient.from(TABLE).select('id').eq('id', id).eq('user_id', ctx.userId).maybeSingle();
-                    if (confirmation.error) throw new Error('Не удалось подтвердить сохранение. Нажмите «Обновить» и проверьте список перед повторной загрузкой.');
-                    if (!confirmation.data) {
-                        await supabaseClient.storage.from(BUCKET).remove([row.storage_path]);
-                        throw new Error('Документ не сохранён. Повторите загрузку.');
-                    }
-                }
+                const {mime,extension}=await inspectFile(file);
+                if(!current(ctx))return;
+                const id=crypto.randomUUID();
+                const row={...fields,id,user_id:ctx.userId,pet_id:ctx.petId,file_name:file.name.slice(0,255),mime_type:mime,file_size:file.size,storage_path:ctx.userId+'/'+id+'/original.'+extension};
+                await PetCareFiles.putDocument(row,file);
+                if(current(ctx)){appData.preferences={...appData.preferences,documentAdded:true};saveData().catch(()=>{});}
             }
             if (!current(ctx)) return;
             resetEditor();
             el('documentEditor').open = false;
             await load();
-            if (current(ctx) && el('documentStatus').dataset.kind !== 'error') status(editId ? 'Изменения сохранены.' : 'Документ сохранён в аккаунте.');
+            if (current(ctx) && el('documentStatus').dataset.kind !== 'error') status(await PetCareFiles.pending(ctx.userId) ? 'Сохранено на устройстве. Ожидает отправки при появлении связи.' : 'Документ сохранён в аккаунте.');
         } catch (error) {
             if (current(ctx)) status(error.message || 'Не удалось сохранить документ. Повторите попытку.', true);
         } finally { setBusy(false); }
@@ -268,9 +253,11 @@
     }
 
     async function readFile(row, download) {
+        if (window.PetCareNative) return readNativeFile(row, download ? 'share' : 'open');
         const ctx = context;
         const popup = download ? null : window.open('about:blank', '_blank');
         if (popup) popup.opener = null;
+        if (popup) printWindows.add(popup);
         if (!download && !popup) { status('Разрешите открытие новой вкладки или нажмите «Скачать».', true); return; }
         setBusy(true);
         status(download ? 'Подготавливаю скачивание…' : 'Открываю документ…');
@@ -288,12 +275,12 @@
                 link.remove();
                 setTimeout(() => URL.revokeObjectURL(url), 60000);
             } else {
-                const { data, error } = await supabaseClient.storage.from(BUCKET).createSignedUrl(row.storage_path, 60);
-                if (error || !data?.signedUrl) throw error || new Error('No document URL');
-                if (!current(ctx)) { popup.close(); return; }
-                const url = new URL(data.signedUrl);
-                if (url.origin !== 'https://qexiyikdmdbdxgusqnee.supabase.co') throw new Error('Invalid document URL');
-                popup.location.replace(url.href);
+                const {data,error}=await supabaseClient.storage.from(BUCKET).download(row.storage_path);
+                if(error||!data)throw error||new Error('Файл не загружен.');
+                if(!current(ctx)){popup.close();return;}
+                const url=URL.createObjectURL(new Blob([data],{type:row.mime_type}));
+                popup.location.replace(url);
+                setTimeout(()=>URL.revokeObjectURL(url),60000);
             }
             if (current(ctx)) status('');
         } catch {
@@ -303,6 +290,7 @@
     }
 
     async function printFile(row) {
+        if (window.PetCareNative) return readNativeFile(row, 'print');
         const ctx = context;
         const localFile = window.location.protocol === 'file:';
         const popup = window.open(localFile ? '' : new URL('document-print.html', window.location.href).href, '_blank');
@@ -360,40 +348,30 @@
         } finally { setBusy(false); }
     }
 
-    async function remove(row) {
-        if (!confirm(`Удалить документ «${row.title}» и его файл? Медицинская запись останется.`)) return;
+    async function readNativeFile(row, action) {
         const ctx = context;
         setBusy(true);
+        status('Подготавливаю документ…');
         try {
-            const { error: fileError } = await supabaseClient.storage.from(BUCKET).remove([row.storage_path]);
-            if (fileError) throw new Error('Не удалось удалить файл. Повторите попытку.');
-            if (activeUserId !== ctx.userId) return;
-            const { error } = await supabaseClient.from(TABLE).delete().eq('id', row.id).eq('user_id', ctx.userId).eq('pet_id', ctx.petId);
-            if (error) throw new Error('Файл удалён, но карточку удалить не удалось. Повторите удаление.');
+            const { data, error } = await supabaseClient.storage.from(BUCKET).download(row.storage_path);
+            if (error || !data) throw error || new Error('No document');
             if (!current(ctx)) return;
-            if (editingId === row.id) { resetEditor(); el('documentEditor').open = false; }
-            await load();
-        } catch (error) { if (current(ctx)) status(error.message, true); }
-        finally { setBusy(false); }
+            await window.PetCareNative.shareFile(data, row.file_name, action);
+            if (current(ctx)) status('');
+        } catch {
+            if (current(ctx)) status('Не удалось открыть документ. Проверьте подключение и наличие приложения для просмотра.', true);
+        } finally { setBusy(false); }
     }
 
-    async function removePet(petId, userId) {
-        if (busy) throw new Error('Дождитесь окончания операции с документом и повторите удаление питомца.');
-        setBusy(true);
-        try {
-            const { data, error } = await supabaseClient.from(TABLE).select('*').eq('user_id', userId).eq('pet_id', petId);
-            if (error) throw new Error('Не удалось проверить документы питомца. Повторите удаление после восстановления связи.');
-            for (const row of data || []) {
-                if (activeUserId !== userId || !safePath(row, userId)) throw new Error('Аккаунт изменился. Повторите действие.');
-                const fileResult = await supabaseClient.storage.from(BUCKET).remove([row.storage_path]);
-                if (fileResult.error) throw new Error('Не удалось удалить документы питомца. Повторите попытку.');
-                if (activeUserId !== userId) throw new Error('Аккаунт изменился. Повторите действие.');
-                const result = await supabaseClient.from(TABLE).delete().eq('id', row.id).eq('user_id', userId).eq('pet_id', petId);
-                if (result.error) throw new Error('Не удалось удалить карточки документов. Повторите попытку.');
-            }
-        } finally {
-            setBusy(false);
-        }
+    async function remove(row) {
+        if(!confirm('Убрать документ «'+row.title+'»? Его можно восстановить в разделе «Мои данные» в течение 30 дней.'))return;
+        const ctx=context;setBusy(true);
+        try{await PetCareFiles.deleteDocument(row);if(!current(ctx))return;if(editingId===row.id)resetEditor();await load();status('Документ перемещён в корзину.');}
+        catch(error){if(current(ctx))status(error.message||'Не удалось сохранить удаление.',true)}finally{setBusy(false)}
+    }
+    async function removePet(petId,userId) {
+        if(busy)throw new Error('Дождитесь окончания операции с документом.');
+        await PetCareFiles.removePet(petId,userId);
     }
 
     el('documentUploadForm').addEventListener('submit', save);
@@ -415,10 +393,12 @@
         const row = rows.find(item => item.id === control.dataset.documentId && item.user_id === context.userId && item.pet_id === context.petId);
         if (!row || !safePath(row, context.userId)) return;
         if (action === 'edit') edit(row);
+        else if(action==='resolve-sync')window.PetCareCare?.resolveDocument(row.id);
         else if (action === 'print') printFile(row);
         else if (action === 'open' || action === 'download') readFile(row, action === 'download');
         else if (action === 'delete') remove(row);
     });
+    window.addEventListener('petcare:files-changed',()=>{if(current(context)&&el('documentsPage').style.display==='block'&&!busy)load();});
     window.addEventListener('petcare:account-reset', () => { resetContext(); context = null; });
     window.PetCareDocuments = {
         open, removePet,

@@ -1,9 +1,17 @@
-const CACHE_NAME = "petcare-shell-v39";
+const CACHE_NAME = "petcare-shell-v40-care";
 const SHELL_FILES = [
     "/",
     "/index.html",
     "/style.css",
     "/script.js",
+    "/sync.js",
+    "/offline-files.js",
+    "/care.js",
+    "/care.css",
+    "/vet.html",
+    "/vet.js",
+    "/vet.css",
+    "/assets/vendor/supabase/supabase-2.118.0.min.js",
     "/documents.js",
     "/documents.css",
     "/document-print.html",
@@ -60,11 +68,12 @@ self.addEventListener("fetch", event => {
                 .then(response => {
                     if (response.ok) {
                         const copy = response.clone();
-                        caches.open(CACHE_NAME).then(cache => cache.put("/index.html", copy));
+                        const key = url.pathname === "/" || url.pathname === "/index.html" ? "/index.html" : url.pathname;
+                        caches.open(CACHE_NAME).then(cache => cache.put(key, copy));
                     }
                     return response;
                 })
-                .catch(async () => (await caches.match(request)) || (await caches.match("/index.html")))
+                .catch(async () => (await caches.match(request)) || (await caches.match(url.pathname === "/" ? "/index.html" : url.pathname)) || new Response("Нет связи. Откройте PetCare один раз при наличии интернета.", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } }))
         );
         return;
     }

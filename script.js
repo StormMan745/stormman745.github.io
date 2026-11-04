@@ -202,58 +202,28 @@ function normalizeAppData() {
 // СОХРАНЕНИЕ ДАННЫХ
 // ==============================
 
-function saveData() {
-    if (!activeUserId) return Promise.resolve();
+async function saveData() {
+    if (!activeUserId) return false;
     updateHomeOverview();
-
-    const userId = activeUserId;
-    const snapshot = JSON.parse(JSON.stringify(appData));
-    const activePhotoRecord = snapshot.pets?.find(pet =>
-        getPetKey(pet) === getPetKey(snapshot.pet)
-    );
-    if (activePhotoRecord?.photoData && snapshot.pet) {
-        delete snapshot.pet.photoData;
+    const userId=activeUserId;
+    const snapshot=JSON.parse(JSON.stringify(appData));
+    notifyAssistantLocalChange(snapshot,userId);
+    profilePendingWrites.set(userId,(profilePendingWrites.get(userId)||0)+1);
+    try {
+        const synced=await PetCareSync.save(snapshot,userId);
+        if(activeUserId===userId && assistantLive.userId===userId){
+            const savedKey=getAssistantLocalProfileKey(snapshot,assistantLive.petId);
+            const changed=synced&&savedKey!==assistantLive.cloudKey;
+            if(synced)assistantLive.cloudKey=savedKey;
+            assistantLive.localDirty=!synced;assistantLive.phase=synced?'ready':'error';updateAssistantProfileStatus();
+            if(changed)scheduleAssistantProfileRefresh(0);
+        }
+        window.dispatchEvent(new Event('petcare:data-changed'));
+        return synced;
+    } finally {
+        const count=Math.max(0,(profilePendingWrites.get(userId)||1)-1);
+        if(count)profilePendingWrites.set(userId,count);else profilePendingWrites.delete(userId);
     }
-
-    localStorage.setItem(`${STORAGE_KEY}:${userId}`, JSON.stringify(snapshot));
-    notifyAssistantLocalChange(snapshot, userId);
-    profilePendingWrites.set(userId, (profilePendingWrites.get(userId) || 0) + 1);
-
-    cloudSaveQueue = cloudSaveQueue
-        .catch(() => {})
-        .then(async () => {
-            const { error } = await supabaseClient
-                .from(CLOUD_TABLE)
-                .upsert({
-                    user_id: userId,
-                    data: snapshot,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: "user_id" });
-
-            if (error) throw error;
-            return true;
-        })
-        .catch(error => {
-            console.error("Не удалось сохранить данные в Supabase. Локальная копия сохранена:", error);
-            return false;
-        })
-        .then(synced => {
-            const remaining = Math.max(0, (profilePendingWrites.get(userId) || 1) - 1);
-            if (remaining) profilePendingWrites.set(userId, remaining);
-            else profilePendingWrites.delete(userId);
-            if (activeUserId === userId && assistantLive.userId === userId && !remaining) {
-                const savedKey = getAssistantLocalProfileKey(snapshot, assistantLive.petId);
-                const profileChanged = synced && savedKey !== assistantLive.cloudKey;
-                if (synced) assistantLive.cloudKey = savedKey;
-                if (synced && assistantLive.localKey === savedKey) assistantLive.localDirty = false;
-                assistantLive.phase = synced ? (assistantLive.snapshot ? "ready" : "loading") : "error";
-                updateAssistantProfileStatus();
-                if (profileChanged) scheduleAssistantProfileRefresh(0);
-            }
-            return synced;
-        });
-
-    return cloudSaveQueue;
 }
 
 
@@ -301,58 +271,13 @@ function applyAccountData(savedData) {
 }
 
 async function loadDataFromDatabase(userId) {
-    cancelAssistantRequest();
-    stopAssistantProfileLive();
-    const loadToken = ++activeDataLoadToken;
-    activeUserId = userId;
-    appData = createInitialAppData();
-
-    const userStorageKey = `${STORAGE_KEY}:${userId}`;
-    let savedData = localStorage.getItem(userStorageKey);
-    const legacyData = localStorage.getItem(STORAGE_KEY);
-
-    // Claim old browser-only data for the first signed-in account exactly once.
-    if (legacyData) {
-        if (!savedData) {
-            localStorage.setItem(userStorageKey, legacyData);
-            savedData = legacyData;
-        }
-        localStorage.removeItem(STORAGE_KEY);
-    }
-
-    if (savedData) {
-        try {
-            applyAccountData(JSON.parse(savedData));
-        } catch (error) {
-            console.error("Не удалось прочитать локальную копию данных:", error);
-        }
-    }
-
-    const { data, error } = await supabaseClient
-        .from(CLOUD_TABLE)
-        .select("data")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-    if (loadToken !== activeDataLoadToken || activeUserId !== userId) return;
-
-    if (error) {
-        console.error("Не удалось загрузить данные из Supabase; используется локальная копия:", error);
-    } else if (data && data.data) {
-        const needsCompletionMigration = Array.isArray(data.data.completedTasks)
-            && data.data.completedTasks.some(task => typeof task === "string");
-        applyAccountData(data.data);
-        if (needsCompletionMigration) await saveData();
-    } else if (savedData) {
-        // First sign-in after the upgrade: migrate this browser's saved data to the account.
-        normalizeAppData();
-        await saveData();
-    }
-
-    if (loadToken !== activeDataLoadToken || activeUserId !== userId) return;
-
-    normalizeAppData();
-    localStorage.setItem(userStorageKey, JSON.stringify(appData));
+    cancelAssistantRequest();stopAssistantProfileLive();
+    const token=++activeDataLoadToken;activeUserId=userId;appData=createInitialAppData();
+    let legacy=null;try{legacy=JSON.parse(localStorage.getItem(STORAGE_KEY+':'+userId)||'null')}catch{}
+    const data=await PetCareSync.load(userId,legacy);
+    if(token!==activeDataLoadToken || activeUserId!==userId)return;
+    if(data)applyAccountData(data);
+    else {appData=createInitialAppData();appData.pet={id:'new-pet',name:'',animal:'🐾',isPlaceholder:true};appData.pets=[appData.pet];normalizeAppData();}
 }
 
 
@@ -868,7 +793,7 @@ async function savePet() {
         return;
     }
 
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser();
+    const { data: userData, error: userError } = await getPetCareUser();
     if (userError || !userData.user || userData.user.id !== activeUserId) {
         alert("Сначала войдите в аккаунт!");
         return;
@@ -900,43 +825,8 @@ async function savePet() {
     if (Number(weight) > 0 && Number(weight) !== Number(previousPet?.weight)) {
         pet.weightHistory.push({ id: `weight-${Date.now()}`, date: getLocalDateInputValue(), value: Number(weight) });
     }
-    const databasePet = {
-        name,
-        breed,
-        weight: weight ? Number(weight) : null,
-        animal,
-        user_id: userData.user.id
-    };
-    let databaseWarning = null;
-
-    try {
-        const result = pet.dbId
-            ? await supabaseClient
-                .from("pets")
-                .update(databasePet)
-                .eq("id", pet.dbId)
-                .eq("user_id", userData.user.id)
-                .select()
-                .maybeSingle()
-            : await supabaseClient
-                .from("pets")
-                .insert(databasePet)
-                .select()
-                .maybeSingle();
-
-        if (result.error) {
-            databaseWarning = result.error;
-        } else if (result.data?.id) {
-            pet.dbId = result.data.id;
-            pet.id = String(result.data.id);
-        }
-    } catch (error) {
-        databaseWarning = error;
-    }
-
-    if (databaseWarning) {
-        console.warn("Не удалось обновить отдельную запись в таблице pets; профиль сохранится в данных PetCare:", databaseWarning);
-    }
+    const databaseWarning = null;
+    appData.legacyPetsImported=true;
 
     const previousKey = previousPet ? getPetKey(previousPet) : null;
     const newPetKey = getPetKey(pet);
@@ -961,6 +851,7 @@ async function savePet() {
     appData.activePetId = getPetKey(pet);
     normalizeAppData();
     await saveData();
+    if(isCreating)window.PetCareCare?.recordEvent("pet_added");
     updatePetOnScreen();
     closePetForm();
 
@@ -983,7 +874,7 @@ async function deletePet() {
     );
     if (!confirmed) return;
 
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser();
+    const { data: userData, error: userError } = await getPetCareUser();
     if (userError || !userData.user || userData.user.id !== activeUserId) {
         alert("Сначала войдите в аккаунт.");
         return;
@@ -998,21 +889,12 @@ async function deletePet() {
         return;
     }
 
-    if (pet.dbId != null) {
-        const { error } = await supabaseClient
-            .from("pets")
-            .delete()
-            .eq("id", pet.dbId)
-            .eq("user_id", userData.user.id);
+    if(pet.dbId!=null)await PetCareFiles.legacyDelete(pet.dbId);
 
-        if (error) {
-            console.error("Не удалось удалить питомца из Supabase:", error);
-            alert("Не удалось удалить питомца. Проверьте подключение и попробуйте ещё раз.");
-            return;
-        }
-    }
-
+    appData.legacyPetsImported=true;
     const deletedPetId = getPetKey(pet);
+    appData.medicationCourses=(appData.medicationCourses||[]).filter(r=>String(r.petId)!==deletedPetId);
+    appData.medicationIntakes=(appData.medicationIntakes||[]).filter(r=>String(r.petId)!==deletedPetId);
     const remainingPets = appData.pets.filter(item => getPetKey(item) !== deletedPetId);
     appData.healthRecords = appData.healthRecords.filter(record => String(record.petId ?? deletedPetId) !== deletedPetId);
     appData.reminders = appData.reminders.filter(reminder => String(reminder.petId ?? deletedPetId) !== deletedPetId);
@@ -1199,7 +1081,8 @@ async function switchPet(petId) {
         updateAssistantProfileStatus();
     }
     await saveData();
-    startAssistantProfileLive();
+    if(navigator.onLine)startAssistantProfileLive();
+
 }
 
 
@@ -1728,18 +1611,6 @@ async function savePetWeight() {
     appData.pet.weight = value;
     appData.pet.weightHistory = [...(appData.pet.weightHistory || []), entry];
     addActivityEvent("weight", `Взвешивание · ${value} кг`, date, "Изменение веса", `weight-${entry.id}`);
-    if (appData.pet.dbId && activeUserId) {
-        try {
-            const { error } = await supabaseClient
-                .from("pets")
-                .update({ weight: value })
-                .eq("id", appData.pet.dbId)
-                .eq("user_id", activeUserId);
-            if (error) console.warn("Не удалось обновить вес в таблице питомцев:", error);
-        } catch (error) {
-            console.warn("Вес будет сохранён в данных аккаунта PetCare:", error);
-        }
-    }
     await saveData();
     if (valueInput) valueInput.value = "";
     updatePetOnScreen();
@@ -1913,6 +1784,11 @@ function exportPetHealthPdf() {
         return;
     }
     const html = buildPetHealthPrintHtml(appData.pet, fields, records, weights);
+    if (window.PetCareNative) {
+        closeHealthExportDialog();
+        window.PetCareNative.printHtml(html).catch(() => alert("Не удалось открыть системную печать. Попробуйте ещё раз."));
+        return;
+    }
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
         alert("Разрешите открытие нового окна, чтобы распечатать выбранные данные или сохранить PDF.");
@@ -2122,6 +1998,7 @@ async function saveReminder() {
     appData.reminders.push(reminder);
 
     const synced = await saveData();
+    window.PetCareCare?.recordEvent("reminder_created");
     renderReminders();
     renderHomeReminders();
     renderCalendar();
@@ -2136,10 +2013,11 @@ async function saveReminder() {
 // ==============================
 
 function isReminderCompleted(reminder) {
+    if(reminder.endDate && getLocalDateInputValue()>reminder.endDate)return true;
     if (reminder.repeat === "once") return Boolean(reminder.completed);
     const dueDate = getNextReminderDate(reminder);
     const dueDateKey = dueDate ? getLocalDateInputValue(dueDate) : getLocalDateInputValue();
-    return reminder.completedForDate === dueDateKey;
+    return reminder.completedForDate === dueDateKey || (Array.isArray(reminder.completedDates)&&reminder.completedDates.includes(dueDateKey));
 }
 
 function getReminderIcon(reminder) {
@@ -2246,6 +2124,7 @@ async function toggleReminderCompletion(reminderId) {
         && String(item.petId ?? getActivePetKey()) === getActivePetKey()
     );
     if (!reminder) return;
+    if(reminder.courseId && window.PetCareCare)return PetCareCare.markReminder(reminder);
 
     let completedDate = null;
     let uncompletedDate = null;
@@ -2388,6 +2267,8 @@ function renderCalendar() {
         .map(event => String(event.id)));
     const addPlannedReminder = (date, reminder) => {
         const key = typeof date === "string" ? date : getLocalDateInputValue(date);
+        if(reminder.endDate&&key>reminder.endDate)return;
+        if(Array.isArray(reminder.completedDates)&&reminder.completedDates.includes(key))return;
         if (reminder.completedForDate === key || completedReminderIds.has(`reminder-${reminder.id}-${key}`)) return;
         addEvent(date, reminder.name, getReminderIcon(reminder), "reminder");
     };
@@ -2742,6 +2623,7 @@ async function savePushSubscription(subscription, expectedUserId = activeUserId)
 }
 
 async function renderPushSettings() {
+    if (window.PetCareNative) return window.PetCareNative.renderNotificationSettings();
     const status = document.getElementById("pushSettingsStatus");
     const enableButton = document.getElementById("pushEnableButton");
     const disableButton = document.getElementById("pushDisableButton");
@@ -2806,6 +2688,7 @@ async function renderPushSettings() {
 }
 
 async function enablePushNotifications() {
+    if (window.PetCareNative) return window.PetCareNative.enableNotifications();
     if (!activeUserId) {
         alert("Сначала войдите в аккаунт PetCare.");
         return;
@@ -2866,6 +2749,7 @@ async function enablePushNotifications() {
 }
 
 async function disablePushNotifications(options = {}) {
+    if (window.PetCareNative) return window.PetCareNative.disableNotifications();
     const silent = Boolean(options.silent);
     if (!activeUserId) return;
     try {
@@ -3417,6 +3301,10 @@ async function saveStoryCollage(button) {
             storyCollageBlobCache.set(path, blob);
         }
         if (activeUserId !== userId || !appData.storyProjects.includes(story) || story.collagePath !== path) return;
+        if (window.PetCareNative) {
+            await window.PetCareNative.shareFile(blob, filename);
+            return;
+        }
         const file = new File([blob], filename, { type: "image/jpeg" });
         const shareData = { files: [file], title: "Как растёт мой питомец · PetCare" };
         if (navigator.share && navigator.canShare?.(shareData)) {
@@ -3670,11 +3558,19 @@ async function loginUser() {
 // ОТКРЫТЬ ГЛАВНУЮ ПОСЛЕ ВХОДА
 // ==============================
 
+async function getPetCareUser() {
+    if(!navigator.onLine){try{const cached=JSON.parse(localStorage.getItem("sb-qexiyikdmdbdxgusqnee-auth-token")||"null");if(cached?.user?.id)return {data:{user:cached.user},error:null};}catch{}}
+    const cached=await supabaseClient.auth.getSession();
+    if(cached.data?.session?.user)return {data:{user:cached.data.session.user},error:null};
+    if(!navigator.onLine)return {data:{user:null},error:new Error('offline')};
+    return supabaseClient.auth.getUser();
+}
+
 async function openMainAfterLogin() {
     const authPage = document.getElementById("authPage");
     const bottomMenu = document.querySelector(".bottom-menu");
 
-    const { data: authData, error: authError } = await supabaseClient.auth.getUser();
+    const { data: authData, error: authError } = await getPetCareUser();
     if (authError || !authData.user) {
         console.error("Не удалось определить пользователя для загрузки данных:", authError);
         return;
@@ -3690,13 +3586,18 @@ async function openMainAfterLogin() {
     renderReminders();
     restoreTasks();
 
-    await loadPetFromDatabase(userId);
+    if(navigator.onLine && !appData.legacyPetsImported){
+        if(appData.pet?.isPlaceholder || (getActivePetKey()==='legacy-default'&&appData.pet.name==='Барни'))await loadPetFromDatabase(userId);
+        appData.legacyPetsImported=true;await saveData();
+    }
     if (activeUserId !== userId) return;
 
     await loadUserProfile(userId);
     if (activeUserId !== userId) return;
     startAssistantProfileLive();
+    window.PetCareNative?.syncReminders();
 
+    window.dispatchEvent(new Event("petcare:account-ready"));
     if (authPage) authPage.style.display = "none";
     if (bottomMenu) bottomMenu.style.display = "flex";
     if (new URLSearchParams(window.location.search).get("page") === "reminders") {
@@ -3714,7 +3615,7 @@ async function openMainAfterLogin() {
 
 async function checkAuth() {
     try {
-        const { data, error } = await supabaseClient.auth.getUser();
+        const { data, error } = await getPetCareUser();
 
         if (error) {
             console.error("Ошибка проверки входа:", error);
@@ -3745,9 +3646,18 @@ async function checkAuth() {
 // ==============================
 
 async function logoutUser() {
+    if(!navigator.onLine){
+        const uid=activeUserId;
+        try{const raw=JSON.parse(localStorage.getItem('sb-qexiyikdmdbdxgusqnee-auth-token')||'null');if(raw?.user?.id===uid)localStorage.removeItem('sb-qexiyikdmdbdxgusqnee-auth-token');}catch{}
+        supabaseClient.auth.stopAutoRefresh();
+        navigator.serviceWorker?.getRegistration('/').then(r=>r?.pushManager?.getSubscription()).then(subscription=>subscription?.unsubscribe()).catch(()=>{});
+        window.dispatchEvent(new CustomEvent('petcare:local-signout',{detail:{userId:uid}}));
+        resetActiveAccountData();hideAllPages();document.getElementById('authPage').style.display='flex';document.querySelector('.bottom-menu').style.display='none';showLoginForm();document.getElementById('authMessage').textContent='Вы вышли. Неотправленные изменения сохранены на устройстве для следующего входа.';
+        return;
+    }
     try {
         await disablePushNotifications({ silent: true });
-        const { error } = await supabaseClient.auth.signOut();
+        const { error } = await supabaseClient.auth.signOut({ scope: navigator.onLine ? "global" : "local" });
 
         if (error) {
             console.error("Ошибка выхода:", error);
@@ -3777,7 +3687,7 @@ async function logoutUser() {
 
 async function loadUserProfile(expectedUserId = activeUserId) {
     try {
-        const { data, error } = await supabaseClient.auth.getUser();
+        const { data, error } = await getPetCareUser();
 
         if (error || !data.user || data.user.id !== expectedUserId || activeUserId !== expectedUserId) {
             return;
@@ -3890,10 +3800,12 @@ function getAssistantLocalProfileKey(data = appData, petId = getActivePetKey()) 
     return JSON.stringify([
         petId, values(pet, ["name", "animal", "breed", "birthDate", "weight", "allergies", "medications", "vetClinic", "vetPhone"]),
         (pet.weightHistory || []).map(row => values(row, ["id", "date", "value"])),
-        (data.healthRecords || []).filter(own).map(row => [...values(row, ["id", "name", "type", "date", "nextDate", "note"]), getAttachmentPhotos(row).length]),
+        (data.healthRecords || []).filter(own).map(row => [...values(row, ["id", "name", "type", "date", "nextDate", "note", "diagnosis", "prescription", "clinic"]), getAttachmentPhotos(row).length]),
         (data.reminders || []).filter(own).map(row => values(row, ["id", "name", "type", "date", "time", "repeat", "completed", "completedForDate", "note"])),
         (data.activityHistory || []).filter(own).map(row => values(row, ["id", "title", "kind", "date", "note"])),
         (data.completedTasks || []).filter(own).map(row => values(row, ["id", "date"])),
+        (data.medicationCourses || []).filter(own).map(row => values(row,["id","name","dosage","instructions","prescriber","startDate","endDate","times","stopped"])),
+        (data.medicationIntakes || []).filter(own).map(row => values(row,["id","courseId","date","time","status"])),
         (data.storyProjects || []).filter(own).map(row => [row.id, row.month, row.startDate, Boolean(row.collagePath), (row.photos || []).map(photo => [photo.week, photo.date])])
     ]);
 }
@@ -3912,6 +3824,7 @@ function stopAssistantProfileLive() {
 }
 
 function startAssistantProfileLive() {
+    if(!navigator.onLine){assistantLive.phase="offline";updateAssistantProfileStatus();return;}
     const userId = activeUserId;
     const petId = getActivePetKey();
     if (!userId || appData.pet?.isPlaceholder) { updateAssistantProfileStatus(); return; }
@@ -3944,6 +3857,7 @@ function startAssistantProfileLive() {
 }
 
 function scheduleAssistantProfileRefresh(delay = 200) {
+    if(!navigator.onLine)return;
     if (!activeUserId || assistantLive.userId !== activeUserId) return;
     window.clearTimeout(assistantLiveTimer);
     assistantLiveTimer = window.setTimeout(() => refreshAssistantProfile(), delay);
@@ -4038,37 +3952,7 @@ function mergeAssistantMessages(remote, incoming) {
     return merged.slice(-30);
 }
 
-function saveAssistantConversation() {
-    const userId = activeUserId;
-    const account = appData;
-    if (!userId) return Promise.resolve(false);
-    const messages = JSON.parse(JSON.stringify(account.assistantConversation || []));
-    localStorage.setItem(`${STORAGE_KEY}:${userId}`, JSON.stringify(account));
-    cloudSaveQueue = cloudSaveQueue.catch(() => {}).then(async () => {
-        for (let attempt = 0; attempt < 4; attempt += 1) {
-            if (activeUserId !== userId) return false;
-            const { data: row, error } = await supabaseClient.from(CLOUD_TABLE).select("data,updated_at").eq("user_id", userId).maybeSingle();
-            if (error) throw error;
-            if (activeUserId !== userId) return false;
-            if (!row?.data || !row.updated_at) return false;
-            const merged = mergeAssistantMessages(row.data.assistantConversation, messages);
-            const stamp = new Date(Math.max(Date.now(), Date.parse(row.updated_at) + 1)).toISOString();
-            const { data: updated, error: saveError } = await supabaseClient.from(CLOUD_TABLE)
-                .update({ data: { ...row.data, assistantConversation: merged }, updated_at: stamp })
-                .eq("user_id", userId).eq("updated_at", row.updated_at).select("updated_at");
-            if (saveError) throw saveError;
-            if (updated?.length) {
-                if (activeUserId === userId && appData === account) {
-                    account.assistantConversation = mergeAssistantMessages(merged, account.assistantConversation);
-                    localStorage.setItem(`${STORAGE_KEY}:${userId}`, JSON.stringify(account));
-                }
-                return true;
-            }
-        }
-        return false;
-    }).catch(error => { console.error("Не удалось синхронизировать переписку:", error); return false; });
-    return cloudSaveQueue;
-}
+function saveAssistantConversation() { return saveData(); }
 
 function updateAssistantProfileStatus(context) {
     const badge = document.getElementById("assistantLiveBadge");
@@ -4206,6 +4090,7 @@ async function getAssistantErrorMessage(error) {
 }
 
 async function sendAssistantMessage(event) {
+    if(!navigator.onLine){event?.preventDefault?.();alert('История чата доступна без связи. Для нового ответа помощника нужен интернет.');return;}
     event?.preventDefault();
     const input = document.getElementById("assistantQuestion");
     const sendButton = document.querySelector("#assistantForm button[type='submit']");
@@ -4413,3 +4298,16 @@ function bindAuthControls() {
 
 bindAuthControls();
 bindPetCareActions();
+window.PetCareNative?.attach({
+    getState: () => ({ userId: activeUserId, reminders: appData.reminders || [] }),
+    showHome,
+    showReminders,
+    startAutoRefresh: () => supabaseClient.auth.startAutoRefresh(),
+    stopAutoRefresh: () => supabaseClient.auth.stopAutoRefresh()
+});
+
+window.addEventListener('petcare:snapshot', event=>{
+ if(event.detail.userId!==activeUserId)return;
+ const selected=getActivePetKey(),previous=appData;applyAccountData(event.detail.data);const kept=appData.pets.find(p=>getPetKey(p)===selected);if(kept){appData.pet=kept;appData.activePetId=selected;}Object.assign(previous,appData);appData=previous;window.PetCareNative?.syncReminders();updatePetOnScreen();renderHealthRecords();renderReminders();restoreTasks();
+ window.dispatchEvent(new Event('petcare:data-changed'));
+});

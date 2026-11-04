@@ -20,7 +20,7 @@ select set_config('request.jwt.claim.sub', 'b1000000-0000-4000-8000-000000000002
 do $$ declare affected integer; begin
     if exists(select 1 from public.petcare_documents where pet_id='test-pet') then raise exception 'Cross-account read allowed'; end if;
     if exists(select 1 from storage.objects where bucket_id='petcare-documents' and name like 'a1000000-%') then raise exception 'Cross-account file read allowed'; end if;
-    delete from public.petcare_documents where pet_id='test-pet';
+    update public.petcare_documents set deleted_at=now() where pet_id='test-pet';
     get diagnostics affected = row_count;
     if affected <> 0 then raise exception 'Cross-account delete allowed'; end if;
     begin
@@ -35,9 +35,13 @@ do $$ declare affected integer; begin
     exception when insufficient_privilege then null; end;
 end $$;
 select set_config('request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000001', true);
-delete from public.petcare_documents where pet_id='test-pet';
+update public.petcare_documents set deleted_at=now() where pet_id='test-pet';
 do $$ begin
-    if exists(select 1 from public.petcare_documents where pet_id='test-pet') then raise exception 'Own delete failed'; end if;
+    if exists(select 1 from public.petcare_documents where pet_id='test-pet' and deleted_at is null) then raise exception 'Own recoverable delete failed'; end if;
+    begin
+        delete from public.petcare_documents where pet_id='test-pet';
+        raise exception 'Permanent deletion must use service retention';
+    exception when insufficient_privilege then null; end;
 end $$;
 rollback;
 select 'PASS: own CRUD, immutable ownership, cross-account denial, private file policies; all test data rolled back' as result;

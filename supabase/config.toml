@@ -8,3 +8,7 @@ verify_jwt = false
 
 [functions.petcare-clinics]
 verify_jwt = true
+
+# Public expiring-token cards; all account actions verify JWT inside the handler.
+[functions.petcare-platform]
+verify_jwt = false

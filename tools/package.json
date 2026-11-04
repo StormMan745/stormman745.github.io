@@ -3,7 +3,8 @@
   "scripts": {
     "build:pet-scene": "node build-pet-scene.cjs",
     "build:document-print": "node build-document-print.cjs",
-    "test:security": "node security-edge-check.cjs"
+    "test:security": "node security-edge-check.cjs",
+    "test:care": "node check-care-edge.cjs && node check-offline-care.cjs && node check-document-print.cjs"
   },
   "devDependencies": {
     "esbuild": "0.25.5",

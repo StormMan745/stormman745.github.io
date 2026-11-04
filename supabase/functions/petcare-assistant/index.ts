@@ -139,7 +139,7 @@ async function getLiveProfileMeta(saved: DataRow, requestedPetId: string, update
   const belongs = (row: DataRow) => scalarText(row.petId ?? petKey(current)) === id;
   const fields = (row: DataRow, keys: string[]) => keys.map(key => row[key] ?? null);
   const health = asRows(saved.healthRecords).filter(belongs).map(row => [
-    ...fields(row, ["id", "type", "name", "date", "nextDate", "note"]), Array.isArray(row.photos) ? row.photos.length : row.photoData ? 1 : 0,
+    ...fields(row, ["id", "type", "name", "date", "nextDate", "note", "diagnosis", "prescription", "clinic"]), Array.isArray(row.photos) ? row.photos.length : row.photoData ? 1 : 0,
   ]);
   const reminders = asRows(saved.reminders).filter(belongs).map(row => fields(row, ["id", "type", "name", "date", "time", "repeat", "completed", "completedForDate", "note"]));
   const weights = asRows(pet.weightHistory).map(row => fields(row, ["id", "date", "value"]));
@@ -148,12 +148,14 @@ async function getLiveProfileMeta(saved: DataRow, requestedPetId: string, update
   const stories = asRows(saved.storyProjects).filter(belongs).map(row => [
     ...fields(row, ["id", "month", "startDate"]), Boolean(row.collagePath), asRows(row.photos).map(photo => fields(photo, ["week", "date"])),
   ]);
-  const facts = [id, fields(pet, ["name", "animal", "breed", "birthDate", "weight", "allergies", "medications", "vetClinic", "vetPhone"]), health, weights, reminders, activities, tasks, stories];
+  const courses = asRows(saved.medicationCourses).filter(belongs).map(row => fields(row, ["id", "name", "dosage", "startDate", "endDate", "times", "instructions", "prescriber", "stopped"]));
+  const intakes = asRows(saved.medicationIntakes).filter(belongs).map(row => fields(row, ["id", "courseId", "date", "time", "status"]));
+  const facts = [id, fields(pet, ["name", "animal", "breed", "birthDate", "weight", "allergies", "medications", "vetClinic", "vetPhone"]), health, weights, reminders, activities, tasks, stories, courses, intakes];
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(facts)));
   const signature = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
   return {
     petId: id, petName: scalarText(pet.name, 160) || "Питомец", source: "account", signature, updatedAt,
-    availableEntries: health.length + weights.length + reminders.length + activities.length + tasks.length + stories.length,
+    availableEntries: health.length + weights.length + reminders.length + activities.length + tasks.length + stories.length + courses.length + intakes.length,
   };
 }
 
@@ -201,8 +203,16 @@ function buildProfileContext(saved: DataRow, requestedPetId: string, question: s
   const entries: DataRow[] = [];
   const add = (kind: string, row: DataRow) => entries.push({ kind, ...row });
   asRows(saved.healthRecords).filter(belongs).forEach(record => add("Медицинская запись", {
+    diagnosis: text(record.diagnosis, 3000), prescription: text(record.prescription, 3000), clinic: text(record.clinic, 160),
     title: text(record.name, 400), type: text(record.type, 100), date: text(record.date, 10), nextDate: text(record.nextDate, 10),
     note: text(record.note, 6000), attachedPhotos: Array.isArray(record.photos) ? record.photos.length : record.photoData ? 1 : 0,
+  }));
+  asRows(saved.medicationCourses).filter(belongs).forEach(course => add("Курс лекарства по назначению врача", {
+    id: text(course.id, 160), name: text(course.name, 100), dosageAsEnteredByOwner: text(course.dosage, 180), date: text(course.startDate, 10),
+    endDate: text(course.endDate, 10), schedule: Array.isArray(course.times) ? course.times.map(value => scalarText(value, 5)).join(", ") : "", instructions: text(course.instructions, 2000), prescriber: text(course.prescriber, 160), stopped: course.stopped === true,
+  }));
+  asRows(saved.medicationIntakes).filter(belongs).forEach(intake => add("Отметка приёма лекарства", {
+    courseId: text(intake.courseId, 160), date: text(intake.date, 10), time: text(intake.time, 5), status: text(intake.status, 20),
   }));
   asRows(pet.weightHistory).forEach(entry => add("Взвешивание", { date: text(entry.date, 10), weightKg: text(entry.value, 24) }));
   asRows(saved.reminders).filter(belongs).forEach(reminder => add("Напоминание", {
@@ -469,3 +479,4 @@ Deno.serve(async (request) => {
     httpClient?.close();
   }
 });
+

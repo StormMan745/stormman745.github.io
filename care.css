@@ -1,0 +1,115 @@
+.sync-status-bar { display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;padding:12px 16px;margin:0 0 20px;border:1px solid #d9e5d2;border-radius:14px;background:#eef5e7;color:#284b36;font-size:14px; }
+.sync-status-bar[hidden],.care-onboarding[hidden] { display:none; }
+.sync-status-bar[data-phase="error"],.sync-status-bar[data-phase="conflict"],.sync-status-bar[data-phase="storage"] { background:#fff2e8;color:#833c25;border-color:#e6c8b1; }
+.sync-status-bar button { border:1px solid currentColor;border-radius:10px;background:white;padding:8px 12px;font:inherit;color:inherit;min-height:40px;cursor:pointer; }
+.sync-status-bar button[hidden] { display:none; }
+#fileQueueStatus { flex:1 1 100%; }
+.care-hub,.care-card,.care-onboarding { padding:20px;border:1px solid #d9e5d2;border-radius:21px;background:#fffef9;margin:18px 0;box-shadow:0 4px 0 #e5ecdf; }
+.care-hub { display:grid;gap:12px; }
+.care-hub h3,.care-card h3,.care-onboarding h3 { margin:0 0 12px; }
+.care-button,.care-actions button,.care-dialog button:not(.care-close) { display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 14px;margin:0;border:1px solid #cdddc4;border-radius:12px;background:#f0f6e9;color:#2b553b;font:inherit;font-size:14px;line-height:1.4;text-align:center;cursor:pointer;overflow-wrap:anywhere; }
+.care-button:disabled { cursor:default;opacity:.55; }
+.health-passport>.care-button { width:100%;margin-top:20px; }
+.care-content { display:grid;gap:14px;min-width:0; }
+.care-content p { margin:6px 0;line-height:1.6;overflow-wrap:anywhere; }
+.care-content h3 { font-size:19px; }
+.care-content input,.care-content select,.care-content textarea,.care-dialog input:not([type="checkbox"]),.care-dialog select,.care-dialog textarea { width:100%;max-width:100%;min-width:0;padding:12px;border:1px solid #bdcfb7;border-radius:12px;background:#fff;color:#274c35;font:inherit;font-size:16px; }
+.care-dialog label,.care-content label { display:block;margin:12px 0 7px;font-size:14px;font-weight:650; }
+.care-muted,.care-intro { color:#526b52; }
+.care-eyebrow { color:#557349;font-size:11px;font-weight:750;letter-spacing:1px; }
+.care-actions { display:flex;flex-wrap:wrap;gap:10px;margin:14px 0; }
+.care-actions>* { flex:0 1 auto;max-width:100%; }
+.care-dose { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid #e1e9dc; }
+.care-dose .care-actions { flex:1 1 100%;margin:0; }
+.care-stock { padding:10px 12px;border-radius:12px;background:#edf4e2;font-weight:650; }
+.care-setup-step { margin:8px 8px 8px 0; }
+.care-onboarding p { color:#52664d;line-height:1.6;font-size:14px; }
+.care-dialog { width:min(620px,calc(100% - 24px));max-height:calc(100dvh - 32px);overflow:auto;border:1px solid #d0dfc7;border-radius:22px;padding:24px;background:#fffef9;color:#284934; }
+.care-dialog::backdrop { background:#16291b80; }
+.care-dialog h2 { margin-top:0;font-size:23px; }
+.care-dialog p { line-height:1.6; }
+.care-dialog>form { display:flex;justify-content:flex-end;margin:0; }
+.care-close { width:42px;height:42px;border:0;border-radius:50%;background:#edf3e5;color:#2a5538;font-size:27px;cursor:pointer; }
+.care-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px; }
+.care-status { color:#35603d;line-height:1.6; }
+.care-status:empty { display:none; }
+.care-status[data-error="true"],.care-error { color:#8c3825; }
+.care-check { display:flex!important;align-items:flex-start;gap:10px;padding:12px;border:1px solid #dce6d5;border-radius:12px;background:white; }
+.care-check input { width:20px!important;height:20px;flex:0 0 20px;margin:1px 0; }
+.care-danger { border-color:#d9b29f!important;background:#fff2eb!important;color:#8c3825!important; }
+.care-link-output { padding:14px;background:#edf4e4;border-radius:12px;word-break:break-all; }
+.care-list { display:grid;gap:12px; }
+.care-card .care-button { margin-right:8px;margin-top:8px; }
+.care-page details { padding:16px;border:1px solid #dce6d5;border-radius:16px;background:#fffef9; }
+.care-page summary { cursor:pointer;min-height:36px;font-weight:650; }
+.care-dialog pre,.care-page pre { white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%; }
+.care-card { overflow-wrap:anywhere; }
+.page .passport-grid small,.page .document-meta,.page .document-card-info small,.page .empty-state,.auth-subtitle { color:#54684f; }
+button:focus-visible,a:focus-visible,summary:focus-visible { outline:3px solid #547a57;outline-offset:4px; }
+.care-page :focus-visible,.care-dialog :focus-visible,.sync-status-bar :focus-visible { outline:3px solid #547a57;outline-offset:4px; }
+.care-page :is(input,button,textarea,select),.care-dialog :is(input,button,textarea,select) { scroll-margin-top:30px; }
+.profile-item:is(button) { width:100%;text-align:left;font:inherit;color:inherit; }
+@media(max-width:600px) { .care-grid { grid-template-columns:minmax(0,1fr); }.care-card,.care-onboarding,.care-hub { padding:16px; }.care-actions>* { flex:1 1 130px; }.care-dialog { padding:18px; } }
+@media(prefers-reduced-motion:reduce) { .care-page *,.care-dialog * { scroll-behavior:auto!important;transition:none!important;animation:none!important; } }
+
+/* Daily care uses the same warm palette as the rest of PetCare. */
+.sync-status-bar { gap:8px 12px;background:linear-gradient(115deg,#f0f6e9,#fafbf5);box-shadow:inset 0 1px #fff; }
+.sync-status-bar>[role="status"] { display:flex;align-items:center;gap:10px; }
+.sync-status-bar>[role="status"]::before { content:"";width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:#327553;box-shadow:0 0 0 4px #32755312; }
+.sync-status-bar:is([data-phase="offline"],[data-phase="pending"])>[role="status"]::before { background:#976a25;box-shadow:0 0 0 4px #976a2512; }
+.sync-status-bar:is([data-phase="error"],[data-phase="conflict"],[data-phase="storage"])>[role="status"]::before { background:#a24e35; }
+.care-content { gap:18px; }
+.care-content>.care-card { margin:0; }
+.care-section-intro { display:grid;gap:12px;align-items:start;padding:22px;border:1px solid #d9e5d2;border-radius:22px;background:radial-gradient(ellipse at 95% 0,#e1ebcf,transparent 65%),#f3f6ec; }
+.care-section-intro>.care-button { justify-self:start;background:#245d46;color:white;border-color:#245d46;box-shadow:0 3px 0 #194c37; }
+.care-pet-tag { display:inline-flex;justify-self:start;align-items:center;width:fit-content;border-radius:100px;padding:6px 11px;background:#e7efda;color:#36523b;font-size:12px;font-weight:650; }
+.care-card-heading { display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap; }
+.care-card-heading h3 { margin:4px 0; }
+.care-day-summary { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:18px;border:1px solid #dce5d4;border-radius:18px;background:#fffef9; }
+.care-summary-item { display:grid;gap:4px;text-align:center; }
+.care-summary-item strong { font-size:27px;line-height:1.2;font-weight:750; }
+.care-summary-item span { color:#53694f;font-size:12px; }
+.care-summary-item[data-status="taken"] strong { color:#26754f; }
+.care-summary-item[data-status="skipped"] strong { color:#906032; }
+.care-day-summary progress { grid-column:1/-1;display:block;width:100%;height:6px;border:0;border-radius:9px;overflow:hidden;accent-color:#43815c; }
+.care-day-summary progress::-webkit-progress-bar { background:#eaf0e3; }
+.care-day-summary progress::-webkit-progress-value { background:#43815c;border-radius:9px; }
+.care-prescription { font-weight:600; }
+.care-dose-status { padding:5px 10px;border-radius:30px;background:#f0f2eb;font-size:13px;color:#57694f; }
+.care-dose[data-status="taken"] .care-dose-status { color:#246445;background:#e3f1e6; }
+.care-dose[data-status="skipped"] .care-dose-status { color:#82512d;background:#faf0e2; }
+.care-dose .care-actions { display:grid;grid-template-columns:1fr 1fr;gap:8px; }
+.care-dose .care-actions button { margin:0; }
+.care-dose button[aria-pressed="true"] { background:#2c654c;color:#fff;border-color:#2c654c;box-shadow:inset 0 1px #ffffff20; }
+.care-dose button[data-status="skipped"][aria-pressed="true"] { background:#875b35;border-color:#875b35; }
+.care-dose button[data-status="clear"] { grid-column:1/-1;background:transparent;border-color:transparent;color:#617357;min-height:36px;font-size:12px; }
+.care-dose button[hidden] { display:none; }
+.care-hub { grid-template-columns:repeat(2,minmax(0,1fr));padding:24px;background:linear-gradient(140deg,#f6f8f0,#fffef9);box-shadow:0 4px 0 #e5ecdf,0 16px 35px #344b2610; }
+.care-hub-heading { grid-column:1/-1; }
+.care-hub-heading h3 { margin:7px 0; }
+.care-hub-heading p { color:#52664d;font-size:14px;line-height:1.5;margin:0 0 10px; }
+.care-hub-link { justify-content:flex-start;gap:13px;padding:18px;text-align:left;background:#fffefb;border-color:#dce6d4;border-radius:17px; }
+.care-hub-icon { width:39px;height:42px;flex:0 0 39px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(145deg,#f5f8eb,#e0eacb);box-shadow:0 3px 0 #cbd8ba,inset 0 1px white;font-size:23px;font-weight:700; }
+.care-hub-text { display:grid;gap:5px; }
+.care-hub-text strong { font-size:15px;font-weight:650; }
+.care-hub-text small { color:#596d51;line-height:1.45;font-size:12px!important; }
+.care-hub-arrow { margin-left:auto;color:#658454; }
+.care-more-menu { display:grid;gap:12px; }
+.care-more-menu button { display:grid!important;text-align:left!important;justify-content:start!important;gap:5px;padding:18px!important; }
+.care-more-menu small { font-weight:400;color:#566c50; }
+.bottom-menu .care-nav-label { font:inherit; }
+.bottom-menu .care-nav-more { display:none; }
+@media(hover:hover) and (pointer:fine) { .care-hub-link:hover { border-color:#8ca878;background:#f6f9ef;transform:translateY(-2px);box-shadow:0 5px 14px #405b2420; }.care-hub-link { transition:transform .15s,box-shadow .15s; } }
+@media(max-width:599px) {
+ .care-hub { grid-template-columns:minmax(0,1fr);padding:17px; }
+ .care-section-intro { padding:18px; }
+ .care-hub-link { padding:15px; }
+ .bottom-menu { gap:3px;justify-content:space-between;padding:8px!important; }
+ .bottom-menu>a:is([data-pc-click="nav-stories"],[data-pc-click="nav-profile"],[data-pc-click="nav-assistant"]) { display:none; }
+ .bottom-menu>a,.bottom-menu .care-nav-more { flex:1 1 0;min-width:0;min-height:58px!important;border:0;padding:7px 2px!important;margin:0;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-family:inherit;color:#516846;background:transparent;box-shadow:none;line-height:1.2; }
+ .bottom-menu .care-nav-label { font-size:0; }
+ .bottom-menu .care-nav-label::after { content:attr(data-short);font-size:10px;font-weight:650; }
+ .bottom-menu .care-nav-more b { font-size:10px;font-weight:650; }
+ .bottom-menu .care-nav-more span { font-size:23px;line-height:1; }
+ .bottom-menu:has(a:is([data-pc-click="nav-stories"],[data-pc-click="nav-profile"],[data-pc-click="nav-assistant"])[aria-current="page"]) .care-nav-more { background:#e9efdb;color:#36573e; }
+}

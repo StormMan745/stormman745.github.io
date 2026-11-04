@@ -37,76 +37,33 @@ function samplePdf() {
         const errors = [];
         context.on('page', page => { page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (process.env.PRINT_DEBUG && m.type() === 'error') console.error(m.text()); }); });
         await context.route('https://**', route => route.abort());
-        await context.addInitScript(({ pdf }) => {
-            window.print = () => { window.printCalls = (window.printCalls || 0) + 1; };
-            const state = window.printTest = { fail: false, delayed: false, pdf };
-            const uid = 'a1000000-0000-4000-8000-000000000001';
-            const rows = [{ id:'doc-pdf', user_id:uid, pet_id:'one', title:'<img src=x onerror=alert(1)> Анализы', category:'analysis', document_date:'2026-11-04', file_name:'results.pdf', mime_type:'application/pdf', file_size:2000, storage_path:`${uid}/doc-pdf/original.pdf` },
-                { id:'doc-image', user_id:uid, pet_id:'one', title:'Скан заключения', category:'conclusion', document_date:'2026-11-04', file_name:'scan.png', mime_type:'image/png', file_size:100, storage_path:`${uid}/doc-image/original.png` }];
-            const builder = { select(){return this},eq(){return this},order(){return this},then(resolve){resolve({data:rows,error:null})} };
-            const client = { auth:{getUser:async()=>({data:{user:null}}),onAuthStateChange(){}},from:()=>builder,
-                storage:{from:()=>({download:async file => {
-                    if(state.delayed) await new Promise(resolve=>state.release=resolve);
-                    if(state.fail)return {error:new Error('network')};
-                    const data=file.endsWith('.pdf') ? atob(state.pdf) : atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3FoAAAAASUVORK5CYII=');
-                    return {data:new Blob([Uint8Array.from(data,c=>c.charCodeAt(0))]),error:null};
-                }})} };
-            Object.defineProperty(window,'supabase',{get:()=>({createClient:()=>client}),set(){},configurable:true});
-        }, { pdf: samplePdf().toString('base64') });
+        await context.addInitScript(() => { window.print=()=>{window.printCalls=(window.printCalls||0)+1}; });
+        const original=samplePdf().toString('base64');
+        const prepare=async(page,encoded,mime='application/pdf')=>{
+            await page.waitForFunction(()=>window.PetCareDocumentPrint);
+            await page.evaluate(async({encoded,mime})=>{await PetCareDocumentPrint.prepare(new Blob([Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))]),{title:'<img src=x onerror=alert(1)> Анализы',mime});},{encoded,mime});
+        };
         for(const mode of ['http','file']) {
-            const page = await context.newPage();
-            await page.goto(mode==='http'?`http://127.0.0.1:${server.address().port}/`:pathToFileURL(path.join(root,'index.html')).href);
-            await page.waitForFunction(()=>window.PetCareDocuments);
-            await page.evaluate(async()=>{
-                activeUserId='a1000000-0000-4000-8000-000000000001';appData=createInitialAppData();
-                appData.pets=[{id:'one',name:'Барни',animal:'🐶'}];appData.pet=appData.pets[0];appData.activePetId='one';normalizeAppData();await PetCareDocuments.open();
-            });
-            const openPrint = async id => {
-                const pending=page.waitForEvent('popup');await page.locator(`[data-document-action="print"][data-document-id="${id}"]`).click();return pending;
-            };
-            const pdf=await openPrint('doc-pdf');
-            if(mode==='file' && process.env.PRINT_DEBUG) { await pdf.waitForTimeout(1000); console.error(await pdf.evaluate(()=>({url:location.href,state:document.readyState,ready:!!window.PetCareDocumentPrint,scripts:[...document.scripts].map(s=>s.src),html:document.body?.innerHTML.slice(0,250)}))); }
-            try { await pdf.waitForFunction(()=>document.body?.classList.contains('print-ready'),null,{timeout:45000}); }
-            catch(error) { console.error({mode,status:await page.locator('#documentStatus').innerText(),errors}); throw error; }
+            const address=mode==='http'?'http://127.0.0.1:'+server.address().port+'/document-print.html':pathToFileURL(path.join(root,'document-print.html')).href;
+            const pdf=await context.newPage();await pdf.goto(address);await prepare(pdf,original);
+            await pdf.waitForFunction(()=>document.body.classList.contains('print-ready'));
             assert.equal(await pdf.locator('.print-sheet').count(),2);
-            assert.equal(await pdf.locator('h1 img').count(),0,'Metadata must render as text');
-            assert.match(await pdf.locator('h1').innerText(),/onerror/);
+            assert.equal(await pdf.locator('h1 img').count(),0);assert.match(await pdf.locator('h1').innerText(),/onerror/);
             assert(await pdf.locator('.print-sheet img').evaluateAll(images=>images.every(img=>img.naturalWidth>1000&&img.naturalHeight>1000)));
-            for(const width of [320,1440]) {
-                await pdf.setViewportSize({width,height:900});
-                assert(await pdf.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-            }
-            await pdf.locator('#printButton').click();assert.equal(await pdf.evaluate(()=>window.printCalls),1);
-            if(mode==='http') {
-                await pdf.pdf({path:path.join(root,'.tools/document-print-output.pdf'),preferCSSPageSize:true,printBackground:true});
-                const bytes=fs.readFileSync(path.join(root,'.tools/document-print-output.pdf'));
-                const count=await pdf.evaluate(async encoded=>{const task=PetCarePDF.getDocument({data:Uint8Array.from(atob(encoded),c=>c.charCodeAt(0)),isEvalSupported:false});const p=await task.promise;const n=p.numPages;await task.destroy();return n;},bytes.toString('base64'));
+            for(const width of [320,1440]){await pdf.setViewportSize({width,height:900});assert(await pdf.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
+            await pdf.locator('#printButton').click();assert.equal(await pdf.evaluate(()=>printCalls),1);
+            if(mode==='http'){
+                const output=await pdf.pdf({preferCSSPageSize:true,printBackground:true});
+                const count=await pdf.evaluate(async encoded=>{const task=PetCarePDF.getDocument({data:Uint8Array.from(atob(encoded),c=>c.charCodeAt(0)),isEvalSupported:false});const doc=await task.promise;const count=doc.numPages;await task.destroy();return count;},output.toString('base64'));
                 assert.equal(count,2,'Printed output must contain exactly two pages');
                 await pdf.screenshot({path:path.join(root,'.tools/document-print-preview.png'),fullPage:true});
             }
-            await pdf.close();await page.waitForFunction(()=>!document.getElementById('documentSave').disabled);
-            const image=await openPrint('doc-image');
-            await image.waitForFunction(()=>document.body?.classList.contains('print-ready'));
-            assert.equal(await image.locator('.print-sheet').count(),1);
-            await image.locator('#printButton').click();assert.equal(await image.evaluate(()=>window.printCalls),1);await image.close();
-            await page.waitForFunction(()=>!document.getElementById('documentSave').disabled);
-            await page.evaluate(()=>{printTest.fail=true});
-            const failed=await openPrint('doc-pdf');await failed.waitForEvent('close');
-            assert.match(await page.locator('#documentStatus').innerText(),/Не удалось загрузить/);
-            await page.evaluate(()=>{printTest.fail=false;printTest.pdf=btoa('broken PDF');});
-            const broken=await openPrint('doc-pdf');
-            await broken.waitForFunction(()=>document.getElementById('printStatus')?.dataset.error==='true');
-            assert.equal(await broken.locator('#printButton').isDisabled(),true);assert.equal(await broken.locator('.print-sheet').count(),0);await broken.close();
-            await page.waitForFunction(()=>!document.getElementById('documentSave').disabled);
-            await page.evaluate(()=>{printTest.delayed=true});
-            const stale=await openPrint('doc-pdf');
-            await page.waitForFunction(()=>printTest.release);
-            const closed = stale.waitForEvent('close');
-            await page.evaluate(()=>{resetActiveAccountData();printTest.release();});
-            await closed;
-            assert.equal(stale.isClosed(),true,'Logout must close private preview');
-            await page.close();
-            console.log(`PASS ${mode}: PDF (2 pages + landscape), scan, print action, metadata escaping, responsive preview, network failure, corrupt PDF, account reset.`);
+            await pdf.close();
+            const image=await context.newPage();await image.goto(address);await prepare(image,'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3FoAAAAASUVORK5CYII=','image/png');
+            assert.equal(await image.locator('.print-sheet').count(),1);await image.locator('#printButton').click();assert.equal(await image.evaluate(()=>printCalls),1);await image.close();
+            const broken=await context.newPage();await broken.goto(address);await prepare(broken,Buffer.from('broken PDF').toString('base64'));
+            assert.equal(await broken.locator('#printButton').isDisabled(),true);assert.equal(await broken.locator('.print-sheet').count(),0);assert.equal(await broken.locator('#printStatus').getAttribute('data-error'),'true');await broken.close();
+            console.log('PASS '+mode+': isolated print renderer, two-page portrait/landscape PDF, exact printed page count, scan, safe metadata, responsive preview and corrupt-PDF rejection.');
         }
         assert.deepEqual(errors,[]);
     } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); }

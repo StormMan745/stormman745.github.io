@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://qexiyikdmdbdxgusqnee.supabase.co; media-src 'self' blob: https://qexiyikdmdbdxgusqnee.supabase.co; connect-src 'self' https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; frame-src https://yandex.ru https://api-maps.yandex.ru; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://qexiyikdmdbdxgusqnee.supabase.co; media-src 'self' blob: https://qexiyikdmdbdxgusqnee.supabase.co; connect-src 'self' https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; frame-src https://yandex.ru https://api-maps.yandex.ru; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; upgrade-insecure-requests">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>PetCare</title>
@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="documents.css?v=20261104-print">
     <link rel="stylesheet" href="experience.css?v=20261028-profile-photo">
     <link rel="stylesheet" href="clinics.css?v=20261031-pet-services">
+    <link rel="stylesheet" href="care.css?v=20261104-care">
 </head>
 <body>
 <div class="app">
@@ -646,9 +647,9 @@
             <p id="userEmail"></p>
         </div>
 
-        <div class="profile-item" data-pc-click="pet">🐾 Мой питомец</div>
-        <div class="profile-item" data-pc-click="health">❤️ Здоровье</div>
-        <div class="profile-item" data-pc-click="reminders">🔔 Напоминания</div>
+        <button type="button" class="profile-item" data-pc-click="pet">🐾 Мой питомец</button>
+        <button type="button" class="profile-item" data-pc-click="health">❤️ Здоровье</button>
+        <button type="button" class="profile-item" data-pc-click="reminders">🔔 Напоминания</button>
         <button type="button" class="clinic-entry" data-pc-click="clinics-open"><span class="clinic-entry-icon" aria-hidden="true">✚</span><span><strong>Места для питомцев</strong><small>Карта клиник и других полезных мест</small></span><span class="clinic-entry-arrow" aria-hidden="true">↗</span></button>
         <button class="logout-button" type="button" data-pc-click="logout">🚪 Выйти из аккаунта</button>
 
@@ -741,7 +742,7 @@
                 </button>
             </div>
 
-            <p id="authMessage" class="auth-message"></p>
+            <p id="authMessage" class="auth-message" role="status" aria-live="polite"></p>
         </div>
     </section>
 
@@ -888,10 +889,13 @@
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
+<script src="assets/vendor/supabase/supabase-2.118.0.min.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
 <script src="experience.js?v=20261028-studio"></script>
-<script src="script.js?v=20261104-document-print"></script>
-<script src="documents.js?v=20261104-print"></script>
+<script src="sync.js?v=20261104-care"></script>
+<script src="script.js?v=20261104-care"></script>
+<script src="offline-files.js?v=20261104-care"></script>
+<script src="documents.js?v=20261104-offline"></script>
+<script src="care.js?v=20261104-care"></script>
 <script src="pet-scene.js?v=20261029-attached-tails"></script>
 </body>
 </html>

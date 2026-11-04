@@ -67,6 +67,7 @@ function dateKeyFromParts(parts: Record<string, string>) {
 function reminderOccursOnDate(reminder: Record<string, unknown>, dateKey: string) {
   const startDate = typeof reminder.date === "string" ? reminder.date : "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || dateKey < startDate) return false;
+  if (typeof reminder.endDate === "string" && dateKey > reminder.endDate) return false;
   const repeat = reminder.repeat === "daily" || reminder.repeat === "weekly"
     ? reminder.repeat
     : "once";
@@ -105,11 +106,12 @@ function reminderIsDueNow(reminder: Record<string, unknown>, now: Date, timeZone
     if (!reminderOccursOnDate(reminder, candidateDate)) continue;
     if (reminder.repeat === "once" && reminder.completed === true) continue;
     if (reminder.repeat !== "once" && reminder.completedForDate === candidateDate) continue;
+    if (Array.isArray(reminder.completedDates) && reminder.completedDates.includes(candidateDate)) continue;
     const [dueYear, dueMonth, dueDay] = candidateDate.split("-").map(Number);
     const dueAsLocalUtc = Date.UTC(dueYear, dueMonth - 1, dueDay, hour, minute, 0);
     const elapsed = nowAsLocalUtc - dueAsLocalUtc;
     // Cron runs once a minute; keep a short catch-up window for scheduler jitter.
-    if (elapsed >= 0 && elapsed < 180000) return candidateDate;
+    if (elapsed >= 0 && elapsed < 15 * 60000) return candidateDate;
   }
   return null;
 }
@@ -181,6 +183,7 @@ Deno.serve(async request => {
     let skipped = 0;
     let failed = 0;
     const now = new Date();
+    const jobs: Array<()=>Promise<void>>=[];
     for (const device of subscriptions || []) {
       const userId = String(device.user_id);
       const account = accountById.get(userId);
@@ -201,41 +204,13 @@ Deno.serve(async request => {
         const reminderText = typeof reminder.name === "string" ? reminder.name.trim().slice(0, 180) : "";
         if (!dueDate || !reminderId || !reminderText) continue;
 
+        jobs.push(async()=>{
         const notificationKey = `${userId}:${reminderId}:${dueDate}`;
-        const { data: previous, error: previousError } = await admin
-          .from("petcare_push_delivery_log")
-          .select("status,attempt_count")
-          .eq("endpoint_hash", endpointHash)
-          .eq("notification_key", notificationKey)
-          .maybeSingle();
-        if (previousError) {
-          failed += 1;
-          continue;
-        }
-        if (previous?.status === "sent" || Number(previous?.attempt_count || 0) >= 3) {
-          skipped += 1;
-          continue;
-        }
-
-        const attemptCount = Number(previous?.attempt_count || 0) + 1;
-        const logEntry = {
-          endpoint_hash: endpointHash,
-          notification_key: notificationKey,
-          user_id: userId,
-          reminder_id: reminderId,
-          due_date: dueDate,
-          status: "sending",
-          attempt_count: attemptCount,
-          last_attempt_at: new Date().toISOString(),
-          last_error: null,
-        };
-        const { error: logError } = await admin
-          .from("petcare_push_delivery_log")
-          .upsert(logEntry, { onConflict: "endpoint_hash,notification_key" });
-        if (logError) {
-          failed += 1;
-          continue;
-        }
+        const {data:attemptCount,error:claimError}=await admin.rpc("petcare_claim_push_delivery",{
+            p_endpoint_hash:endpointHash,p_notification_key:notificationKey,p_user_id:userId,p_reminder_id:reminderId,p_due_date:dueDate,
+        });
+        if(claimError){failed+=1;return;}
+        if(!attemptCount){skipped+=1;return;}
 
         const petName = getPetName(account, reminder);
         const title = petName === "вашего питомца" ? "Напоминание PetCare" : `${petName}: напоминание`;
@@ -259,7 +234,7 @@ Deno.serve(async request => {
             .from("petcare_push_delivery_log")
             .update({ status: "sent", delivered_at: new Date().toISOString(), last_error: null })
             .eq("endpoint_hash", endpointHash)
-            .eq("notification_key", notificationKey);
+            .eq("notification_key", notificationKey).eq("attempt_count", attemptCount);
           if (updateError) throw updateError;
           sent += 1;
         } catch (error) {
@@ -270,16 +245,22 @@ Deno.serve(async request => {
             .eq("endpoint_hash", endpointHash)
             .eq("notification_key", notificationKey);
           if (errorCode === "push_service_404" || errorCode === "push_service_410") {
-            await admin.from("petcare_push_subscriptions").delete().eq("endpoint", device.endpoint);
+            await admin.from("petcare_push_subscriptions").delete().eq("endpoint", device.endpoint).eq("user_id", userId);
           }
           failed += 1;
         }
+        });
       }
     }
 
-    return jsonResponse({ ok: true, sent, skipped, failed });
+    let next=0;const deadline=Date.now()+40000;
+    await Promise.all(Array.from({length:Math.min(4,jobs.length)},async()=>{
+        while(next<jobs.length&&Date.now()<deadline){const job=jobs[next++];try{await job();}catch{failed+=1;}}
+    }));
+    return jsonResponse({ ok: true, sent, skipped, failed, deferred:jobs.length-next });
   } catch (error) {
     console.error("PetCare push dispatcher failed:", error instanceof Error ? error.name : "UnknownError");
     return jsonResponse({ error: "Push dispatcher failed" }, 500);
   }
 });
+

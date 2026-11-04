@@ -104,6 +104,10 @@ function permissionUi(state) {
         : 'Разрешите доступ, чтобы найти места рядом с вами.';
 }
 async function checkPermission() {
+    if (window.PetCareNative) {
+        try { permissionUi(await window.PetCareNative.checkLocationPermission()); } catch { permissionUi('prompt'); }
+        return;
+    }
     if (!navigator.permissions?.query) return;
     try {
         permission = permission || await navigator.permissions.query({ name: 'geolocation' });
@@ -116,10 +120,11 @@ async function checkPermission() {
 }
 function locate() {
     if (isBusy()) return;
-    if (!navigator.geolocation || !window.isSecureContext) { status('Геопозиция недоступна. Введите адрес вручную.', 'error'); return; }
+    if (!window.PetCareNative && (!navigator.geolocation || !window.isSecureContext)) { status('Геопозиция недоступна. Введите адрес вручную.', 'error'); return; }
     const token = ++generation;
     busy(true); status('Разрешите определение геопозиции в окне браузера…', 'loading');
-    navigator.geolocation.getCurrentPosition(position => {
+    const geolocation = window.PetCareNative || navigator.geolocation;
+    geolocation.getCurrentPosition(position => {
         if (token !== generation) return;
         const coords = position.coords;
         point = { lat: coords.latitude, lon: coords.longitude, accuracy: coords.accuracy };
