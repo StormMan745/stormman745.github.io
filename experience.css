@@ -59,8 +59,8 @@ button:disabled { cursor: wait; opacity: .65; }
 .pet-info h2 { color: #294334; font-size: 19px; letter-spacing: -.5px; }
 .pet-card > button { background: #f0f2e8; color: #516d47; box-shadow: none; border: 0; }
 .section-heading h2, .section-heading h3 { color: #2a4339; font-size: 20px; font-weight: 600; letter-spacing: -.55px; }
-.today, .home-reminders { padding: 22px; background: #fffefa; border: 1px solid var(--studio-line); border-radius: 22px; margin-bottom: 22px; box-shadow: none; }
-.today .section-heading, .home-reminders .section-heading { margin-bottom: 18px; }
+section.today, .home-reminders { padding: 22px; background: #fffefa; border: 1px solid var(--studio-line); border-radius: 22px; margin-bottom: 22px; box-shadow: none; }
+section.today .section-heading, .home-reminders .section-heading { margin-bottom: 18px; }
 .task { margin-bottom: 10px; padding: 12px 0; border: 0; border-bottom: 1px solid #f0f0e8; border-radius: 0; background: transparent; box-shadow: none; }
 .task:last-child { border-bottom: 0; margin-bottom: 0; }
 .task-icon { width: 41px; height: 41px; border-radius: 14px; box-shadow: none; background: #f1efdf; font-size: 22px; }
@@ -158,7 +158,7 @@ input, select, textarea { border-color: #dce3d5; box-shadow: none; border-radius
     .bottom-menu a { min-height: 47px; border-radius: 13px; font-size: 13px; }
     #homePage[style*="display: block"] { gap: 22px; }
     #homePage > .care-overview, #homePage > .care-discover, #homePage > .care-footer { grid-column: 1 / -1; margin: 0; }
-    #homePage > .today, #homePage > .home-reminders { margin: 0; }
+    #homePage > section.today, #homePage > .home-reminders { margin: 0; }
     .studio-welcome { margin: 0; padding: 32px 28px 30px 36px; min-height: 350px; }
     .app:has(#authPage[style*="display: flex"]) { max-width: 1120px; padding: 14px; min-height: 0; margin: 30px auto; }
     #authPage[style*="display: flex"] { display: grid !important; grid-template-columns: 1.05fr 1fr; align-items: stretch; gap: 8px; padding: 0; min-height: 680px; }
@@ -215,7 +215,7 @@ input, select, textarea { border-color: #dce3d5; box-shadow: none; border-radius
     .overview-item small { font-size: 9px; line-height: 1.5; }
     .overview-arrow { display: none; }
     .pet-card { padding: 15px; }
-    .today, .home-reminders { padding: 20px 17px; }
+    section.today, .home-reminders { padding: 20px 17px; }
     .discover-grid { gap: 11px; }
     .discover-card { padding: 18px 15px; min-height: 290px; border-radius: 20px; }
     .discover-card > strong { font-size: 22px; }

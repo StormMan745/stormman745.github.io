@@ -11,7 +11,12 @@
     if(accountChannel)accountChannel.onmessage=event=>{if(event.data?.type==='signed-out'&&(event.data.all||event.data.userId===activeUserId)){resetActiveAccountData();hideAllPages();document.getElementById('authPage').style.display='flex';document.querySelector('.bottom-menu').style.display='none';showLoginForm();}};
     const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
     const same = (a,b) => JSON.stringify(a) === JSON.stringify(b);
-    const keyOf = row => row && typeof row === 'object' ? String(row.dbId ?? row.id ?? '') : '';
+    // A checklist entry identifies one task on one day for one pet, not just a task.
+    const keyOf = (row, path = '') => row && typeof row === 'object'
+        ? path === '/completedTasks' && row.id && row.petId && row.date
+            ? JSON.stringify([String(row.petId), String(row.date), String(row.id)])
+            : String(row.dbId ?? row.id ?? '')
+        : '';
     const canonical = value => {
         const data = clone(value || {});
         if (Array.isArray(data.pets)) {data.pet = clone(data.pets.find(p=>keyOf(p)===String(data.activePetId)) || data.pets[0] || data.pet);if(data.pet)delete data.pet.photoData;}
@@ -21,8 +26,8 @@
         if(same(local,remote))return clone(local);
         if(same(local,base))return clone(remote);
         if(same(remote,base))return clone(local);
-        if(Array.isArray(local) && Array.isArray(remote) && (!base || Array.isArray(base)) && [...local,...remote,...(base||[])].every(x=>keyOf(x))) {
-            const maps=[base||[],local,remote].map(a=>new Map(a.map(x=>[keyOf(x),x])));
+        if(Array.isArray(local) && Array.isArray(remote) && (!base || Array.isArray(base)) && [...local,...remote,...(base||[])].every(x=>keyOf(x,path))) {
+            const maps=[base||[],local,remote].map(a=>new Map(a.map(x=>[keyOf(x,path),x])));
             const ids=new Set([...maps[2].keys(),...maps[1].keys(),...maps[0].keys()]);
             return [...ids].map(id=>merge(maps[0].get(id),maps[1].get(id),maps[2].get(id),`${path}/${id}`,conflicts)).filter(x=>x!==undefined);
         }
@@ -209,5 +214,5 @@
     window.addEventListener('petcare:account-reset',()=>{if(realtime){supabaseClient.removeChannel(realtime);realtime=null;}for(const timer of timers.values())clearTimeout(timer);timers.clear();document.getElementById('syncStatusBar')?.setAttribute('hidden','')});
     window.PetCareSync={load,save,flush,resolveConflict,purge,get,put,remove,all,merge,canonical,request,status,session,
         async purgeAll(){await Promise.allSettled([...queues.values()]);for(const name of ['profiles','files','outbox','preferences'])await store(name,'readwrite',s=>s.clear());for(const key of Object.keys(localStorage))if(key===STORAGE_KEY||key.startsWith(STORAGE_KEY+':'))localStorage.removeItem(key);},
-        get state(){return displayed},get version(){return '2026.11.04-care.1'}};
+        get state(){return displayed},get version(){return '2026.11.04-daily.2'}};
 })();

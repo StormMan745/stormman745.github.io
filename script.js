@@ -1076,6 +1076,7 @@ async function switchPet(petId) {
     renderCalendar();
     renderHomeReminders();
     renderStories();
+    restoreTasks();
     if (document.getElementById("assistantPage")?.style.display === "block") {
         renderAssistantConversation();
         updateAssistantProfileStatus();
@@ -3342,28 +3343,7 @@ function updateHomeTaskState(taskElement) {
 }
 
 async function completeTask(element, taskId) {
-    const taskElement = element?.matches(".task") ? element : element?.closest(".task");
-    if (!taskElement) return;
-
-    const date = getLocalDateInputValue();
-    const petId = getActivePetKey();
-    const selectedTaskId = taskId || taskElement.getAttribute("data-task");
-    const existingIndex = appData.completedTasks.findIndex(task =>
-        task.id === selectedTaskId && task.date === date && task.petId === petId
-    );
-
-    if (existingIndex >= 0) {
-        appData.completedTasks.splice(existingIndex, 1);
-    } else {
-        appData.completedTasks.push({ id: selectedTaskId, date, petId });
-        const taskNames = { feeding: "Кормление", walk: "Прогулка", vitamins: "Витамины" };
-        addActivityEvent("task", `Выполнено: ${taskNames[selectedTaskId] || selectedTaskId}`, date, "Задача ухода", `task-${selectedTaskId}-${date}`);
-    }
-
-    updateHomeTaskState(taskElement);
-    await saveData();
-    renderEventHistory();
-    renderCalendar();
+    return window.PetCareRoutine?.toggle(element, taskId);
 }
 
 
@@ -3372,7 +3352,7 @@ async function completeTask(element, taskId) {
 // ==============================
 
 function restoreTasks() {
-    document.querySelectorAll("#homePage .task[data-task]").forEach(updateHomeTaskState);
+    window.PetCareRoutine?.render();
 }
 
 

@@ -17,9 +17,10 @@
     <script src="install.js?v=20261028-studio"></script>
     <link rel="stylesheet" href="style.css?v=20261104-health-actions">
     <link rel="stylesheet" href="documents.css?v=20261104-print">
-    <link rel="stylesheet" href="experience.css?v=20261028-profile-photo">
+    <link rel="stylesheet" href="experience.css?v=20261104-daily-care">
     <link rel="stylesheet" href="clinics.css?v=20261031-pet-services">
     <link rel="stylesheet" href="care.css?v=20261104-care">
+    <link rel="stylesheet" href="polish.css?v=20261104-daily-care">
 </head>
 <body>
 <div class="app">
@@ -71,38 +72,15 @@
             <button data-pc-click="pet">→</button>
         </section>
 
-        <section class="today">
+        <section class="today" aria-labelledby="todayTitle">
             <div class="section-heading">
-                <h2>Сегодня</h2>
+                <div><span class="page-eyebrow">ЕЖЕДНЕВНЫЙ УХОД</span><h2 id="todayTitle">Сегодня</h2></div>
                 <span id="todayDate"></span>
             </div>
-
-            <div class="task" data-task="feeding">
-                <div class="task-icon">🍖</div>
-                <div class="task-info">
-                    <strong>Кормление</strong>
-                    <p>08:00</p>
-                </div>
-                <button type="button" class="task-complete" data-pc-click="task-feeding" aria-label="Отметить выполненным" aria-pressed="false">○</button>
-            </div>
-
-            <div class="task" data-task="walk">
-                <div class="task-icon">🚶</div>
-                <div class="task-info">
-                    <strong>Прогулка</strong>
-                    <p>18:00</p>
-                </div>
-                <button type="button" class="task-complete" data-pc-click="task-walk" aria-label="Отметить выполненным" aria-pressed="false">○</button>
-            </div>
-
-            <div class="task" data-task="vitamins">
-                <div class="task-icon">💊</div>
-                <div class="task-info">
-                    <strong>Витамины</strong>
-                    <p>20:00</p>
-                </div>
-                <button type="button" class="task-complete" data-pc-click="task-vitamins" aria-label="Отметить выполненным" aria-pressed="false">○</button>
-            </div>
+            <div class="routine-progress"><span id="routineProgressLabel" role="status"></span><progress id="routineProgress" max="3" value="0" aria-label="Выполнение ежедневных задач"></progress></div>
+            <div id="dailyTaskList"></div>
+            <div class="routine-footer"><button type="button" class="routine-add" data-routine="add">＋ Добавить дело</button><p>Ваш чек-лист на каждый день. Уведомления настраиваются в разделе «Напоминания».</p></div>
+            <p id="routineStatus" class="routine-status" role="status"></p>
         </section>
 
         <section class="home-reminders" aria-labelledby="homeRemindersTitle">
@@ -755,7 +733,8 @@
         <h2>PetCare ассистент 🐾</h2>
     </div>
 
-    <p class="assistant-disclaimer">Отвечает PetCare ассистент. Для ответа в GigaChat передаются ваш вопрос и текстовые записи выбранного питомца: карточка, здоровье, вес и уход. Фото не анализируются. Помощник не заменяет ветеринара.</p>
+    <p class="assistant-disclaimer">Ответы с учётом записей вашего питомца. Помощник не заменяет ветеринара.</p>
+    <details class="assistant-privacy"><summary>Какие данные получает ИИ?</summary><p>Для ответа в GigaChat передаются ваш вопрос и текстовые записи выбранного питомца: карточка, здоровье, вес и уход. Фото не анализируются.</p></details>
     <div class="pet-switcher compact-pet-switcher assistant-pet-context">
         <label for="assistantPetSwitcher">О каком питомце поговорим?</label>
         <select id="assistantPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для PetCare ассистента"></select>
@@ -889,14 +868,34 @@
 
 </div>
 
+<dialog id="routineDialog" class="routine-dialog" aria-labelledby="routineDialogTitle" aria-describedby="routineDialogDescription">
+    <div class="routine-dialog-heading"><span class="routine-dialog-mark" aria-hidden="true">✦</span><button type="button" class="routine-close" data-routine="close" aria-label="Закрыть редактор">×</button></div>
+    <span class="page-eyebrow">ЗАБОТА В ВАШЕМ РИТМЕ</span>
+    <h2 id="routineDialogTitle">Изменить дело</h2>
+    <p id="routineDialogDescription"></p>
+    <form id="routineForm">
+        <label for="routineName">Название</label>
+        <input id="routineName" type="text" maxlength="80" required placeholder="Например, вечерняя прогулка" autocomplete="off">
+        <div class="routine-fields">
+            <div><label for="routineTime">Время каждый день</label><input id="routineTime" type="time" required></div>
+            <div><label for="routineIcon">Значок</label><select id="routineIcon"><option value="🍖">🍖 Кормление</option><option value="🚶">🚶 Прогулка</option><option value="💊">💊 Лекарства</option><option value="💧">💧 Вода</option><option value="🪮">🪮 Уход</option><option value="🎾">🎾 Игры</option><option value="🐾">🐾 Другое</option></select></div>
+        </div>
+        <p class="routine-field-hint">Изменения относятся только к выбранному питомцу. Отметки выполнения за прошлые дни сохранятся.</p>
+        <p id="routineFormStatus" class="routine-status" role="alert"></p>
+        <div class="routine-form-actions"><button type="button" class="routine-cancel" data-routine="close">Отмена</button><button id="routineSave" type="submit" class="primary-button">Сохранить</button></div>
+        <button id="routineDelete" type="button" class="routine-delete" data-routine="delete">Удалить это дело</button>
+    </form>
+</dialog>
+
 <!-- Same-origin pinned SDK; classic loading also supports opening index.html from disk. -->
 <script src="assets/vendor/supabase/supabase-2.118.0.min.js"></script>
 <script src="experience.js?v=20261028-studio"></script>
-<script src="sync.js?v=20261104-care"></script>
-<script src="script.js?v=20261104-care"></script>
+<script src="sync.js?v=20261104-daily-care"></script>
+<script src="script.js?v=20261104-daily-care"></script>
 <script src="offline-files.js?v=20261104-care"></script>
 <script src="documents.js?v=20261104-offline"></script>
 <script src="care.js?v=20261104-care"></script>
-<script src="pet-scene.js?v=20261104-happy-companions"></script>
+<script src="routine.js?v=20261104-daily-care"></script>
+<script src="pet-scene.js?v=20261104-daily-care"></script>
 </body>
 </html>

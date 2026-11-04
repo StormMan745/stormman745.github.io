@@ -1,6 +1,6 @@
 // Classic script so animated pets also work when opening index.html directly.
 (() => {
-const rendererUrl = new URL('./assets/vendor/three/three.runtime.min.js?v=20261104-happy-companions', document.currentScript.src).href;
+const rendererUrl = new URL('./assets/vendor/three/three.runtime.min.js?v=20261104-daily-care', document.currentScript.src).href;
 let rendererPromise;
 function loadRenderer() {
     if (window.PetCareThree) return Promise.resolve(window.PetCareThree);
@@ -197,8 +197,22 @@ async function createEngine() {
             soft(ball(head,0x3b302c,0,-.055,.605,.103,.07,.058),.28);
             ball(head,0x8d7660,-.025,-.034,.652,.024,.008,.004);
             for(const side of [-1,1]) curve(head,0x684432,[[side*.13,-.245,.556],[side*.22,-.205,.548],[side*.27,-.15,.515]],.011);
-            soft(ball(head,0xe694a0,.025,-.292,.567,.089,.10,.035),.55);
-            curve(head,0xc16b80,[[.025,-.23,.603],[.025,-.294,.603]],.007);
+            // A soft, rounded tongue grows out of the mouth and curls towards its tip.
+            const tongueShape = new T.Shape();
+            tongueShape.moveTo(-.066,0);
+            tongueShape.bezierCurveTo(-.080,-.035,-.094,-.095,-.080,-.148);
+            tongueShape.bezierCurveTo(-.067,-.197,.067,-.197,.080,-.148);
+            tongueShape.bezierCurveTo(.094,-.095,.080,-.035,.066,0);
+            tongueShape.quadraticCurveTo(0,.016,-.066,0);
+            const tongueGeometry = new T.ExtrudeGeometry(tongueShape,{depth:.024,bevelEnabled:true,bevelSize:.014,bevelThickness:.012,bevelSegments:4,steps:1,curveSegments:16});
+            const tongueVertices = tongueGeometry.attributes.position;
+            const curl = y => .044*Math.sin(Math.min(1,Math.max(0,-y/.20))*Math.PI*.8);
+            for(let i=0;i<tongueVertices.count;i++) tongueVertices.setZ(i,tongueVertices.getZ(i)+curl(tongueVertices.getY(i)));
+            tongueGeometry.computeVertexNormals();
+            const tongue = new T.Group();tongue.position.set(.022,-.211,.546);tongue.rotation.z=-.07;head.add(tongue);
+            soft(mesh(tongue,tongueGeometry,0xec8b9d,0,0,0),.46);
+            curve(tongue,0xcf758a,[[-.001,-.035,.037+curl(-.035)],[0,-.08,.037+curl(-.08)],[.001,-.124,.037+curl(-.124)]],.003);
+            soft(ball(tongue,0xf5b0bc,-.037,-.132,.038+curl(-.132),.018,.025,.003),.48);
             collar(pet,1.025,.275,0x337e70);
         }
         const tailPoints=cat?[[-.20,.40,-.22],[-.58,.48,-.36],[-.79,.85,-.32],[-.79,1.18,-.13],[-.65,1.27,.01]]:[[-.17,.46,-.23],[-.53,.64,-.36],[-.75,.86,-.30],[-.82,1.06,-.15]];

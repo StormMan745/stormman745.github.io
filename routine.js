@@ -1,0 +1,207 @@
+/* Daily checklist settings belong to the active pet inside its account snapshot. */
+(() => {
+    const defaults = [
+        { id: 'feeding', name: 'Кормление', time: '08:00', icon: '🍖' },
+        { id: 'walk', name: 'Прогулка', time: '18:00', icon: '🚶' },
+        { id: 'vitamins', name: 'Витамины', time: '20:00', icon: '💊' }
+    ];
+    const icons = new Set(['🍖', '🚶', '💊', '💧', '🪮', '🎾', '🐾']);
+    const $ = id => document.getElementById(id);
+    const dialog = $('routineDialog');
+    let editing = null, busy = false, midnightTimer, renderedKey = '';
+    const pendingTasks = new Set();
+    const copy = value => JSON.parse(JSON.stringify(value));
+    const validTime = value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+    function items(pet = appData.pet) {
+        if (!pet || pet.isPlaceholder) return [];
+        const source = Array.isArray(pet.dailyRoutine) ? pet.dailyRoutine : defaults;
+        const seen = new Set();
+        return source.filter(row => row && typeof row.id === 'string' && row.id && !seen.has(row.id) && seen.add(row.id))
+            .slice(0, 20).map(row => ({
+                id: row.id, name: String(row.name || 'Ежедневное дело').slice(0, 80),
+                time: validTime(row.time) ? row.time : '09:00', icon: icons.has(row.icon) ? row.icon : '🐾'
+            }));
+    }
+    function node(tag, text, className) {
+        const element = document.createElement(tag);
+        if (text !== undefined) element.textContent = text;
+        if (className) element.className = className;
+        return element;
+    }
+    function control(label, action, className, id) {
+        const button = node('button', label, className);
+        button.type = 'button'; button.dataset.routine = action;
+        if (id) button.dataset.taskId = id;
+        return button;
+    }
+    function render(force = false) {
+        if (!$('dailyTaskList')) return;
+        if (editing && (editing.userId !== activeUserId || editing.petId !== getActivePetKey())) dialog.close();
+        setTodayDate();
+        const tasks = items().sort((a, b) => a.time.localeCompare(b.time));
+        const done = tasks.filter(task => isHomeTaskCompleted(task.id)).length;
+        const key = JSON.stringify([activeUserId, getActivePetKey(), getLocalDateInputValue(), tasks, tasks.map(t => isHomeTaskCompleted(t.id))]);
+        if (!force && renderedKey === key) return;
+        renderedKey = key;
+        const focused = document.activeElement?.closest('[data-routine][data-task-id]');
+        const restoreFocus = focused ? { action: focused.dataset.routine, id: focused.dataset.taskId } : null;
+        $('routineProgressLabel').textContent = tasks.length ? (done === tasks.length ? 'Все дела сделаны. Вы отличная команда!' : `${done} из ${tasks.length} дел выполнено`) : 'Маленькие дела, большая забота';
+        $('routineProgress').max = Math.max(tasks.length, 1);
+        $('routineProgress').value = done;
+        $('routineProgress').hidden = !tasks.length;
+        const list = $('dailyTaskList');
+        list.replaceChildren();
+        for (const task of tasks) {
+            const row = node('div', undefined, 'task'); row.dataset.task = task.id;
+            const icon = node('div', task.icon, 'task-icon'); icon.setAttribute('aria-hidden', 'true');
+            const info = node('div', undefined, 'task-info');
+            const time = node('time', task.time); time.dateTime = task.time;
+            const subline = node('p'); subline.append(time, node('span', ' · каждый день', 'routine-frequency'));
+            info.append(node('strong', task.name), subline);
+            const actions = node('div', undefined, 'routine-row-actions');
+            const edit = control('Изменить', 'edit', 'routine-edit', task.id);
+            edit.setAttribute('aria-label', `Изменить дело «${task.name}»`);
+            const complete = control('○', 'toggle', 'task-complete', task.id);
+            complete.disabled = pendingTasks.has(`${activeUserId}:${getActivePetKey()}:${task.id}`);
+            actions.append(edit, complete); row.append(icon, info, actions);
+            list.append(row); updateHomeTaskState(row);
+            complete.setAttribute('aria-label', `${isHomeTaskCompleted(task.id) ? 'Снять отметку' : 'Выполнить'}: ${task.name}`);
+        }
+        if (!tasks.length) {
+            const empty = node('div', undefined, 'routine-empty');
+            empty.append(node('span', '✦', 'routine-empty-mark'), node('strong', appData.pet?.isPlaceholder ? 'Начнём с вашего питомца' : 'Ритм дня выбираете вы'), node('p', appData.pet?.isPlaceholder ? 'Добавьте питомца, чтобы составить его ежедневный план.' : 'Добавьте кормление, прогулку или игру — всё, что важно для вашего любимца.'));
+            if (appData.pet?.isPlaceholder) { const add = control('Добавить питомца', 'pet', 'routine-add'); empty.append(add); }
+            list.append(empty);
+        }
+        document.querySelector('.routine-footer').hidden = Boolean(appData.pet?.isPlaceholder);
+        document.querySelector('[data-routine="add"]').disabled = tasks.length >= 20;
+        if (restoreFocus) [...list.querySelectorAll('[data-routine]')].find(b => b.dataset.routine === restoreFocus.action && b.dataset.taskId === restoreFocus.id)?.focus({ preventScroll: true });
+    }
+    function open(id) {
+        if (!activeUserId || appData.pet?.isPlaceholder) return;
+        const task = id ? items().find(row => row.id === id) : null;
+        if ((id && !task) || (!id && items().length >= 20)) return;
+        editing = { userId: activeUserId, petId: getActivePetKey(), id, original: task ? JSON.stringify(task) : null };
+        $('routineDialogTitle').textContent = task ? 'Изменить дело' : 'Новое дело';
+        $('routineDialogDescription').textContent = `Ежедневный план · ${appData.pet.name || 'Ваш питомец'}`;
+        $('routineName').value = task?.name || '';
+        $('routineTime').value = task?.time || '09:00';
+        $('routineIcon').value = task?.icon || '🐾';
+        $('routineDelete').hidden = !task;
+        $('routineFormStatus').textContent = '';
+        $('routineStatus').textContent = '';
+        busy = false; setBusy(false);
+        dialog.showModal(); $('routineName').focus();
+    }
+    function setBusy(value) {
+        busy = value;
+        for (const element of $('routineForm').elements) element.disabled = value;
+        $('routineSave').textContent = value ? 'Сохраняю…' : 'Сохранить';
+        $('routineForm').setAttribute('aria-busy', String(value));
+    }
+    async function commit(remove = false) {
+        if (busy || !editing) return;
+        const draft = editing;
+        if (draft.userId !== activeUserId || draft.petId !== getActivePetKey()) { dialog.close(); return; }
+        const current = items();
+        if (draft.id && JSON.stringify(current.find(task => task.id === draft.id)) !== draft.original) {
+            $('routineFormStatus').textContent = 'Это дело уже изменилось на другом устройстве. Закройте редактор и откройте его заново, чтобы увидеть актуальные данные.'; return;
+        }
+        const name = $('routineName').value.trim(), time = $('routineTime').value;
+        if (!remove && (!name || !validTime(time))) { $('routineFormStatus').textContent = 'Введите название и время.'; $('routineName').focus(); return; }
+        if (!draft.id && current.length >= 20) { $('routineFormStatus').textContent = 'Можно добавить до 20 ежедневных дел.'; return; }
+        if (remove && !confirm('Удалить дело из ежедневного плана? Прошлые отметки останутся в истории.')) return;
+        const previous = appData.pet.dailyRoutine;
+        const next = remove ? current.filter(task => task.id !== draft.id) : current.slice();
+        if (!remove) {
+            const task = { id: draft.id || createEntryId('routine'), name, time, icon: icons.has($('routineIcon').value) ? $('routineIcon').value : '🐾' };
+            const index = next.findIndex(row => row.id === task.id);
+            if (index < 0) next.push(task); else next[index] = task;
+        }
+        appData.pet.dailyRoutine = next;
+        setBusy(true); render();
+        try {
+            const synced = await saveData();
+            if (draft.userId !== activeUserId || draft.petId !== getActivePetKey()) return;
+            if (editing === draft) dialog.close();
+            $('routineStatus').textContent = synced ? (remove ? 'Дело удалено из плана.' : 'Ежедневный план сохранён.') : 'План сохранён на устройстве и будет отправлен при восстановлении связи.';
+        } catch {
+            if (draft.userId === activeUserId && draft.petId === getActivePetKey()) {
+                // Failed local persistence must not be presented as a successful edit.
+                if (appData.pet.dailyRoutine === next) {
+                    if (previous === undefined) delete appData.pet.dailyRoutine; else appData.pet.dailyRoutine = previous;
+                }
+                $('routineFormStatus').textContent = 'Не удалось сохранить на устройстве. Освободите место и повторите попытку.';
+                $('routineStatus').textContent = 'Изменения пока не сохранены.'; render(true);
+            }
+        } finally { if (editing === draft) setBusy(false); }
+    }
+    async function toggle(element, taskId) {
+        if (!activeUserId || appData.pet?.isPlaceholder) return;
+        const id = taskId || element?.dataset.taskId || element?.closest('[data-task]')?.dataset.task;
+        const task = items().find(row => row.id === id);
+        if (!task) return;
+        const uid = activeUserId, petId = getActivePetKey(), date = getLocalDateInputValue(), pending = `${uid}:${petId}:${id}`;
+        if (pendingTasks.has(pending)) return;
+        pendingTasks.add(pending);
+        const match = row => row.id === id && row.date === date && row.petId === petId;
+        const previous = appData.completedTasks.find(match);
+        const historyId = `task-${petId}-${id}-${date}`;
+        const hadHistory = appData.activityHistory.some(row => row.id === historyId);
+        const priorEvents = appData.activityHistory.filter(row => row.petId === petId && row.date === date && [historyId, `task-${id}-${date}`].includes(row.id));
+        if (previous) {
+            appData.completedTasks = appData.completedTasks.filter(row => !match(row));
+            appData.activityHistory = appData.activityHistory.filter(row => !priorEvents.includes(row));
+        }
+        else {
+            appData.completedTasks.push({ id, date, petId });
+            addActivityEvent('task', `Выполнено: ${task.name}`, date, `Ежедневный уход · ${task.time}`, historyId);
+        }
+        render(true);
+        try { await saveData(); }
+        catch {
+            if (activeUserId === uid) {
+                appData.completedTasks = appData.completedTasks.filter(row => !match(row));
+                if (previous) appData.completedTasks.push(copy(previous));
+                if (!hadHistory) appData.activityHistory = appData.activityHistory.filter(row => row.id !== historyId);
+                for (const event of priorEvents) if (!appData.activityHistory.some(row => row.id === event.id && row.petId === petId)) appData.activityHistory.push(event);
+                $('routineStatus').textContent = 'Отметка не сохранена. Освободите место на устройстве и повторите попытку.';
+            }
+        } finally {
+            pendingTasks.delete(pending);
+            if (activeUserId === uid) { render(true); renderEventHistory(); renderCalendar(); }
+        }
+    }
+    $('routineForm').addEventListener('submit', event => { event.preventDefault(); commit(); });
+    document.addEventListener('click', event => {
+        const button = event.target.closest?.('[data-routine]');
+        if (!button || button.disabled) return;
+        const action = button.dataset.routine;
+        if (action === 'add') open();
+        else if (action === 'edit') open(button.dataset.taskId);
+        else if (action === 'toggle') toggle(button);
+        else if (action === 'close') dialog.close();
+        else if (action === 'delete') commit(true);
+        else if (action === 'pet') openPetForm(true);
+    });
+    dialog.addEventListener('close', () => {
+        const previous = editing; editing = null;
+        if (previous?.userId !== activeUserId || previous?.petId !== getActivePetKey()) return;
+        const trigger = [...$('dailyTaskList').querySelectorAll('[data-routine="edit"]')].find(button => button.dataset.taskId === previous.id);
+        (trigger || document.querySelector('[data-routine="add"]'))?.focus({ preventScroll: true });
+    });
+    // Reset the checklist at local midnight, also after resuming a suspended PWA.
+    function refreshDay() {
+        clearTimeout(midnightTimer);
+        if (document.hidden) return;
+        if (activeUserId) { render(); renderHomeReminders(); updateHomeOverview(); }
+        const next = new Date(); next.setHours(24, 0, 0, 50);
+        midnightTimer = setTimeout(refreshDay, next.getTime() - Date.now());
+    }
+    window.addEventListener('petcare:data-changed', () => render());
+    window.addEventListener('petcare:account-ready', refreshDay);
+    window.addEventListener('petcare:account-reset', () => { dialog.close(); renderedKey = ''; pendingTasks.clear(); $('routineStatus').textContent = ''; });
+    document.addEventListener('visibilitychange', refreshDay);
+    window.PetCareRoutine = { render, items, toggle };
+    render(); refreshDay();
+})();

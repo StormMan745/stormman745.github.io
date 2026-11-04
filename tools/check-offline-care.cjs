@@ -84,6 +84,48 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   const base=`http://127.0.0.1:${server.address().port}`;
   await page.goto(base);await page.waitForFunction(()=>window.PetCareCare&&activeUserId&&document.getElementById('homePage').style.display==='block');
   await page.waitForFunction(()=>PetCareSync.state.phase==='saved');
+  // The visible daily checklist is editable without changing actual push reminders.
+  await page.locator('[data-routine="edit"][data-task-id="feeding"]').click();
+  await page.locator('#routineName').fill('Завтрак после прогулки');await page.locator('#routineTime').fill('09:30');
+  await page.locator('#routineSave').click();await page.waitForFunction(()=>!document.getElementById('routineDialog').open);
+  assert.equal(profiles.get(uid).data.pet.dailyRoutine.find(r=>r.id==='feeding').time,'09:30');
+  assert.equal(profiles.get(uid).data.reminders.length,0,'Checklist edits must not silently create push reminders');
+  await page.locator('[data-routine="toggle"][data-task-id="feeding"]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-task="feeding"] .task-complete').getAttribute('aria-pressed')==='true'&&PetCareSync.state.phase==='saved');
+  await page.locator('[data-routine="edit"][data-task-id="feeding"]').click();await page.locator('#routineName').fill('Не сохранять');await page.keyboard.press('Escape');
+  assert.match(await page.locator('[data-task="feeding"] .task-info').innerText(),/Завтрак после прогулки/);
+  await page.locator('[data-routine="edit"][data-task-id="feeding"]').click();await page.locator('#routineTime').fill('10:00');await page.locator('#routineSave').click();await page.waitForFunction(()=>!document.getElementById('routineDialog').open);
+  assert.equal(await page.locator('[data-task="feeding"] .task-complete').getAttribute('aria-pressed'),'true','Editing retains completion');
+  // Offline edits survive reload; a task with the same ID on another date/pet must survive merging.
+  await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>true));available=false;await context.setOffline(true);
+  await page.locator('[data-routine="add"]').click();await page.locator('#routineName').fill('Игра <img src=x onerror=alert(1)>');await page.locator('#routineTime').fill('19:15');await page.locator('#routineIcon').selectOption('🎾');await page.locator('#routineSave').click();await page.waitForFunction(()=>!document.getElementById('routineDialog').open);
+  assert.equal(await page.locator('#dailyTaskList img').count(),0,'Task names must render as text');
+  await page.reload();await page.waitForFunction(()=>window.PetCareRoutine&&activeUserId&&document.querySelectorAll('#dailyTaskList .task').length===4);
+  assert.match(await page.locator('#dailyTaskList').innerText(),/Игра <img/);
+  await page.evaluate(async()=>{appData.completedTasks.push({id:'feeding',date:'2020-01-01',petId:getActivePetKey()});appData.pets.push({id:'pet-two',name:'Кошка',animal:'🐱'});await saveData()});
+  profiles.get(uid).data.completedTasks.push({id:'feeding',date:'2020-01-02',petId:'pet-one'},{id:'feeding',date:'2020-01-02',petId:'pet-two'});profiles.get(uid).revision++;
+  available=true;await context.setOffline(false);await page.evaluate(()=>PetCareSync.flush());await page.waitForFunction(()=>PetCareSync.state.phase==='saved');
+  assert.equal(profiles.get(uid).data.completedTasks.filter(r=>r.id==='feeding').length,4,'Merge retains repeated task IDs across dates and pets');
+  await page.evaluate(()=>switchPet('pet-two'));assert.equal(await page.locator('#dailyTaskList .task').count(),3);assert.match(await page.locator('[data-task="feeding"] .task-info').innerText(),/08:00/);
+  await page.locator('[data-routine="toggle"][data-task-id="feeding"]').click();await page.waitForFunction(()=>PetCareSync.state.phase==='saved'&&!document.querySelector('[data-routine="toggle"][data-task-id="feeding"]').disabled);
+  assert.equal(profiles.get(uid).data.activityHistory.filter(e=>e.kind==='task').length,2,'Both pets keep independent completion histories');
+  await page.evaluate(()=>switchPet('pet-one'));assert.equal(await page.locator('#dailyTaskList .task').count(),4);
+  await page.locator('#dailyTaskList .task').filter({hasText:'Игра <img'}).locator('[data-routine="edit"]').click();await page.locator('#routineDelete').click();await page.waitForFunction(()=>!document.getElementById('routineDialog').open);assert.equal(await page.locator('#dailyTaskList .task').count(),3);
+  await page.locator('[data-routine="edit"][data-task-id="walk"]').click();
+  profiles.get(uid).data.pets[0].dailyRoutine.find(r=>r.id==='walk').time='18:45';profiles.get(uid).data.pet=profiles.get(uid).data.pets[0];profiles.get(uid).revision++;
+  await page.evaluate(()=>PetCareSync.flush());await page.locator('#routineName').fill('Устаревшая правка');await page.locator('#routineSave').click();assert.match(await page.locator('#routineFormStatus').innerText(),/другом устройстве/);await page.keyboard.press('Escape');
+  assert.equal(profiles.get(uid).data.pet.dailyRoutine.find(r=>r.id==='walk').time,'18:45');
+  await page.locator('[data-routine="edit"][data-task-id="walk"]').click();await page.locator('#routineName').fill('Не должно сохраниться');
+  await page.evaluate(()=>{window.savedSync=PetCareSync.save;PetCareSync.save=async()=>{throw new Error('test disk full')}});await page.locator('#routineSave').click();await page.waitForFunction(()=>document.getElementById('routineFormStatus').textContent.includes('Не удалось сохранить'));assert.equal(await page.evaluate(()=>PetCareRoutine.items().find(r=>r.id==='walk').name),'Прогулка');await page.evaluate(()=>{PetCareSync.save=window.savedSync});await page.keyboard.press('Escape');
+  for(const width of [320,390,1440]){
+   await page.setViewportSize({width,height:960});await page.evaluate(()=>showHome());
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Home fits '+width);
+   assert(await page.locator('[data-routine="edit"]').first().evaluate(e=>e.scrollWidth<=e.clientWidth&&parseFloat(getComputedStyle(e).fontSize)<=16),'Edit label fits its button');
+   await page.screenshot({path:path.join(root,`.tools/polish-home-${width}.png`),fullPage:true});
+   await page.locator('[data-routine="edit"]').first().click();assert(await page.locator('#routineDialog').evaluate(e=>e.scrollWidth<=e.clientWidth),'Editor fits '+width);
+   await page.screenshot({path:path.join(root,`.tools/polish-editor-${width}.png`)});await page.keyboard.press('Escape');
+  }
+  await page.setViewportSize({width:390,height:844});
   await page.locator('[data-care="navigation-more"]').click();await page.locator('[data-care="navigation-open"][data-target="nav-profile"]').click();assert.equal(await page.locator('#profilePage').isVisible(),true);assert.equal(await page.locator('#careDialog').isVisible(),false);
   await page.screenshot({path:path.join(root,'.tools/care-profile-mobile.png'),fullPage:true});
   await page.evaluate(()=>PetCareCare.openMedications());await page.locator('[data-care="course-add"]').click();
@@ -158,12 +200,19 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   await page.locator('[data-care="shared-pet-edit"]').click();await page.locator('#sharedName').fill('Edited by helper');await page.locator('#sharedEditForm button[type="submit"]').click();await page.waitForFunction(()=>!document.getElementById('careDialog').open);assert.equal(profiles.get(other).data.pet.name,'Edited by helper');assert.equal(profiles.get(other).data.pets.find(p=>p.id==='pet-b-private').name,'Never shared');
   await page.evaluate(()=>PetCareCare.openPrivacy());const download=page.waitForEvent('download');await page.locator('[data-care="export-all"]').click();const archive=await download;const zipBuffer=fs.readFileSync(await archive.path());const entries=zipEntries(zipBuffer);assert(entries.some(e=>e.name==='account.json'));assert(entries.some(e=>e.name.endsWith('original.png')));assert(JSON.parse(entries.find(e=>e.name==='account.json').bytes).profile.data.healthRecords.some(r=>r.id==='offline-visit'));
   await page.locator('[data-care="support"]').first().evaluate(e=>e.click());await page.locator('#careSupportMessage').fill('Тестовое описание проблемы');await page.locator('#careSupportForm button[type="submit"]').click();await page.waitForFunction(()=>document.getElementById('supportPageStatus').textContent.includes('test-report'));assert.equal(reports.length,1);assert.deepEqual(Object.keys(reports[0].diagnostics).sort(),['browser','errorCodes','online','pending','version']);assert(!JSON.stringify(reports[0]).includes('Офлайн запись'));
-  for(const width of [320,390,1440]){await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
+  for(const width of [320,390,1440]){
+   await page.setViewportSize({width,height:900});
+   for(const screen of ['Pet','Health','Reminders','Stories','Profile','Assistant']){
+    await page.evaluate(screen=>window['show'+screen](),screen);
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),screen+' fits '+width);
+    if(width!==320)await page.screenshot({path:path.join(root,`.tools/polish-${screen.toLowerCase()}-${width}.png`),fullPage:true});
+   }
+  }
   await page.evaluate(()=>PetCareCare.openPrivacy());await page.screenshot({path:path.join(root,'.tools/care-privacy-desktop.png'),fullPage:true});
   await page.evaluate(()=>PetCareCare.openPrivacy());await page.locator('[data-care="account-delete"]').click();await page.locator('#deleteAccountPassword').fill('test-password');await page.locator('#deleteAccountPhrase').fill('УДАЛИТЬ');await page.locator('#deleteAccountForm button[type="submit"]').click();await page.waitForFunction(()=>activeUserId===null&&document.getElementById('authMessage').textContent.includes('удалены'));
   assert(deleted);assert.equal(await page.evaluate(uid=>PetCareSync.get('profiles',uid),uid),undefined);assert.equal(profiles.get(other).data.pet.name,'Edited by helper');
   await page.locator('#loginEmail').fill('new@example.test');await page.locator('[data-care="password-recovery"]').click();await page.waitForFunction(()=>document.getElementById('authMessage').textContent.includes('Если аккаунт'));assert.equal(recoveryRequests,1);
   await page.locator('#registerTab').click();await page.locator('#registerEmail').fill('new@example.test');await page.locator('#registerPassword').fill('test-password');await page.locator('#registerPassword2').fill('test-password');await page.locator('#registerButton').click();await page.waitForFunction(()=>activeUserId==='c3000000-0000-4000-8000-000000000003'&&document.getElementById('homePage').style.display==='block');assert.equal(await page.evaluate(()=>appData.pet.isPlaceholder),true,'New accounts must not invent a pet');
-  assert.deepEqual(errors,[]);console.log('PASS: mobile navigation, labeled forms and focus, medication course/daily doses/stock, concurrent saves and account switching, offline upload/reload/printing, profile/document conflicts, recoverable deletion, full shared-care editing isolation, originals ZIP, private diagnostics, opt-out, responsive layouts, account deletion, registration and password recovery (mocked services).');
+  assert.deepEqual(errors,[]);console.log('PASS: editable per-pet daily routines, offline edit/reload, completion date/pet merge, stale-editor and storage-failure handling, seven responsive screens, mobile navigation, labeled forms and focus, medication course/daily doses/stock, concurrent saves and account switching, offline upload/reload/printing, profile/document conflicts, recoverable deletion, full shared-care editing isolation, originals ZIP, private diagnostics, opt-out, account deletion, registration and password recovery (mocked services).');
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(e=>{console.error(e.stack);process.exitCode=1});

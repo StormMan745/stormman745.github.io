@@ -1,4 +1,4 @@
-const CACHE_NAME = "petcare-shell-v41-happy-companions";
+const CACHE_NAME = "petcare-shell-v42-daily-care";
 const SHELL_FILES = [
     "/",
     "/index.html",
@@ -8,6 +8,8 @@ const SHELL_FILES = [
     "/offline-files.js",
     "/care.js",
     "/care.css",
+    "/routine.js",
+    "/polish.css",
     "/vet.html",
     "/vet.js",
     "/vet.css",
