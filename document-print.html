@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' blob: data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>Печать документа — PetCare</title>
+    <link rel="stylesheet" href="document-print.css?v=20261104">
+    <script src="document-print.bundle.js?v=20261104" defer></script>
+</head>
+<body>
+    <header class="print-toolbar">
+        <div><span class="print-brand">PetCare · Документы</span><h1 id="printTitle">Подготовка документа</h1><p id="printStatus" role="status">Загружаю оригинал…</p></div>
+        <div class="print-actions"><button type="button" id="printButton" disabled>Печатать</button><a id="printOriginal" hidden target="_blank" rel="noopener noreferrer">Открыть оригинал ↗</a></div>
+        <p class="print-hint">В окне печати можно выбрать страницы, принтер или сохранение в PDF. На телефоне доступные варианты зависят от системы.</p>
+    </header>
+    <main id="printPages" aria-label="Страницы документа" aria-busy="true"></main>
+</body>
+</html>

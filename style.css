@@ -1662,6 +1662,23 @@ input:focus, select:focus, textarea:focus {
     cursor: pointer;
 }
 
+.pet-profile-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.pet-profile-actions > button {
+    width: 100%;
+    min-width: 0;
+    min-height: 52px;
+    margin: 0;
+    padding: 12px 16px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
 .pet-photo-editor {
     display: grid;
     grid-template-columns: 88px minmax(0, 1fr);
@@ -2568,6 +2585,73 @@ input, select, textarea {
     margin-top: 12px;
 }
 
+.health-passport-actions {
+    display: grid;
+    gap: 14px;
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid #e1e8dc;
+}
+
+.health-passport-action {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 80px;
+    margin: 0;
+    padding: 14px;
+    border: 1px solid #d8e4d2;
+    border-radius: 18px;
+    background: #f1f6e9;
+    color: #294b3b;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 3px 0 #e0e8d9, inset 0 1px #fff;
+}
+
+.health-passport-action .health-action-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 42px;
+    height: 42px;
+    border: 1px solid #dce6d4;
+    border-radius: 13px;
+    background: #fffef8;
+    font-size: 23px;
+}
+
+.health-passport-action .health-action-copy { flex: 1; min-width: 0; }
+.health-passport-action .health-action-copy strong {
+    display: block;
+    color: inherit;
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+.health-passport-action .health-action-copy small {
+    display: block;
+    margin-top: 4px;
+    color: #647361;
+    font-size: 12px;
+    line-height: 1.45;
+}
+.health-passport-action .health-action-arrow { flex: 0 0 auto; font-size: 21px; color: #698365; }
+.health-print-action { background: #fffefa; border-color: #e5e4da; box-shadow: 0 3px 0 #eeece1, inset 0 1px #fff; }
+.health-print-action .health-action-icon { background: #f6f3eb; border-color: #e9e4d8; }
+.health-passport-action:hover { border-color: #a5bba0; background: #eaf2df; }
+.health-print-action:hover { background: #f8f5eb; border-color: #c9c2ae; }
+.health-passport-action:focus-visible { outline: 3px solid #6b947d; outline-offset: 4px; }
+.health-passport-action:active { transform: translateY(2px); box-shadow: none; }
+
+@media (max-width: 380px) {
+    .health-passport-action { gap: 9px; padding: 12px; }
+    .health-passport-action .health-action-icon { flex-basis: 34px; height: 36px; font-size: 20px; }
+    .health-passport-action .health-action-copy strong { font-size: 13px; }
+}
+
 .weight-section .section-heading span {
     color: var(--green-dark, #245d43);
     font-size: 14px;
@@ -3231,7 +3315,6 @@ body { background: radial-gradient(ellipse at 3% 6%, #d9ece1 0, transparent 38re
 #assistantMessages { background: linear-gradient(145deg, #f4f7ed, #fbfaf6 65%); box-shadow: inset 0 2px 7px rgba(54, 78, 46, .025); }
 .assistant-pet-context { padding: 13px 15px; margin-bottom: 15px; }
 .assistant-pet-context > label { margin: 0 0 7px; }
-.assistant-profile-status { margin-top: 9px; color: #6e826c; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .assistant-live-badge { display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; padding: 6px 10px; border: 1px solid #e7dfc8; border-radius: 999px; background: #fff8e8; color: #8e7c43; font-size: 11px; font-weight: 700; line-height: 1.4; }
 .assistant-live-badge::before { content: ""; flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .assistant-live-badge[data-state="ready"] { border-color: #d3e4d3; background: #edf7e9; color: #54834e; }
@@ -3323,4 +3406,59 @@ body { background: radial-gradient(ellipse at 3% 6%, #d9ece1 0, transparent 38re
 @media (prefers-reduced-motion: reduce) {
     .hero-sphere, .care-art-tile { animation: none; }
     .task, .health-record, .reminder, .story-card, .history-event { transition: none; }
+}
+
+/* Detailed care records, appointments and situation guides */
+#healthForm [hidden] { display: none !important; }
+.record-detail-fields { margin: 14px 0; padding: 17px; border: 1px solid #dfe9dc; border-radius: 16px; background: #f6faf4; }
+.record-detail-fields label:first-child { margin-top: 0; }
+.record-detail-fields textarea { min-height: 90px; }
+.health-record-details { display: grid; grid-template-columns: minmax(85px, .4fr) minmax(0, 1fr); gap: 5px 10px; margin: 12px 0 2px; padding: 12px; border-radius: 12px; background: #f4f8f1; font-size: 12px; line-height: 1.5; }
+.health-record-details dt { color: #64816a; font-weight: 700; }
+.health-record-details dd { min-width: 0; margin: 0; color: #314d3d; white-space: pre-wrap; overflow-wrap: anywhere; }
+.appointment-section { margin: 20px 0; padding: 20px; border: 1px solid #dce8da; border-radius: 20px; background: #fffefa; }
+.appointment-section .section-heading { margin-bottom: 4px; }
+.appointment-hint { margin: 8px 0 16px; color: #788774; font-size: 13px; line-height: 1.6; }
+.appointment-list { display: grid; gap: 10px; margin: 14px 0; }
+.appointment-list .empty-state { margin: 0; padding: 16px; }
+.appointment-card { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px; border: 1px solid #e1e9dc; border-radius: 14px; background: #f9fcf7; }
+.appointment-card > div:first-child { min-width: 180px; flex: 1; }
+.appointment-card strong, .appointment-card small { display: block; overflow-wrap: anywhere; }
+.appointment-card strong { color: #294c38; }
+.appointment-card small { margin-top: 5px; color: #697e6e; font-size: 12px; }
+.appointment-card .appointment-overdue { color: #a25c3c; }
+.appointment-edit-button { min-height: 40px; padding: 8px 10px; border: 1px solid #cfe1d0; border-radius: 11px; background: #f1f8f0; color: #356047; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.appointment-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.appointment-actions > * { display: inline-flex; align-items: center; justify-content: center; width: auto; text-align: center; text-decoration: none; }
+.guide-intro { max-width: 680px; color: #718071; line-height: 1.6; }
+.guide-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; margin-top: 20px; }
+.guide-card { min-width: 0; padding: 20px; border: 1px solid #dce8da; border-radius: 20px; background: #fffefa; box-shadow: 0 4px 0 #e9efe5; }
+.guide-icon { font-size: 28px; }
+.guide-card h3 { margin: 10px 0; color: #294c38; font-size: 18px; }
+.guide-card ol { padding-left: 20px; color: #596f5d; font-size: 13px; line-height: 1.65; }
+.guide-card li { margin: 8px 0; }
+.guide-card a { display: inline-block; margin-top: 12px; color: #276549; font-size: 13px; font-weight: 700; }
+.guide-card button { width: 100%; margin-top: 8px; }
+@media (max-width: 850px) { .guide-list { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+    .appointment-section { padding: 15px; }
+    .appointment-card .entry-actions { justify-content: flex-start; flex-wrap: wrap; }
+    .appointment-actions > * { width: 100%; }
+    .health-record-details { grid-template-columns: minmax(0, 1fr); }
+    .health-record-details dd { margin-bottom: 5px; }
+}
+@media (min-width: 900px) { #appointmentForm { max-width: 660px; margin-inline: auto; } }
+
+/* Keep reading text legible when moving between sections. */
+.page:not(#homePage):not(#authPage) :is(p, li, label, small, dt, dd) {
+    font-size: max(14px, 1em);
+}
+.page:not(#homePage):not(#authPage) :is(.history-open-button, .home-reminders-link, .pet-photo-edit, .weight-history-link, .appointment-edit-button, .guide-card a, .clinic-button, .clinic-official-links a),
+#healthPage .health-passport strong,
+#healthPage .weight-chart {
+    font-size: 14px;
+}
+
+@media (max-width: 420px) {
+    .bottom-menu a { min-height: 64px; font-size: 11px; }
 }

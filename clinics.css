@@ -7,6 +7,8 @@
 #clinicsPage { min-width: 0; }
 .clinic-intro { margin: -8px 0 22px; color: #75816f; font-size: 14px; line-height: 1.7; max-width: 640px; }
 .clinic-search-panel { background: #fffefa; border: 1px solid #e0e6d8; padding: 22px; border-radius: 22px; margin-bottom: 20px; }
+.clinic-search-panel > label { display: block; margin-bottom: 9px; font-size: 12px; font-weight: 650; color: #47603d; }
+#clinicCategory { display: block; width: 100%; max-width: 420px; min-height: 48px; margin: 0 0 18px; padding: 10px 14px; border: 1px solid #d7dfd0; border-radius: 13px; background: #fff; color: #284735; font: inherit; font-size: 15px; }
 #clinicSearchForm > label { display: block; margin-bottom: 9px; font-size: 12px; font-weight: 650; color: #47603d; }
 .clinic-search-row { display: flex; gap: 9px; }
 #clinicAddress { flex: 1; min-width: 0; width: auto; margin: 0; border: 1px solid #d7dfd0; border-radius: 13px; padding: 13px 15px; background: white; font: inherit; font-size: 16px; color: #284735; box-shadow: none; }
@@ -28,6 +30,9 @@
 .clinic-status { padding: 14px 17px; border: 1px solid #e2e7da; border-radius: 14px; background: #f0f4e8; color: #627451; font-size: 13px; line-height: 1.6; margin-bottom: 14px; }
 .clinic-status[data-kind="error"] { background: #fff2e6; border-color: #efd6bc; color: #8c583b; }
 .clinic-status[data-kind="loading"]::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 9px; border: 2px solid #b9c9a6; border-top-color: #426638; border-radius: 50%; animation: clinic-spin 1s linear infinite; }
+.clinic-official-links { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 16px; }
+.clinic-official-links a { display: inline-flex; align-items: center; min-height: 42px; padding: 9px 13px; border: 1px solid #cfe1d0; border-radius: 12px; background: #f0f7eb; color: #295d40; font-size: 12px; font-weight: 700; text-decoration: none; }
+.clinic-official-links a:hover { background: #e3f0de; }
 @keyframes clinic-spin { to { transform: rotate(360deg); } }
 .clinic-results-heading { display: flex; align-items: start; justify-content: space-between; gap: 15px; margin: 24px 0 14px; }
 .clinic-results-heading h3 { margin: 0 0 5px; font-size: 19px; font-weight: 650; color: #294b39; }

@@ -361,6 +361,9 @@ async function loadDataFromDatabase(userId) {
 // ==============================
 
 function hideAllPages() {
+    // Reset before removing the current page: otherwise scroll anchoring keeps
+    // the old position when the next page is shorter.
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     window.dispatchEvent(new Event('petcare:clinics-close'));
     const pages = document.querySelectorAll(".page");
 
@@ -376,7 +379,7 @@ function loadClinicsRuntime() {
     if (window.PetCareClinics?.open) return Promise.resolve(window.PetCareClinics);
     if (!clinicsRuntimePromise) clinicsRuntimePromise = new Promise((resolve, reject) => {
         const script = document.createElement('script');
-        script.src = 'clinics.bundle.js?v=20261029-yandex-directory';
+        script.src = 'clinics.bundle.js?v=20261031-pet-services';
         const fail = () => {
             script.remove();
             clinicsRuntimePromise = null;
@@ -407,6 +410,7 @@ async function showClinics() {
 function closeClinics() {
     if (clinicsReturnPage === 'healthPage') showHealth();
     else if (clinicsReturnPage === 'profilePage') showProfile();
+    else if (clinicsReturnPage === 'guidesPage') showGuides();
     else showHome();
 }
 
@@ -519,6 +523,23 @@ function showProfile() {
     }
 
     loadUserProfile();
+}
+
+let guidesReturnPage = "homePage";
+function showGuides() {
+    const currentPage = Array.from(document.querySelectorAll(".page")).find(page => page.offsetParent);
+    if (currentPage && currentPage.id !== "guidesPage" && currentPage.id !== "clinicsPage") {
+        guidesReturnPage = currentPage.id;
+    }
+    hideAllPages();
+    markActiveNavigation(guidesReturnPage === "petPage" ? "nav-pet" : "nav-home");
+    const page = document.getElementById("guidesPage");
+    if (page) page.style.display = "block";
+    window.scrollTo(0, 0);
+}
+function closeGuides() {
+    if (guidesReturnPage === "petPage") showPet();
+    else showHome();
 }
 
 
@@ -768,6 +789,9 @@ function fillPetForm() {
     const breedInput = document.getElementById("breedInput");
     const weightInput = document.getElementById("weightInput");
     const birthDateInput = document.getElementById("birthDateInput");
+    const sexInput = document.getElementById("sexInput");
+    const colorInput = document.getElementById("colorInput");
+    const chipInput = document.getElementById("chipInput");
     const allergiesInput = document.getElementById("allergiesInput");
     const medicationsInput = document.getElementById("medicationsInput");
     const vetClinicInput = document.getElementById("vetClinicInput");
@@ -796,6 +820,9 @@ function fillPetForm() {
     }
 
     if (birthDateInput) birthDateInput.value = formPet?.birthDate || "";
+    if (sexInput) sexInput.value = formPet?.sex || "";
+    if (colorInput) colorInput.value = formPet?.color || "";
+    if (chipInput) chipInput.value = formPet?.chipNumber || "";
     if (allergiesInput) allergiesInput.value = formPet?.allergies || "";
     if (medicationsInput) medicationsInput.value = formPet?.medications || "";
     if (vetClinicInput) vetClinicInput.value = formPet?.vetClinic || "";
@@ -819,6 +846,9 @@ async function savePet() {
     const breedInput = document.getElementById("breedInput");
     const weightInput = document.getElementById("weightInput");
     const birthDateInput = document.getElementById("birthDateInput");
+    const sexInput = document.getElementById("sexInput");
+    const colorInput = document.getElementById("colorInput");
+    const chipInput = document.getElementById("chipInput");
     const allergiesInput = document.getElementById("allergiesInput");
     const medicationsInput = document.getElementById("medicationsInput");
     const vetClinicInput = document.getElementById("vetClinicInput");
@@ -831,6 +861,7 @@ async function savePet() {
     const breed = breedInput ? breedInput.value.trim() : "";
     const weight = weightInput ? weightInput.value : "";
     const animal = animalInput ? animalInput.value : "🐶";
+    const chipNumber = chipInput?.value.trim() || "";
 
     if (!name) {
         alert("Введите имя питомца!");
@@ -851,6 +882,9 @@ async function savePet() {
         weight: weight ? Number(weight) : null,
         animal,
         birthDate: birthDateInput?.value || "",
+        sex: sexInput?.value || "",
+        color: colorInput?.value.trim() || "",
+        chipNumber,
         allergies: allergiesInput?.value.trim() || "",
         medications: medicationsInput?.value.trim() || "",
         vetClinic: vetClinicInput?.value.trim() || "",
@@ -945,13 +979,22 @@ async function deletePet() {
 
     const petName = pet.name || "этого питомца";
     const confirmed = window.confirm(
-        `Удалить ${petName}? Вместе с карточкой будут удалены его записи о здоровье, напоминания и история. Это действие нельзя отменить.`
+        `Удалить ${petName}? Вместе с карточкой будут удалены его документы, записи о здоровье, напоминания и история. Это действие нельзя отменить.`
     );
     if (!confirmed) return;
 
     const { data: userData, error: userError } = await supabaseClient.auth.getUser();
     if (userError || !userData.user || userData.user.id !== activeUserId) {
         alert("Сначала войдите в аккаунт.");
+        return;
+    }
+
+    try {
+        if (!window.PetCareDocuments) throw new Error("Раздел документов ещё не загружен. Обновите страницу и повторите удаление.");
+        await window.PetCareDocuments.removePet(getPetKey(pet), userData.user.id);
+        if (activeUserId !== userData.user.id) return;
+    } catch (error) {
+        alert(error.message || "Не удалось удалить документы питомца. Повторите попытку.");
         return;
     }
 
@@ -1049,6 +1092,15 @@ function updatePetOnScreen() {
     if (weightElement) {
         weightElement.textContent = weight ? weight + " кг" : "Не указан";
     }
+    const identityFields = {
+        petSex: pet.sex === "male" ? "Самец" : pet.sex === "female" ? "Самка" : "Не указан",
+        petColor: pet.color || "Не указан",
+        petChip: pet.chipNumber || "Не указан"
+    };
+    Object.entries(identityFields).forEach(([id, value]) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    });
 
     renderPetAvatar(photoElement, pet);
 
@@ -1083,6 +1135,7 @@ function updatePetOnScreen() {
     renderWeightHistory();
     renderEventHistory();
     renderCalendar();
+    renderAppointments();
 }
 
 function updateHomeOverview() {
@@ -1131,6 +1184,7 @@ async function switchPet(petId) {
 
     appData.pet = selectedPet;
     appData.activePetId = getPetKey(selectedPet);
+    window.PetCareDocuments?.refreshPet();
     normalizeAppData();
     updatePetOnScreen();
     renderHealthRecords();
@@ -1251,6 +1305,13 @@ function openHealthForm() {
     if (nextDateInput) nextDateInput.value = "";
     if (nameInput) nameInput.value = "";
     if (noteInput) noteInput.value = "";
+    ["recordClinic", "recordDiagnosis", "recordPrescription", "recordLabName", "recordLabResult", "recordTreatment"].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.value = "";
+    });
+    const typeInput = document.getElementById("recordType");
+    if (typeInput) typeInput.value = "Прививка";
+    updateHealthRecordFields();
 
     hideAllPages();
     markActiveNavigation("nav-health");
@@ -1266,6 +1327,19 @@ function closeHealthForm() {
     showHealth();
 }
 
+function updateHealthRecordFields() {
+    const type = document.getElementById("recordType")?.value;
+    const groups = {
+        recordVisitFields: type === "Ветеринар",
+        recordLabFields: type === "Анализы",
+        recordParasiteFields: type === "Обработка от паразитов"
+    };
+    Object.entries(groups).forEach(([id, visible]) => {
+        const group = document.getElementById(id);
+        if (group) group.hidden = !visible;
+    });
+}
+
 
 // ==============================
 // СОХРАНЕНИЕ ЗАПИСИ ЗДОРОВЬЯ
@@ -1279,28 +1353,51 @@ async function saveHealthRecord() {
     const date = document.getElementById("recordDate").value;
     const nextDate = document.getElementById("recordNextDate")?.value || "";
     const note = document.getElementById("recordNote").value.trim();
+    const fieldValue = id => document.getElementById(id)?.value.trim() || "";
 
     if (name === "") {
         alert("Введите название записи!");
         return;
     }
+    if (!date) {
+        alert("Укажите дату записи.");
+        return;
+    }
+    if (type === "Анализы" && !fieldValue("recordLabResult")) {
+        alert("Укажите результат исследования.");
+        document.getElementById("recordLabResult")?.focus();
+        return;
+    }
 
     const record = {
-        id: Date.now(),
+        id: createEntryId("health"),
         type: type,
         name: name,
         date: date,
         nextDate,
         note: note,
+        clinic: type === "Ветеринар" ? fieldValue("recordClinic") : "",
+        diagnosis: type === "Ветеринар" ? fieldValue("recordDiagnosis") : "",
+        prescription: type === "Ветеринар" ? fieldValue("recordPrescription") : "",
+        labName: type === "Анализы" ? fieldValue("recordLabName") : "",
+        labResult: type === "Анализы" ? fieldValue("recordLabResult") : "",
+        treatment: type === "Обработка от паразитов" ? fieldValue("recordTreatment") : "",
         photos: [...pendingHealthPhotos],
         petId: getActivePetKey()
     };
 
     appData.healthRecords.push(record);
     if (nextDate) {
+        const followUpTypes = {
+            "Прививка": "Прививка",
+            "Лекарство": "Лекарство",
+            "Ветеринар": "Ветеринар",
+            "Обработка от паразитов": "Обработка от паразитов и клещей",
+            "Анализы": "Ветеринар"
+        };
         appData.reminders.push({
             id: `health-followup-${record.id}`,
-            type: type === "Лекарство" ? "Лекарство" : type === "Ветеринар" ? "Ветеринар" : "Уход",
+            type: followUpTypes[type] || "Уход",
             name: `Повтор: ${name}`,
             date: nextDate,
             time: "",
@@ -1371,12 +1468,35 @@ function addHealthRecordToScreen(record) {
         note.textContent = record.note;
         info.appendChild(note);
     }
+    appendHealthRecordDetails(info, record);
     appendAttachmentPhotos(info, record, `Фото к записи «${record.name}»`);
     recordElement.append(iconElement, info, createEntryDeleteButton(
         "health-delete", record.id, record.petId ?? getActivePetKey(), `Удалить запись «${record.name}»`
     ));
 
     container.appendChild(recordElement);
+}
+
+function appendHealthRecordDetails(container, record) {
+    const fields = [
+        ["Клиника", record.clinic],
+        ["Диагноз", record.diagnosis],
+        ["Назначения", record.prescription],
+        ["Исследование", record.labName],
+        ["Результат", record.labResult],
+        ["Обработка", record.treatment]
+    ].filter(([, value]) => value);
+    if (!fields.length) return;
+    const details = document.createElement("dl");
+    details.className = "health-record-details";
+    fields.forEach(([label, value]) => {
+        const term = document.createElement("dt");
+        term.textContent = label;
+        const description = document.createElement("dd");
+        description.textContent = value;
+        details.append(term, description);
+    });
+    container.appendChild(details);
 }
 
 
@@ -1440,7 +1560,8 @@ function buildPetEventHistory() {
             date: record.date || getLocalDateInputValue(),
             title: record.name,
             note: [record.type, record.note, record.nextDate ? `Следующая процедура: ${formatHistoryDate(record.nextDate)}` : ""].filter(Boolean).join(" · "),
-            icon: record.type === "Прививка" ? "💉" : record.type === "Лекарство" ? "💊" : record.type === "Ветеринар" ? "🩺" : "❤️"
+            searchText: [record.clinic, record.diagnosis, record.prescription, record.labName, record.labResult, record.treatment].filter(Boolean).join(" "),
+            icon: ({ "Прививка": "💉", "Лекарство": "💊", "Ветеринар": "🩺", "Обработка от паразитов": "🛡️", "Анализы": "🧪" })[record.type] || "❤️"
         }));
     const weights = (appData.pet?.weightHistory || []).map(entry => ({
         id: `weight-${entry.id}`,
@@ -1491,7 +1612,7 @@ function renderEventHistory() {
     const allEvents = buildPetEventHistory();
     const events = allEvents.filter(event => {
         const matchesKind = kind === "all" || event.kind === kind;
-        const text = `${event.title} ${event.note}`.toLocaleLowerCase("ru-RU");
+        const text = `${event.title} ${event.note} ${event.searchText || ""}`.toLocaleLowerCase("ru-RU");
         const matchesDate = (!fromDate || event.date >= fromDate) && (!toDate || event.date <= toDate);
         return matchesKind && matchesDate && (!query || text.includes(query));
     });
@@ -1519,7 +1640,17 @@ function renderEventHistory() {
         content.append(title, meta);
         if (event.kind === "health") {
             const record = appData.healthRecords.find(item => String(item.id) === String(event.entryId) && String(item.petId ?? event.petId) === event.petId);
-            if (record) appendAttachmentPhotos(content, record, `Фото к записи «${record.name}»`);
+            if (record) {
+                appendHealthRecordDetails(content, record);
+                appendAttachmentPhotos(content, record, `Фото к записи «${record.name}»`);
+                const documentsButton = document.createElement("button");
+                documentsButton.type = "button";
+                documentsButton.className = "document-button";
+                documentsButton.dataset.pcClick = "documents-open";
+                documentsButton.dataset.recordId = String(record.id);
+                documentsButton.textContent = "Документы и заключения ↗";
+                content.appendChild(documentsButton);
+            }
         }
         const reminder = event.reminderId == null ? null : appData.reminders.find(item => String(item.id) === String(event.reminderId) && String(item.petId ?? event.petId) === event.petId);
         if (reminder) appendAttachmentPhotos(content, reminder, `Фото к напоминанию «${reminder.name}»`);
@@ -1726,6 +1857,8 @@ function buildPetHealthPrintHtml(pet, fields, records, weights) {
     if (fields.has("basic")) {
         addCard("Вид и порода", [pet.animal, pet.breed].filter(Boolean).join(" · ") || "Не указаны");
         addCard("Возраст и текущий вес", `${formatPetAge(pet.birthDate)} · ${pet.weight ? `${pet.weight} кг` : "Вес не указан"}`);
+        addCard("Пол и окрас", [pet.sex === "male" ? "Самец" : pet.sex === "female" ? "Самка" : "", pet.color].filter(Boolean).join(" · ") || "Не указаны");
+        addCard("Номер микрочипа", pet.chipNumber || "Не указан");
     }
     if (fields.has("allergies")) addCard("Аллергии", pet.allergies || "Не указаны");
     if (fields.has("medications")) addCard("Постоянные лекарства", pet.medications || "Не указаны");
@@ -1733,6 +1866,8 @@ function buildPetHealthPrintHtml(pet, fields, records, weights) {
     const recordRows = records.map(record => `
         <article class="entry"><strong>${escapeHtml(record.name)}</strong><small>${escapeHtml(record.type)} · ${escapeHtml(formatHistoryDate(record.date))}</small>
         ${record.nextDate ? `<small>Следующая процедура: ${escapeHtml(formatHistoryDate(record.nextDate))}</small>` : ""}
+        ${[["Клиника", record.clinic], ["Диагноз", record.diagnosis], ["Назначения", record.prescription], ["Исследование", record.labName], ["Результат", record.labResult], ["Обработка", record.treatment]]
+            .filter(([, value]) => value).map(([label, value]) => `<p><b>${escapeHtml(label)}:</b> ${escapeHtml(value)}</p>`).join("")}
         ${record.note ? `<p>${escapeHtml(record.note)}</p>` : ""}</article>`).join("");
     const weightRows = weights.map(entry => `<li>${escapeHtml(formatHistoryDate(entry.date))} — <strong>${escapeHtml(entry.value)} кг</strong></li>`).join("");
     return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Здоровье — ${escapeHtml(pet.name || "Питомец")}</title>
@@ -1790,6 +1925,131 @@ function exportPetHealthPdf() {
     window.setTimeout(() => printWindow.print(), 300);
 }
 
+let editingAppointmentId = null;
+function openAppointmentForm(reminderId = null) {
+    if (!activeUserId || !appData.pet || appData.pet.isPlaceholder) {
+        alert("Сначала выберите питомца.");
+        return;
+    }
+    const reminder = reminderId == null ? null : appData.reminders.find(item =>
+        String(item.id) === String(reminderId) && item.appointment === true
+        && String(item.petId) === getActivePetKey() && !item.completed
+    );
+    if (reminderId != null && !reminder) return;
+    editingAppointmentId = reminder ? String(reminder.id) : null;
+    const form = document.getElementById("appointmentForm");
+    form.dataset.userId = activeUserId;
+    form.dataset.petId = getActivePetKey();
+    document.getElementById("appointmentFormTitle").textContent = reminder ? "Изменить приём" : "Приём у ветеринара";
+    document.getElementById("appointmentPurpose").value = reminder?.appointmentPurpose || "";
+    document.getElementById("appointmentClinic").value = reminder?.appointmentClinic || "";
+    document.getElementById("appointmentDate").value = reminder?.date || getLocalDateInputValue();
+    document.getElementById("appointmentTime").value = reminder?.time || "";
+    hideAllPages();
+    markActiveNavigation("nav-health");
+    form.style.display = "block";
+    window.scrollTo(0, 0);
+}
+
+function closeAppointmentForm() {
+    editingAppointmentId = null;
+    showHealth();
+}
+
+async function saveAppointment() {
+    const form = document.getElementById("appointmentForm");
+    if (!activeUserId || form?.dataset.userId !== activeUserId || form.dataset.petId !== getActivePetKey()) {
+        alert("Аккаунт или питомец изменился. Откройте форму заново.");
+        return;
+    }
+    const purpose = document.getElementById("appointmentPurpose").value.trim();
+    const clinic = document.getElementById("appointmentClinic").value.trim();
+    const date = document.getElementById("appointmentDate").value;
+    const time = document.getElementById("appointmentTime").value;
+    if (!date || !time) {
+        alert("Укажите дату и время приёма.");
+        return;
+    }
+    if (new Date(`${date}T${time}`).getTime() <= Date.now()) {
+        alert("Укажите будущую дату и время приёма.");
+        return;
+    }
+    const existing = editingAppointmentId == null ? null : appData.reminders.find(item =>
+        String(item.id) === editingAppointmentId && item.appointment === true
+        && String(item.petId) === getActivePetKey()
+    );
+    if (editingAppointmentId != null && !existing) return;
+    const reminder = {
+        ...(existing || {}),
+        id: existing?.id || createEntryId("appointment"),
+        type: "Ветеринар",
+        name: purpose ? `Приём у ветеринара: ${purpose}` : "Приём у ветеринара",
+        date,
+        time,
+        repeat: "once",
+        appointment: true,
+        appointmentPurpose: purpose,
+        appointmentClinic: clinic,
+        completed: false,
+        photos: existing?.photos || [],
+        petId: getActivePetKey()
+    };
+    if (existing) Object.assign(existing, reminder);
+    else appData.reminders.push(reminder);
+    const synced = await saveData();
+    updatePetOnScreen();
+    renderReminders();
+    renderHomeReminders();
+    closeAppointmentForm();
+    if (!synced) alert("Приём сохранён на устройстве, но пока не синхронизирован с аккаунтом. Проверьте подключение.");
+}
+
+function renderAppointments() {
+    const container = document.getElementById("appointmentList");
+    if (!container) return;
+    container.replaceChildren();
+    const petId = getActivePetKey();
+    const appointments = appData.reminders.filter(item =>
+        item.appointment === true && String(item.petId) === petId && !item.completed
+    ).sort((a, b) => `${a.date || ""}T${a.time || ""}`.localeCompare(`${b.date || ""}T${b.time || ""}`));
+    if (!appointments.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty-state";
+        empty.textContent = "Предстоящих приёмов пока нет.";
+        container.appendChild(empty);
+        return;
+    }
+    appointments.forEach(reminder => {
+        const card = document.createElement("article");
+        card.className = "appointment-card";
+        const info = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = reminder.appointmentPurpose || "Приём у ветеринара";
+        const detail = document.createElement("small");
+        detail.textContent = [formatHistoryDate(reminder.date), reminder.time, reminder.appointmentClinic].filter(Boolean).join(" · ");
+        info.append(title, detail);
+        if (reminder.date && reminder.date < getLocalDateInputValue()) {
+            const overdue = document.createElement("small");
+            overdue.textContent = "Дата прошла — отметьте визит выполненным или измените запись.";
+            overdue.className = "appointment-overdue";
+            info.appendChild(overdue);
+        }
+        const actions = document.createElement("div");
+        actions.className = "entry-actions";
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.className = "appointment-edit-button";
+        edit.textContent = "Изменить";
+        edit.dataset.pcClick = "appointment-edit";
+        edit.dataset.entryId = String(reminder.id);
+        actions.append(edit, createReminderCompletionButton(reminder, false), createEntryDeleteButton(
+            "reminder-delete", reminder.id, petId, `Удалить приём «${reminder.name}»`
+        ));
+        card.append(info, actions);
+        container.appendChild(card);
+    });
+}
+
 
 // ==============================
 // НАПОМИНАНИЯ — ФОРМА
@@ -1804,9 +2064,11 @@ function openReminderForm() {
     const reminderForm = document.getElementById("reminderForm");
     const dateInput = document.getElementById("reminderDate");
     const repeatInput = document.getElementById("reminderRepeat");
+    const typeInput = document.getElementById("reminderType");
     const nameInput = document.getElementById("reminderName");
     const timeInput = document.getElementById("reminderTime");
     if (dateInput) dateInput.value = getLocalDateInputValue();
+    if (typeInput) typeInput.value = "";
     if (nameInput) nameInput.value = "";
     if (timeInput) timeInput.value = "";
     if (repeatInput) repeatInput.value = "once";
@@ -1828,11 +2090,18 @@ function closeReminderForm() {
 async function saveReminder() {
     await waitForPhotoSelection("reminder");
 
-    const type = document.getElementById("reminderType").value;
+    const typeInput = document.getElementById("reminderType");
+    const type = typeInput.value.trim();
     const name = document.getElementById("reminderName").value.trim();
     const date = document.getElementById("reminderDate").value;
     const time = document.getElementById("reminderTime").value;
     const repeat = document.getElementById("reminderRepeat").value;
+
+    if (type === "") {
+        alert("Выберите или введите тип напоминания!");
+        typeInput.focus();
+        return;
+    }
 
     if (name === "") {
         alert("Введите название напоминания!");
@@ -1878,7 +2147,10 @@ function getReminderIcon(reminder) {
         "Кормление": "🍖",
         "Прогулка": "🚶",
         "Лекарство": "💊",
+        "Прививка": "💉",
+        "Прививки": "💉",
         "Ветеринар": "🩺",
+        "Обработка от паразитов и клещей": "🛡️",
         "Уход": "🛁",
         "Фото питомца": "📸"
     };
@@ -1924,6 +2196,7 @@ function addHomeReminderToScreen(reminder) {
     const nextDate = getNextReminderDate(reminder);
     const repeatLabels = { daily: "Каждый день", weekly: "Каждую неделю" };
     detail.textContent = [
+        reminder.type,
         nextDate ? formatReminderDate(nextDate) : "Дата не указана",
         repeatLabels[reminder.repeat],
         reminder.time
@@ -2000,6 +2273,7 @@ async function toggleReminderCompletion(reminderId) {
     renderHomeReminders();
     renderEventHistory();
     renderCalendar();
+    renderAppointments();
 }
 
 function addReminderToScreen(reminder) {
@@ -2026,7 +2300,7 @@ function addReminderToScreen(reminder) {
     const nextDate = getNextReminderDate(reminder);
     const repeatLabels = { daily: "Каждый день", weekly: "Каждую неделю" };
     const dateLabel = nextDate ? formatReminderDate(nextDate) : "Дата не указана";
-    detail.textContent = [repeatLabels[reminder.repeat], dateLabel, reminder.time]
+    detail.textContent = [reminder.type, repeatLabels[reminder.repeat], dateLabel, reminder.time]
         .filter(Boolean)
         .join(" · ");
     info.append(title, detail);
@@ -3797,35 +4071,22 @@ function saveAssistantConversation() {
 }
 
 function updateAssistantProfileStatus(context) {
-    const status = document.getElementById("assistantProfileStatus");
     const badge = document.getElementById("assistantLiveBadge");
-    if (!status) return;
     if (context?.source === "account" && String(context.petId) === getActivePetKey()) assistantLive.answerContext = context;
     const live = assistantLive;
-    let text;
     let label = "Обновляю записи";
     let state = "loading";
     if (appData.pet?.isPlaceholder) {
-        text = "Добавьте питомца в профиль, чтобы я мог учитывать его записи.";
         label = "Выберите питомца";
     } else if (["offline", "error"].includes(live.phase)) {
-        text = live.localDirty ? "Изменения сохранены на устройстве, но ещё не синхронизированы. При восстановлении подключения записи обновятся автоматически." : "Не удалось обновить записи. Проверьте подключение; при восстановлении связи данные обновятся автоматически.";
         label = "Ожидаю подключение";
         state = "offline";
     } else if (live.localDirty || live.phase === "saving") {
-        text = "Сохраняю изменения записей. Они будут учтены в следующем ответе сразу после синхронизации.";
         label = "Сохраняю записи";
     } else if (live.snapshot && live.petId === getActivePetKey()) {
-        text = `Питомец: ${live.snapshot.petName}. Записей в профиле: ${live.snapshot.availableEntries}. Новые записи учитываются автоматически.`;
-        if (live.answerContext?.signature === live.snapshot.signature && live.answerContext.includedEntries != null) {
-            text += ` В последнем ответе учтено: ${live.answerContext.includedEntries}.${live.answerContext.partial ? " Для большой истории выбраны записи по вопросу." : ""}`;
-        }
         label = live.connected ? "Записи актуальны · онлайн" : "Записи актуальны · автообновление";
         state = "ready";
-    } else {
-        text = `Выбран питомец: ${appData.pet?.name || "без имени"}. Получаю актуальные записи профиля…`;
     }
-    if (status.textContent !== text) status.textContent = text;
     if (badge) { badge.textContent = label; badge.dataset.state = state; }
 }
 
@@ -3860,6 +4121,13 @@ function scrollAssistantToBottom(instant = false) {
     container.scrollTop = container.scrollHeight;
 }
 
+function formatAssistantMessage(content) {
+    return content
+        .replace(/^[ \t]{0,3}#{1,6}[ \t]+([^\r\n]*?)(?:[ \t]+#+)?[ \t]*(?=\r?$)/gm, "$1")
+        .replace(/^([ \t]*)\*[ \t]+/gm, "$1- ")
+        .replace(/\*/g, "");
+}
+
 function addAssistantBubble(role, content, scroll = true) {
     const container = document.getElementById("assistantMessages");
     if (!container) return null;
@@ -3873,7 +4141,7 @@ function addAssistantBubble(role, content, scroll = true) {
 
         const message = document.createElement("div");
         message.className = "assistant-message-content";
-        message.textContent = content;
+        message.textContent = formatAssistantMessage(content);
         bubble.append(sender, message);
     } else {
         bubble.textContent = content;
@@ -3962,6 +4230,7 @@ async function sendAssistantMessage(event) {
         .slice(-12).map(message => ({ role: message.role, content: message.content }));
     addAssistantBubble("user", question);
     input.value = "";
+    input.blur();
     if (sendButton) sendButton.disabled = true;
 
     const typingBubble = addAssistantBubble("assistant", request.typingText);
@@ -3977,7 +4246,7 @@ async function sendAssistantMessage(event) {
         saveAssistantConversation();
         const data = await requestAssistantEndpoint({ messages, petId, today: getLocalDateInputValue() }, request.controller.signal);
         if (!isCurrent()) return;
-        const answer = typeof data?.answer === "string" ? data.answer.trim() : "";
+        const answer = typeof data?.answer === "string" ? formatAssistantMessage(data.answer).trim() : "";
         if (!answer) throw new Error(`${ASSISTANT_DISPLAY_NAME} вернул пустой ответ.`);
         if (data.profileContext && String(data.profileContext.petId) !== petId) throw new Error("PETCARE_PROFILE_MISMATCH");
 
@@ -4005,7 +4274,6 @@ async function sendAssistantMessage(event) {
         if (activeAssistantRequest === request) {
             activeAssistantRequest = null;
             if (sendButton) sendButton.disabled = false;
-            if (activeUserId === userId && document.getElementById("assistantPage")?.style.display === "block") input?.focus();
         }
     }
 }
@@ -4018,8 +4286,11 @@ document.getElementById("assistantForm")?.addEventListener("submit", sendAssista
 
 // Keep event behavior in this file so the page can use a strict script CSP.
 const petCareClickActions = {
+    "documents-open": element => window.PetCareDocuments?.open(element.dataset.recordId || ""),
     "clinics-open": () => showClinics(),
     "clinics-close": () => closeClinics(),
+    "guides-open": () => showGuides(),
+    "guides-close": () => closeGuides(),
     "home": () => showHome(),
     "pet": () => showPet(),
     "task-feeding": element => completeTask(element, "feeding"),
@@ -4042,6 +4313,10 @@ const petCareClickActions = {
     "pet-weight-save": () => savePetWeight(),
     "health-add": () => openHealthForm(),
     "health-save": () => saveHealthRecord(),
+    "appointment-add": () => openAppointmentForm(),
+    "appointment-edit": element => openAppointmentForm(element.dataset.entryId),
+    "appointment-close": () => closeAppointmentForm(),
+    "appointment-save": () => saveAppointment(),
     "health-delete": element => deleteHealthRecord(element.dataset.entryId, element.dataset.petId),
     "weight-delete": element => deleteWeightEntry(element.dataset.entryId, element.dataset.petId),
     "activity-delete": element => deleteActivityEntry(element.dataset.entryId, element.dataset.petId),
@@ -4110,6 +4385,8 @@ function bindPetCareActions() {
             renderEventHistory();
         } else if (element.dataset.pcChange === "health-export-selection") {
             updateHealthExportSelection();
+        } else if (element.id === "recordType") {
+            updateHealthRecordFields();
         } else if (element.id === "storyPhotoInput" || element.id === "storyCameraInput") {
             withStoryOperation(element.dataset.storyId, () => handleStoryPhotoSelection(element));
         } else if (["story-photo-date", "story-layout"].includes(element.dataset.pcChange)) {

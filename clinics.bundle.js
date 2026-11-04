@@ -6,13 +6,22 @@
 const $ = id => document.getElementById(id);
 let initialized = false, point = null, address = '', mapMode = '__results__';
 let mapFrame = null, permission = null, generation = 0, lastSearch = 0;
+const categories = Object.freeze({
+    clinics: { query: 'ветеринарные клиники', label: 'ветеринарные клиники', mapLayer: 0, openOnly: true },
+    hospital: { query: 'круглосуточные ветеринарные стационары', label: 'круглосуточные стационары', mapLayer: 1, openOnly: false },
+    vaccination: { query: 'пункты бесплатной вакцинации животных от бешенства', label: 'пункты бесплатной вакцинации', mapLayer: 2, openOnly: false },
+    walking: { query: 'площадки для выгула собак', label: 'площадки для выгула собак', mapLayer: 3, openOnly: false },
+    shelters: { query: 'приюты для животных', label: 'приюты для животных', mapLayer: 4, openOnly: false },
+    hotels: { query: 'зоогостиницы', label: 'зоогостиницы', mapLayer: 5, openOnly: true }
+});
+function currentCategory() { return categories[$('clinicCategory')?.value] || categories.clinics; }
 
 function status(message, kind = '') {
     $('clinicStatus').textContent = message;
     $('clinicStatus').dataset.kind = kind;
 }
 function busy(value) {
-    ['clinicSearchButton', 'clinicLocateButton'].forEach(id => { $(id).disabled = value; });
+    ['clinicSearchButton', 'clinicLocateButton', 'clinicCategory'].forEach(id => { $(id).disabled = value; });
     $('clinicCancel').hidden = !value;
     $('clinicSearchPanel').setAttribute('aria-busy', String(value));
 }
@@ -20,10 +29,19 @@ function isBusy() { return $('clinicSearchPanel').getAttribute('aria-busy') === 
 function removeMap() { mapFrame?.remove(); mapFrame = null; }
 function externalUrl() {
     const url = new URL('https://yandex.ru/maps/');
-    const query = `ветеринарные клиники${$('clinicOpenOnly').checked ? ' открыто сейчас' : ''}${address ? ` рядом с ${address}` : ''}`;
+    const category = currentCategory();
+    const query = `${category.query}${category.openOnly && $('clinicOpenOnly').checked ? ' открыто сейчас' : ''}${address ? ` рядом с ${address}` : ''}`;
     url.searchParams.set('text', query);
     if (point && !address) { url.searchParams.set('ll', `${point.lon},${point.lat}`); url.searchParams.set('z', '13'); }
     return url;
+}
+function updateCategoryControls() {
+    const category = currentCategory();
+    $('clinicOpenOnlyLabel').hidden = !category.openOnly;
+    $('clinicExternalSearch').href = externalUrl().href;
+    $('clinicOfficialMap').href = `https://www.mos.ru/pgu/ru/app/dvm/mypets/?page=info&map_layer=${category.mapLayer}`;
+    $('clinicOfficialMap').textContent = `Городская карта: ${category.label} ↗`;
+    $('clinicOfficialList').hidden = $('clinicCategory').value !== 'vaccination';
 }
 function renderMap() {
     if (!point && !address) return;
@@ -42,15 +60,15 @@ function renderMap() {
     }
     const frame = document.createElement('iframe');
     frame.className = 'clinic-yandex-map';
-    frame.title = ownLocation ? 'Яндекс Карты — моя геопозиция' : 'Яндекс Карты — ветеринарные клиники, телефоны и графики';
+    frame.title = ownLocation ? 'Яндекс Карты — моя геопозиция' : `Яндекс Карты — ${currentCategory().label}`;
     frame.referrerPolicy = 'strict-origin-when-cross-origin';
     frame.allowFullscreen = true;
     frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation');
     frame.addEventListener('load', () => {
         if (mapFrame !== frame) return;
         busy(false);
-        status(ownLocation ? 'На карте показано ваше местоположение. Переключитесь на «Клиники рядом», чтобы найти врача.'
-            : 'Выберите клинику во встроенном справочнике Яндекса: в карточке доступны телефон, часы работы и маршрут.');
+        status(ownLocation ? 'На карте показано ваше местоположение. Переключитесь на «Найденные места» для поиска.'
+            : `Найдены ${currentCategory().label}. Откройте карточку места для подробностей и маршрута.`);
     });
     frame.addEventListener('error', () => {
         if (mapFrame !== frame) return;
@@ -64,8 +82,8 @@ function renderMap() {
     $('clinicMapSelect').value = mapMode;
     $('clinicRefresh').hidden = false;
     $('clinicAreaLabel').textContent = address ? `Поиск по адресу: ${address}` : `Рядом с вами · точность около ${Math.round(point.accuracy)} м`;
-    $('clinicResultSummary').textContent = 'Результаты, телефоны и расписание показывает Яндекс.';
-    $('clinicMapNote').textContent = ownLocation ? 'Ваша геопозиция на Яндекс Картах.' : 'Нажмите на название или метку клиники, чтобы открыть её карточку.';
+    $('clinicResultSummary').textContent = `Поиск: ${currentCategory().label}. Результаты показывает Яндекс.`;
+    $('clinicMapNote').textContent = ownLocation ? 'Ваша геопозиция на Яндекс Картах.' : 'Нажмите на название или метку места, чтобы открыть его карточку.';
     $('clinicExternalSearch').href = externalUrl().href;
     busy(false);
     $('clinicCancel').hidden = false;
@@ -77,7 +95,7 @@ function search(event) {
     const query = $('clinicAddress').value.trim();
     if (query.length < 3) { status('Укажите город и адрес — не менее трёх символов.'); $('clinicAddress').focus(); return; }
     if (Date.now() - lastSearch < 700) return;
-    if (!navigator.onLine) { status('Нет интернета. Для поиска клиник нужно подключение к сети.', 'error'); return; }
+    if (!navigator.onLine) { status('Нет интернета. Для поиска мест нужно подключение к сети.', 'error'); return; }
     lastSearch = Date.now(); generation++;
     address = query; point = null; mapMode = '__results__';
     renderMap();
@@ -86,7 +104,7 @@ function permissionUi(state) {
     $('clinicLocateButton').textContent = state === 'granted' ? '⌖ Обновить геопозицию' : '⌖ Разрешить геопозицию';
     $('clinicLocationStatus').textContent = state === 'granted' ? 'Доступ к геопозиции разрешён.' : state === 'denied'
         ? 'Доступ запрещён. Разрешите геопозицию в настройках сайта в браузере или введите адрес.'
-        : 'Разрешите доступ, чтобы найти клиники рядом с вами.';
+        : 'Разрешите доступ, чтобы найти места рядом с вами.';
 }
 async function checkPermission() {
     if (!navigator.permissions?.query) return;
@@ -136,24 +154,26 @@ function open() {
         $('clinicCancel').addEventListener('click', cancel);
         $('clinicRefresh').addEventListener('click', () => { if (!isBusy()) renderMap(); });
         $('clinicOpenOnly').addEventListener('change', () => { if (point || address) { mapMode = '__results__'; renderMap(); } });
+        $('clinicCategory').addEventListener('change', () => { updateCategoryControls(); if (point || address) { mapMode = '__results__'; renderMap(); } });
         $('clinicMapSelect').addEventListener('change', event => { mapMode = event.target.value; renderMap(); });
         window.addEventListener('petcare:clinics-close', close);
         window.addEventListener('petcare:account-reset', reset);
     }
     if (point || address) renderMap();
+    updateCategoryControls();
     $('clinicAddress').focus({ preventScroll: true });
     checkPermission();
 }
 function close() { generation++; busy(false); removeMap(); }
 function reset() {
     close(); point = null; address = ''; mapMode = '__results__';
-    $('clinicAddress').value = ''; $('clinicOpenOnly').checked = true;
+    $('clinicAddress').value = ''; $('clinicOpenOnly').checked = true; $('clinicCategory').value = 'clinics';
     $('clinicMapControls').hidden = true; $('clinicRefresh').hidden = true;
     ['clinicAreaLabel', 'clinicResultSummary'].forEach(id => { $(id).textContent = ''; });
     const placeholder = document.createElement('div');
     placeholder.className = 'clinic-map-empty'; placeholder.textContent = 'Яндекс Карты · разрешите геопозицию или укажите адрес';
     $('clinicMap').replaceChildren(placeholder);
-    $('clinicExternalSearch').href = 'https://yandex.ru/maps/';
+    updateCategoryControls();
     permissionUi(permission?.state || 'prompt');
     status('Укажите адрес или разрешите геопозицию для поиска во встроенном справочнике Яндекса.');
 }

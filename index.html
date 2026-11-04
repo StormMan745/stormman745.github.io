@@ -15,9 +15,10 @@
     <meta name="apple-mobile-web-app-title" content="PetCare">
     <script src="frameguard.js"></script>
     <script src="install.js?v=20261028-studio"></script>
-    <link rel="stylesheet" href="style.css?v=20261028-studio">
+    <link rel="stylesheet" href="style.css?v=20261104-health-actions">
+    <link rel="stylesheet" href="documents.css?v=20261104-print">
     <link rel="stylesheet" href="experience.css?v=20261028-profile-photo">
-    <link rel="stylesheet" href="clinics.css?v=20261029-yandex-directory">
+    <link rel="stylesheet" href="clinics.css?v=20261031-pet-services">
 </head>
 <body>
 <div class="app">
@@ -110,7 +111,8 @@
             </div>
             <div id="homeRemindersList" class="home-reminders-list" aria-live="polite"></div>
         </section>
-        <button type="button" class="clinic-entry" data-pc-click="clinics-open"><span class="clinic-entry-icon" aria-hidden="true">✚</span><span><strong>Ветклиники рядом</strong><small>Найдите помощь на карте — с графиком и телефоном</small></span><span class="clinic-entry-arrow" aria-hidden="true">↗</span></button>
+        <button type="button" class="clinic-entry" data-pc-click="clinics-open"><span class="clinic-entry-icon" aria-hidden="true">✚</span><span><strong>Места для питомцев</strong><small>Клиники, площадки, вакцинация и другие места на карте</small></span><span class="clinic-entry-arrow" aria-hidden="true">↗</span></button>
+        <button type="button" class="clinic-entry" data-pc-click="guides-open"><span class="clinic-entry-icon" aria-hidden="true">✧</span><span><strong>Что делать в важной ситуации</strong><small>Питомец потерялся, нужна помощь или предстоит поездка</small></span><span class="clinic-entry-arrow" aria-hidden="true">↗</span></button>
         <section class="care-discover" aria-labelledby="discoverTitle">
             <div class="section-heading"><div><span class="page-eyebrow">ПОЛЕЗНОЕ РЯДОМ</span><h2 id="discoverTitle">Забота становится проще</h2></div></div>
             <div class="discover-grid">
@@ -160,14 +162,21 @@
                     <strong id="petWeight">28 кг</strong>
                 </div>
             </div>
+            <div class="data-item"><span>⚥</span><div><small>Пол</small><strong id="petSex">Не указан</strong></div></div>
+            <div class="data-item"><span>🎨</span><div><small>Окрас</small><strong id="petColor">Не указан</strong></div></div>
+            <div class="data-item"><span>⌗</span><div><small>Номер чипа</small><strong id="petChip">Не указан</strong></div></div>
         </div>
 
-        <button class="primary-button" data-pc-click="pet-edit">
-            ✏️ Изменить данные
-        </button>
-        <button class="danger-button" type="button" data-pc-click="pet-delete">
-            Удалить питомца
-        </button>
+        <div class="pet-profile-actions">
+            <button class="primary-button" data-pc-click="pet-edit">
+                ✏️ Изменить данные
+            </button>
+            <button type="button" class="secondary-button" data-pc-click="guides-open">Инструкции для владельца ↗</button>
+            <button type="button" class="secondary-button" data-pc-click="documents-open">📁 Документы питомца</button>
+            <button class="danger-button" type="button" data-pc-click="pet-delete">
+                Удалить питомца
+            </button>
+        </div>
     </section>
 
     <!-- ФОРМА ПИТОМЦА -->
@@ -198,6 +207,15 @@
 
         <label for="birthDateInput">Дата рождения</label>
         <input type="date" id="birthDateInput">
+
+        <label for="sexInput">Пол</label>
+        <select id="sexInput"><option value="">Не указан</option><option value="male">Самец</option><option value="female">Самка</option></select>
+
+        <label for="colorInput">Окрас</label>
+        <input type="text" id="colorInput" maxlength="100" placeholder="Например, рыжий с белым">
+
+        <label for="chipInput">Номер микрочипа</label>
+        <input type="text" id="chipInput" maxlength="32" inputmode="numeric" autocomplete="off" placeholder="Если питомец чипирован">
 
         <label for="allergiesInput">Аллергии</label>
         <textarea id="allergiesInput" placeholder="Например, реакция на курицу"></textarea>
@@ -237,7 +255,7 @@
             <button type="button" class="history-open-button" data-pc-click="history-open" data-history-type="health" aria-label="Открыть историю записей о здоровье"><span aria-hidden="true">↺</span> История</button>
         </div>
 
-        <button type="button" class="clinic-entry" data-pc-click="clinics-open"><span class="clinic-entry-icon" aria-hidden="true">✚</span><span><strong>Найти ветеринарную клинику</strong><small>Рядом с вами или по адресу · открытые сейчас · телефоны</small></span><span class="clinic-entry-arrow" aria-hidden="true">↗</span></button>
+        <button type="button" class="clinic-entry" data-pc-click="clinics-open"><span class="clinic-entry-icon" aria-hidden="true">✚</span><span><strong>Места для питомцев</strong><small>Клиники, стационары и другие полезные места рядом</small></span><span class="clinic-entry-arrow" aria-hidden="true">↗</span></button>
         <div class="health-header">
             <span class="surface-eyebrow">С ЗАБОТОЙ О САМОМ ВАЖНОМ</span>
             <div class="health-icon">❤️</div>
@@ -263,7 +281,18 @@
                 <div><small>Клиника</small><strong id="healthVetClinic">Не указана</strong></div>
                 <div><small>Телефон</small><strong id="healthVetPhone">Не указан</strong></div>
             </div>
-            <button type="button" class="secondary-button export-button" data-pc-click="health-export">📄 PDF / печать здоровья</button>
+            <div class="health-passport-actions" role="group" aria-label="Документы и печать">
+                <button type="button" class="health-passport-action health-documents-action" data-pc-click="documents-open">
+                    <span class="health-action-icon" aria-hidden="true">📁</span>
+                    <span class="health-action-copy"><strong>Документы и результаты обследований</strong><small>Анализы, заключения и ветпаспорт</small></span>
+                    <span class="health-action-arrow" aria-hidden="true">↗</span>
+                </button>
+                <button type="button" class="health-passport-action health-print-action" data-pc-click="health-export">
+                    <span class="health-action-icon" aria-hidden="true">📄</span>
+                    <span class="health-action-copy"><strong>PDF / печать здоровья</strong><small>Выбрать записи для печати</small></span>
+                    <span class="health-action-arrow" aria-hidden="true">↗</span>
+                </button>
+            </div>
         </section>
 
         <section class="weight-section">
@@ -285,10 +314,46 @@
             <button type="button" class="secondary-button" data-pc-click="history-open" data-history-type="health">↺ История здоровья</button>
         </section>
 
+        <section class="appointment-section" aria-labelledby="appointmentTitle">
+            <div class="section-heading"><h3 id="appointmentTitle">Предстоящие приёмы</h3><button type="button" class="home-reminders-link" data-pc-click="appointment-add">Добавить</button></div>
+            <p class="appointment-hint">После записи у врача укажите дату здесь — PetCare напомнит о визите. Запись на mos.ru не переносится автоматически.</p>
+            <div id="appointmentList" class="appointment-list" aria-live="polite"></div>
+            <div class="appointment-actions"><a class="secondary-button" href="https://www.mos.ru/pgu/ru/application/dvm/061101/" target="_blank" rel="noopener noreferrer">Записаться на mos.ru ↗</a><button type="button" class="secondary-button" data-pc-click="appointment-add">Добавить приём в PetCare</button></div>
+        </section>
+
         <button class="primary-button" data-pc-click="health-add">
             + Добавить запись
         </button>
 
+    </section>
+
+    <section class="page" id="documentsPage" aria-labelledby="documentsTitle">
+        <div class="page-header"><button type="button" data-document-action="close" aria-label="Назад">←</button><h2 id="documentsTitle">Документы питомца</h2></div>
+        <p class="documents-intro">Ветпаспорт, результаты анализов, заключения и назначения — в одном месте. Прикрепите документ к медицинской записи, чтобы видеть всё о приёме вместе.</p>
+        <div class="pet-switcher"><label for="documentsPetSwitcher">Питомец</label><select id="documentsPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для документов"></select></div>
+        <details id="documentEditor" class="document-editor">
+            <summary id="documentEditorTitle">＋ Добавить документ</summary>
+            <form id="documentUploadForm">
+                <label for="documentFile">PDF или скан</label>
+                <input type="file" id="documentFile" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" required>
+                <p id="documentFileHint" class="field-hint">Один файл до 10 МБ. PDF, JPEG, PNG или WebP. Оригинал сохраняется без уменьшения качества.</p>
+                <label for="documentTitle">Название</label><input id="documentTitle" maxlength="160" required placeholder="Например, анализ крови или ветпаспорт">
+                <div class="document-fields">
+                    <div><label for="documentCategory">Тип документа</label><select id="documentCategory"><option value="passport">Ветпаспорт</option><option value="analysis">Результаты анализов</option><option value="conclusion">Заключение врача</option><option value="prescription">Назначения</option><option value="other">Другое</option></select></div>
+                    <div><label for="documentDate">Дата документа</label><input id="documentDate" type="date" required></div>
+                </div>
+                <label for="documentRecord">Медицинская запись</label><select id="documentRecord"><option value="">Без привязки</option></select>
+                <div class="document-actions"><button type="submit" class="primary-button" id="documentSave">Загрузить документ</button><button type="button" class="secondary-button" data-document-action="cancel">Отмена</button></div>
+            </form>
+        </details>
+        <div id="documentStatus" class="document-status" role="status" aria-live="polite"></div>
+        <div class="document-filters">
+            <div><label for="documentSearch">Поиск</label><input id="documentSearch" type="search" placeholder="Название, файл или запись"></div>
+            <div><label for="documentTypeFilter">Тип</label><select id="documentTypeFilter"><option value="">Все документы</option><option value="passport">Ветпаспорт</option><option value="analysis">Результаты анализов</option><option value="conclusion">Заключение врача</option><option value="prescription">Назначения</option><option value="other">Другое</option></select></div>
+            <div><label for="documentRecordFilter">Запись</label><select id="documentRecordFilter"><option value="">Все записи</option><option value="unlinked">Без привязки</option></select></div>
+        </div>
+        <div class="document-list-heading"><span id="documentCount"></span><button type="button" class="secondary-button" data-document-action="refresh">Обновить</button></div>
+        <div id="documentsList" class="documents-list"></div>
     </section>
 
     <section class="page" id="entryHistoryPage" aria-labelledby="entryHistoryTitle">
@@ -332,6 +397,8 @@
             <option value="Прививка">Прививка 💉</option>
             <option value="Лекарство">Лекарство 💊</option>
             <option value="Ветеринар">Ветеринар 🩺</option>
+            <option value="Обработка от паразитов">Обработка от паразитов 🛡️</option>
+            <option value="Анализы">Результаты анализов 🧪</option>
             <option value="Уход">Уход 🛁</option>
         </select>
 
@@ -343,6 +410,19 @@
 
         <label for="recordNextDate">Дата следующего визита или процедуры (необязательно)</label>
         <input type="date" id="recordNextDate">
+
+        <div id="recordVisitFields" class="record-detail-fields" hidden>
+            <label for="recordClinic">Клиника</label><input type="text" id="recordClinic" maxlength="160" placeholder="Где проходил приём">
+            <label for="recordDiagnosis">Диагноз</label><textarea id="recordDiagnosis" placeholder="Что установил ветеринар"></textarea>
+            <label for="recordPrescription">Назначения</label><textarea id="recordPrescription" placeholder="Лечение, дозировка, рекомендации врача"></textarea>
+        </div>
+        <div id="recordLabFields" class="record-detail-fields" hidden>
+            <label for="recordLabName">Вид исследования</label><input type="text" id="recordLabName" maxlength="160" placeholder="Например, общий анализ крови">
+            <label for="recordLabResult">Результат</label><textarea id="recordLabResult" placeholder="Показатели или заключение врача"></textarea>
+        </div>
+        <div id="recordParasiteFields" class="record-detail-fields" hidden>
+            <label for="recordTreatment">Препарат или процедура</label><input type="text" id="recordTreatment" maxlength="160" placeholder="Например, капли от клещей">
+        </div>
 
         <label for="recordNote">Заметка</label>
         <textarea id="recordNote" placeholder="Дополнительная информация"></textarea>
@@ -357,6 +437,16 @@
         <button class="primary-button" data-pc-click="health-save">
             💾 Сохранить
         </button>
+    </section>
+
+    <section class="page" id="appointmentForm">
+        <div class="page-header"><button type="button" data-pc-click="appointment-close">←</button><h2 id="appointmentFormTitle">Приём у ветеринара</h2></div>
+        <p class="appointment-hint">Укажите данные подтверждённой записи. PetCare сохранит визит и создаст напоминание.</p>
+        <label for="appointmentPurpose">Причина визита</label><input id="appointmentPurpose" type="text" maxlength="160" placeholder="Например, плановый осмотр">
+        <label for="appointmentClinic">Клиника</label><input id="appointmentClinic" type="text" maxlength="160" placeholder="Название или адрес клиники">
+        <label for="appointmentDate">Дата</label><input id="appointmentDate" type="date">
+        <label for="appointmentTime">Время</label><input id="appointmentTime" type="time">
+        <button type="button" class="primary-button" data-pc-click="appointment-save">Сохранить приём и напоминание</button>
     </section>
 
     <!-- НАПОМИНАНИЯ -->
@@ -436,13 +526,17 @@
             <h2>Новое напоминание</h2>
         </div>
 
-        <label for="reminderType">Тип</label>
-        <select id="reminderType">
-            <option value="Кормление">Кормление 🍖</option>
-            <option value="Прогулка">Прогулка 🚶</option>
-            <option value="Лекарство">Лекарство 💊</option>
-            <option value="Ветеринар">Ветеринар 🩺</option>
-        </select>
+        <label for="reminderType">Тип напоминания</label>
+        <input type="text" id="reminderType" list="reminderTypeOptions" placeholder="Выберите или введите свой тип" maxlength="80" autocomplete="off">
+        <datalist id="reminderTypeOptions">
+            <option value="Прививки"></option>
+            <option value="Ветеринар"></option>
+            <option value="Обработка от паразитов и клещей"></option>
+            <option value="Кормление"></option>
+            <option value="Прогулка"></option>
+            <option value="Лекарство"></option>
+        </datalist>
+        <small class="field-hint reminder-text-hint">Можно выбрать готовый тип или написать свой с клавиатуры.</small>
 
         <label for="reminderName">Текст напоминания</label>
         <input type="text" id="reminderName" placeholder="Например, вечерняя прогулка">
@@ -502,29 +596,42 @@
         <input id="storyCameraInput" class="story-file-input" type="file" accept="image/*" capture="environment" aria-label="Сфотографировать питомца">
     </section>
 
-    <!-- ПРОФИЛЬ -->
+    <section class="page" id="guidesPage" aria-labelledby="guidesTitle">
+        <div class="page-header"><button type="button" data-pc-click="guides-close" aria-label="Назад">←</button><h2 id="guidesTitle">Важные ситуации</h2></div>
+        <p class="guide-intro">Короткие шаги, чтобы не растеряться. Подробные городские инструкции открываются на mos.ru.</p>
+        <div class="guide-list">
+            <article class="guide-card"><span class="guide-icon" aria-hidden="true">🔎</span><h3>Питомец потерялся</h3><ol><li>Подготовьте свежую фотографию, номер чипа и приметы питомца.</li><li>Укажите место и время пропажи, проверьте ближайшие площадки и приюты.</li><li>Разместите объявление в городском сервисе поиска животных.</li></ol><a href="https://www.mos.ru/pgu/ru/app/dvm/mypets/ya_poteryal_ili_nashel_pitomca" target="_blank" rel="noopener noreferrer">Инструкция mos.ru ↗</a></article>
+            <article class="guide-card"><span class="guide-icon" aria-hidden="true">🩺</span><h3>Нужна ветеринарная помощь</h3><ol><li>При срочном состоянии сразу свяжитесь с ветеринарной клиникой.</li><li>Запишите симптомы и время их появления; подготовьте медицинские записи.</li><li>Найдите ближайшую клинику или круглосуточный стационар.</li></ol><button type="button" class="secondary-button" data-pc-click="clinics-open">Найти помощь на карте</button><a href="https://www.mos.ru/pgu/ru/app/dvm/mypets/moemu_pitomcu_nuzhna_veterinarnaya_pomoshh" target="_blank" rel="noopener noreferrer">Инструкция mos.ru ↗</a></article>
+            <article class="guide-card"><span class="guide-icon" aria-hidden="true">🧳</span><h3>Поездка с питомцем</h3><ol><li>Уточните правила перевозчика и места назначения.</li><li>Проверьте срок прививок и нужные документы у ветеринара.</li><li>Подготовьте переноску, воду, корм и привычные вещи питомца.</li></ol><a href="https://www.mos.ru/pgu/ru/app/dvm/mypets/ya_planiruyu_puteshestvie_s_pitomcem" target="_blank" rel="noopener noreferrer">Инструкция mos.ru ↗</a></article>
+        </div>
+    </section>
+
     <section class="page" id="clinicsPage" style="display: none;" aria-labelledby="clinicsTitle">
-        <div class="page-header"><button type="button" data-pc-click="clinics-close" aria-label="Назад">←</button><h2 id="clinicsTitle">Ветклиники рядом</h2></div>
-        <p class="clinic-intro">Встроенный справочник Яндекс Карт: ветеринарные клиники, телефоны, графики работы и маршруты. Укажите адрес или разрешите геопозицию.</p>
+        <div class="page-header"><button type="button" data-pc-click="clinics-close" aria-label="Назад">←</button><h2 id="clinicsTitle">Места для питомцев</h2></div>
+        <p class="clinic-intro">Выберите тип места и найдите его во встроенном справочнике Яндекс Карт. Укажите адрес или разрешите геопозицию.</p>
         <div class="clinic-search-panel" id="clinicSearchPanel">
+            <label for="clinicCategory">Что ищем</label>
+            <select id="clinicCategory"><option value="clinics">Ветеринарные клиники</option><option value="hospital">Круглосуточные стационары</option><option value="vaccination">Пункты бесплатной вакцинации</option><option value="walking">Площадки для выгула собак</option><option value="shelters">Приюты для животных</option><option value="hotels">Зоогостиницы</option></select>
             <form id="clinicSearchForm" role="search">
                 <label for="clinicAddress">Город, улица или адрес</label>
                 <div class="clinic-search-row"><input type="search" id="clinicAddress" placeholder="Например: Москва, Тверская 10" maxlength="200" autocomplete="off" enterkeyhint="search"><button type="submit" id="clinicSearchButton" class="clinic-button clinic-button-primary">Найти</button></div>
             </form>
             <div class="clinic-search-options"><button type="button" id="clinicLocateButton" class="clinic-button">⌖ Разрешить геопозицию</button><button type="button" id="clinicCancel" class="clinic-button" hidden>Отменить</button></div>
-            <p id="clinicLocationStatus" class="clinic-map-note" role="status">Разрешите доступ, чтобы показать ваше местоположение и клиники рядом.</p>
-            <div class="clinic-filters"><label><input type="checkbox" id="clinicOpenOnly" checked>Искать открытые сейчас</label></div>
+            <p id="clinicLocationStatus" class="clinic-map-note" role="status">Разрешите доступ, чтобы показать ваше местоположение и места рядом.</p>
+            <div class="clinic-filters"><label id="clinicOpenOnlyLabel"><input type="checkbox" id="clinicOpenOnly" checked>Искать открытые сейчас</label></div>
             <p class="clinic-privacy">Для поиска адрес или координаты передаются Яндекс Картам. В профиле местоположение не сохраняется.</p>
         </div>
         <div id="clinicStatus" class="clinic-status" role="status" aria-live="polite">Введите город и улицу или нажмите «Разрешить геопозицию».</div>
+        <div class="clinic-official-links"><a id="clinicOfficialMap" href="https://www.mos.ru/pgu/ru/app/dvm/mypets/?page=info&map_layer=0" target="_blank" rel="noopener noreferrer">Открыть городскую карту mos.ru ↗</a><a id="clinicOfficialList" href="https://www.mos.ru/moskomvet/function/punkti_vakcinacii/" target="_blank" rel="noopener noreferrer" hidden>График бесплатной вакцинации ↗</a></div>
         <div class="clinic-results-heading"><div><h3>Справочник Яндекс Карт</h3><p id="clinicAreaLabel"></p><p id="clinicResultSummary"></p></div><button type="button" class="clinic-button" id="clinicRefresh" hidden>Повторить поиск</button></div>
         <div class="clinic-layout clinic-native-layout">
-            <div class="clinic-map-wrap"><div class="clinic-map-provider"><span aria-hidden="true">Я</span><div><strong>Яндекс Карты</strong><small>Клиники · телефоны · часы работы</small></div><a href="https://yandex.ru/maps/" target="_blank" rel="noopener noreferrer" aria-label="Открыть Яндекс Карты">↗</a></div><div id="clinicMapControls" class="clinic-map-controls" hidden><label for="clinicMapSelect">Показать на карте</label><select id="clinicMapSelect" aria-label="Показать клиники рядом или свою геопозицию"><option value="__results__">Клиники рядом</option><option value="__location__">Моя геопозиция</option></select></div><div id="clinicMap" aria-label="Встроенный справочник Яндекс Карт"><div class="clinic-map-empty"><span aria-hidden="true">⌖</span>Справочник Яндекс Карт<br>Разрешите геопозицию или укажите адрес.</div></div><p class="clinic-map-note" id="clinicMapNote">Телефон и часы работы откроются в карточке выбранной клиники.</p></div>
+            <div class="clinic-map-wrap"><div class="clinic-map-provider"><span aria-hidden="true">Я</span><div><strong>Яндекс Карты</strong><small>Места · телефоны · часы работы</small></div><a href="https://yandex.ru/maps/" target="_blank" rel="noopener noreferrer" aria-label="Открыть Яндекс Карты">↗</a></div><div id="clinicMapControls" class="clinic-map-controls" hidden><label for="clinicMapSelect">Показать на карте</label><select id="clinicMapSelect" aria-label="Показать найденные места или свою геопозицию"><option value="__results__">Найденные места</option><option value="__location__">Моя геопозиция</option></select></div><div id="clinicMap" aria-label="Встроенный справочник Яндекс Карт"><div class="clinic-map-empty"><span aria-hidden="true">⌖</span>Справочник Яндекс Карт<br>Разрешите геопозицию или укажите адрес.</div></div><p class="clinic-map-note" id="clinicMapNote">Подробности откроются в карточке выбранного места.</p></div>
         </div>
         <a id="clinicExternalSearch" class="clinic-alternative" href="https://yandex.ru/maps/?text=%D0%B2%D0%B5%D1%82%D0%B5%D1%80%D0%B8%D0%BD%D0%B0%D1%80%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BB%D0%B8%D0%BD%D0%B8%D0%BA%D0%B8" target="_blank" rel="noopener noreferrer">Также посмотреть в Яндекс Картах ↗</a>
-        <p class="clinic-footnote">Источник карты, адресов, организаций, телефонов и графиков — <a href="https://yandex.ru/maps/" target="_blank" rel="noopener noreferrer">Яндекс Карты</a>. Данные показываются в его встроенном справочнике. Нажмите на название или метку клиники, чтобы открыть карточку. Перед поездкой уточните приём и часы работы по телефону.</p>
+        <p class="clinic-footnote">Источник встроенной карты, адресов, организаций, телефонов и графиков — <a href="https://yandex.ru/maps/" target="_blank" rel="noopener noreferrer">Яндекс Карты</a>. Категории ищутся по названиям и могут содержать неточные результаты. Проверяйте адрес и часы работы перед поездкой; для городских объектов используйте ссылку на карту mos.ru выше.</p>
     </section>
 
+    <!-- ПРОФИЛЬ -->
     <section class="page" id="profilePage">
         <div class="page-header">
             <button data-pc-click="home">←</button>
@@ -542,7 +649,7 @@
         <div class="profile-item" data-pc-click="pet">🐾 Мой питомец</div>
         <div class="profile-item" data-pc-click="health">❤️ Здоровье</div>
         <div class="profile-item" data-pc-click="reminders">🔔 Напоминания</div>
-        <button type="button" class="clinic-entry" data-pc-click="clinics-open"><span class="clinic-entry-icon" aria-hidden="true">✚</span><span><strong>Ветклиники рядом</strong><small>Карта, часы работы и телефоны</small></span><span class="clinic-entry-arrow" aria-hidden="true">↗</span></button>
+        <button type="button" class="clinic-entry" data-pc-click="clinics-open"><span class="clinic-entry-icon" aria-hidden="true">✚</span><span><strong>Места для питомцев</strong><small>Карта клиник и других полезных мест</small></span><span class="clinic-entry-arrow" aria-hidden="true">↗</span></button>
         <button class="logout-button" type="button" data-pc-click="logout">🚪 Выйти из аккаунта</button>
 
     </section>
@@ -652,7 +759,6 @@
         <label for="assistantPetSwitcher">О каком питомце поговорим?</label>
         <select id="assistantPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для PetCare ассистента"></select>
         <span id="assistantLiveBadge" class="assistant-live-badge" data-state="loading">Обновляю записи</span>
-        <p id="assistantProfileStatus" class="assistant-profile-status" role="status" aria-live="polite">Записи обновляются автоматически после сохранения. Перед каждым ответом я проверю актуальные данные питомца.</p>
     </div>
     <div id="assistantMessages" aria-live="polite" aria-label="Переписка с PetCare ассистентом"></div>
 
@@ -726,7 +832,7 @@
             <legend>Данные карточки</legend>
             <label class="health-export-option">
                 <input type="checkbox" name="healthExportField" value="basic" data-pc-change="health-export-selection" checked>
-                <span><strong>Данные питомца</strong><small>Вид, порода, возраст и текущий вес</small></span>
+                <span><strong>Данные питомца</strong><small>Вид, порода, возраст, вес, пол, окрас и чип</small></span>
             </label>
             <label class="health-export-option">
                 <input type="checkbox" name="healthExportField" value="allergies" data-pc-change="health-export-selection">
@@ -784,7 +890,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
 <script src="experience.js?v=20261028-studio"></script>
-<script src="script.js?v=20261030-security"></script>
+<script src="script.js?v=20261104-document-print"></script>
+<script src="documents.js?v=20261104-print"></script>
 <script src="pet-scene.js?v=20261029-attached-tails"></script>
 </body>
 </html>
