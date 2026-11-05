@@ -8,7 +8,7 @@ const tables={petcare_data:[{user_id:uid,data:{pets:[{id:'pet-a',name:'Alice pet
  petcare_documents:[{id:'doc-a',user_id:uid,pet_id:'pet-a',title:'Selected PDF',file_name:'result.pdf',mime_type:'application/pdf',file_size:12,storage_path:uid+'/doc-a/original.pdf',deleted_at:null},{id:'doc-b',user_id:other,pet_id:'pet-b',title:'Private other PDF',file_name:'private.pdf',mime_type:'application/pdf',storage_path:other+'/doc-b/original.pdf',deleted_at:null}],
  petcare_care_members:[],petcare_care_invites:[],petcare_support_reports:[],petcare_analytics_consent:[],petcare_product_events:[],petcare_file_trash:[],pets:[]};
 const credential=alias=>['e30',Buffer.from(JSON.stringify({sub:alias==='alice'?uid:other,session_id:'c4000000-0000-4000-8000-000000000003'})).toString('base64url'),'c2ln'].join('.');
-let authCalls=0,downloads=[],removals=[],signouts=[],deletions=[],recent=true,quota=true,active=true,rpcs=[];
+let authCalls=0,downloads=[],removals=[],signouts=[],deletions=[],recent=true,quota=true,active=true,shareQuota=true,shareUnavailable=false,rpcs=[];
 function query(table){let op='select',payload,projection='*',single=false,filters=[],count=10000;const q={
  select(fields='*'){projection=fields;return q},eq:(key,value)=>(filters.push(row=>row[key]===value),q),is:(key,value)=>(filters.push(row=>row[key]===value),q),
  gt:(key,value)=>(filters.push(row=>row[key]>value),q),lt:(key,value)=>(filters.push(row=>row[key]!=null&&row[key]<value),q),
@@ -22,7 +22,7 @@ function query(table){let op='select',payload,projection='*',single=false,filter
   return {data:single?result[0]||null:result,error:null};}).then(resolve,reject)}
  };return q;}
 const admin={auth:{getUser:async jwt=>{authCalls++;const id=jwt===credential('alice')?uid:jwt===credential('bob')?other:null;return id?{data:{user:{id,email:'test@example.invalid',last_sign_in_at:recent?now():'2020-01-01T00:00:00Z'}},error:null}:{data:{user:null},error:{message:'invalid'}}},admin:{signOut:async(jwt,scope)=>{signouts.push([jwt,scope]);return {data:null,error:null}},deleteUser:async id=>{deletions.push(id);return {data:{user:{id}},error:null}}}},
- from:query,rpc:async(name,args)=>{rpcs.push([name,args]);if(name==='petcare_recent_session')return {data:recent,error:null};if(name==='petcare_get_push_runtime_secrets')return {data:{cronToken:'cron-token-012345678901234567890123456789'},error:null};if(name==='petcare_account_objects')return {data:[{bucket_id:'petcare-documents',name:args.p_user+'/doc-a/original.pdf'}],error:null};if(name==='petcare_account_backups')return {data:[],error:null};if(name==='petcare_accept_care')return {data:true,error:null};throw Error('unexpected rpc '+name)},
+ from:query,rpc:async(name,args)=>{rpcs.push([name,args]);if(name==='petcare_consume_vet_share')return {data:shareUnavailable?{unavailable:true}:{allowed:shareQuota,retryAfter:30},error:null};if(name==='petcare_recent_session')return {data:recent,error:null};if(name==='petcare_get_push_runtime_secrets')return {data:{cronToken:'cron-token-012345678901234567890123456789'},error:null};if(name==='petcare_account_objects')return {data:[{bucket_id:'petcare-documents',name:args.p_user+'/doc-a/original.pdf'}],error:null};if(name==='petcare_account_backups')return {data:[],error:null};if(name==='petcare_accept_care')return {data:true,error:null};throw Error('unexpected rpc '+name)},
  storage:{from:bucket=>({
   download:async path=>{downloads.push([bucket,path]);return {data:new Blob(['original bytes']),error:null};},
   remove:async paths=>{removals.push([bucket,paths]);return {data:[],error:null};}
@@ -37,11 +37,17 @@ const request=(data,jwt='',headers={})=>new Request('https://app.invalid',{metho
  assert.equal((await handler(new Request('https://app.invalid',{method:'PUT'}))).status,405);
  const before=authCalls;assert.equal((await handler(request({action:'backups'},'alice',{origin:'https://evil.invalid'}))).status,403);assert.equal(authCalls,before);
  assert.equal((await handler(request({action:'backups'}))).status,401);
+ assert.equal((await handler(request({action:'backups'},'alice',{'content-type':'application/jsonp'}))).status,415);
  assert.equal((await handler(request('not json'))).status,400);
  assert.equal((await handler(request({action:'support',message:'x'.repeat(65537)},'alice'))).status,413);
  const view=await handler(request({action:'share-view',token}));assert.equal(view.status,200);const data=await view.json();assert.equal(data.documents.length,1);assert(!('storage_path'in data.documents[0]));assert(!JSON.stringify(data).includes('PRIVATE CHAT'));assert(!JSON.stringify(data).includes(other));assert.equal(view.headers.get('cache-control'),'no-store');
  assert.equal((await handler(request({action:'share-file',token,documentId:'doc-b'}))).status,404);assert.equal(downloads.length,0);
  const file=await handler(request({action:'share-file',token,documentId:'doc-a'}));assert.equal(file.status,200);assert.equal(await file.text(),'original bytes');assert.equal(downloads.length,1);
+ assert.equal(file.headers.get('x-frame-options'),'DENY');assert.match(file.headers.get('content-security-policy'),/sandbox/);
+ shareQuota=false;const quotaDownloads=downloads.length;
+ for(const action of ['share-view','share-file']){const limited=await handler(request({action,token,documentId:'doc-a'}));assert.equal(limited.status,429);assert.equal(limited.headers.get('retry-after'),'30');}
+ assert.equal(downloads.length,quotaDownloads,'Quota denial must happen before reading originals');shareQuota=true;
+ shareUnavailable=true;assert.equal((await handler(request({action:'share-view',token}))).status,404);shareUnavailable=false;
  tables.petcare_vet_shares[0].revoked_at=now();assert.equal((await handler(request({action:'share-view',token}))).status,404);assert.equal((await handler(request({action:'share-file',token,documentId:'doc-a'}))).status,404);
  tables.petcare_vet_shares[0].revoked_at=null;tables.petcare_vet_shares[0].expires_at='2020-01-01T00:00:00Z';assert.equal((await handler(request({action:'share-view',token}))).status,404);
  assert.equal((await handler(request({action:'share-create',petId:'pet-a',recordIds:['h2'],documentIds:[],tokenHash:digest(otherToken)},'alice'))).status,400);

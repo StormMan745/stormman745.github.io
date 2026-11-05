@@ -281,7 +281,7 @@ function loadClinicsRuntime() {
     if (window.PetCareClinics?.open) return Promise.resolve(window.PetCareClinics);
     if (!clinicsRuntimePromise) clinicsRuntimePromise = new Promise((resolve, reject) => {
         const script = document.createElement('script');
-        script.src = 'clinics.bundle.js?v=20261031-pet-services';
+        script.src = 'clinics.bundle.js?v=20261105-browser-security';
         const fail = () => {
             script.remove();
             clinicsRuntimePromise = null;

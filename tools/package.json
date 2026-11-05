@@ -4,6 +4,7 @@
     "build:app": "node build-app.cjs",
     "check:build": "node build-app.cjs --check",
     "test:auth": "node check-auth-controls.cjs",
+    "test:site-security": "node check-site-security.cjs && node check-browser-security.cjs",
     "build:pet-scene": "node build-pet-scene.cjs",
     "build:document-print": "node build-document-print.cjs",
     "test:security": "node security-edge-check.cjs",

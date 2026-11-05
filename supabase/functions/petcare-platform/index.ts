@@ -5,6 +5,7 @@ const admin = createClient(url, serviceKey, { auth: { persistSession: false, aut
 const origins = new Set(['https://stormman745.github.io', 'https://www.stormman745.github.io', 'capacitor://localhost', 'ionic://localhost', 'petcare://localhost', 'null']);
 const headersFor = (request: Request) => ({ 'Access-Control-Allow-Origin': request.headers.get('origin') || 'https://stormman745.github.io',
     'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info', 'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Expose-Headers': 'Retry-After', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'; sandbox", 'X-Frame-Options': 'DENY',
     'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Vary': 'Origin' });
 const hash = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))).map(x => x.toString(16).padStart(2, '0')).join('');
 const check = (result: any) => { if (result.error) throw new Error('database_error'); return result.data; };
@@ -19,10 +20,10 @@ const safeDiagnostics = (value: any) => ({ version: String(value?.version || '')
 Deno.serve(async request => {
     const origin = request.headers.get('origin');
     if (origin && !origins.has(origin) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return new Response('Forbidden', { status: 403 });
-    const reply = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...headersFor(request), 'Content-Type': 'application/json; charset=utf-8' } });
+    const reply = (data: unknown, status = 200, extraHeaders: Record<string,string> = {}) => new Response(JSON.stringify(data), { status, headers: { ...headersFor(request), 'Content-Type': 'application/json; charset=utf-8', ...extraHeaders } });
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: headersFor(request) });
     if (request.method !== 'POST') return reply({ error: 'method_not_allowed' }, 405);
-    if (!request.headers.get('content-type')?.includes('application/json')) return reply({ error: 'json_required' }, 415);
+    if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type')||'')) return reply({ error: 'json_required' }, 415);
     try {
         const reader=request.body?.getReader();const parts:Uint8Array[]=[];let size=0;
         if(reader)for(;;){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>65536){await reader.cancel();return reply({error:'request_too_large'},413);}parts.push(value);}
@@ -67,6 +68,9 @@ Deno.serve(async request => {
             const share = check(await admin.from('petcare_vet_shares').select('*').eq('token_hash', await hash(body.token))
                 .is('revoked_at', null).gt('expires_at', new Date().toISOString()).maybeSingle());
             if (!share) return reply({ error: 'share_unavailable' }, 404);
+            const budget=check(await admin.rpc('petcare_consume_vet_share',{p_share:share.id,p_action:action==='share-file'?'download':'view'}));
+            if(budget?.unavailable)return reply({error:'share_unavailable'},404);
+            if(budget?.allowed!==true){const retry=Math.max(1,Math.min(86400,Number(budget?.retryAfter)||60));return reply({error:'rate_limited',retryAfter:retry},429,{'Retry-After':String(retry)});}
             const docs = check(await admin.from('petcare_documents').select('id,title,category,document_date,file_name,mime_type,file_size,storage_path')
                 .eq('user_id', share.user_id).eq('pet_id', share.pet_id).is('deleted_at', null).in('id', share.document_ids));
             if (action === 'share-view') return reply({ data: share.snapshot, expiresAt: share.expires_at, documents: docs.map(({ storage_path, ...row }: any) => row) });
@@ -90,7 +94,7 @@ Deno.serve(async request => {
         // Quotas use the verified user's JWT, not the privileged service role.
         if (!['export-file','analytics-event'].includes(action)) {
             const limit = check(await client.rpc('petcare_consume_request', { p_action: 'profile-status' }));
-            if (!limit?.allowed) return reply({ error: 'rate_limited', retryAfter: limit?.retryAfter || 60 }, 429);
+            if (!limit?.allowed) return reply({ error: 'rate_limited', retryAfter: limit?.retryAfter || 60 }, 429, {'Retry-After':String(limit?.retryAfter||60)});
         }
         const profile = async () => check(await admin.from('petcare_data').select('data,revision').eq('user_id', uid).maybeSingle()) || { data: {}, revision: 0 };
         const ownPet = async () => {

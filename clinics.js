@@ -58,9 +58,10 @@ function renderMap() {
     const frame = document.createElement('iframe');
     frame.className = 'clinic-yandex-map';
     frame.title = ownLocation ? 'Яндекс Карты — моя геопозиция' : `Яндекс Карты — ${currentCategory().label}`;
-    frame.referrerPolicy = 'strict-origin-when-cross-origin';
+    frame.referrerPolicy = 'no-referrer';
     frame.allowFullscreen = true;
-    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation');
+    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox');
+    frame.setAttribute('allow', "camera 'none'; microphone 'none'; geolocation 'none'; payment 'none'; clipboard-write 'none'");
     frame.addEventListener('load', () => {
         if (mapFrame !== frame) return;
         busy(false);

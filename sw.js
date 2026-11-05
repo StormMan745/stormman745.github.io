@@ -1,4 +1,4 @@
-const CACHE_NAME = "petcare-shell-v44-security";
+const CACHE_NAME = "petcare-shell-v45-browser-security";
 const SHELL_FILES = [
     "/",
     "/index.html",
