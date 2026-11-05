@@ -2,8 +2,10 @@
   "private": true,
   "scripts": {
     "build:app": "node build-app.cjs",
+    "build:qr": "node build-qr.cjs",
     "check:build": "node build-app.cjs --check",
     "test:auth": "node check-auth-controls.cjs",
+    "test:extras": "node check-offline-care.cjs --extras",
     "test:site-security": "node check-site-security.cjs && node check-browser-security.cjs",
     "build:pet-scene": "node build-pet-scene.cjs",
     "build:document-print": "node build-document-print.cjs",
@@ -12,6 +14,7 @@
   },
   "devDependencies": {
     "esbuild": "0.25.5",
-    "pdfjs-dist": "6.5.438"
+    "pdfjs-dist": "6.5.438",
+    "qrcode-generator": "2.0.4"
   }
 }

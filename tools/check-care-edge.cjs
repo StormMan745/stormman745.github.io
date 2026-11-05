@@ -22,7 +22,7 @@ function query(table){let op='select',payload,projection='*',single=false,filter
   return {data:single?result[0]||null:result,error:null};}).then(resolve,reject)}
  };return q;}
 const admin={auth:{getUser:async jwt=>{authCalls++;const id=jwt===credential('alice')?uid:jwt===credential('bob')?other:null;return id?{data:{user:{id,email:'test@example.invalid',last_sign_in_at:recent?now():'2020-01-01T00:00:00Z'}},error:null}:{data:{user:null},error:{message:'invalid'}}},admin:{signOut:async(jwt,scope)=>{signouts.push([jwt,scope]);return {data:null,error:null}},deleteUser:async id=>{deletions.push(id);return {data:{user:{id}},error:null}}}},
- from:query,rpc:async(name,args)=>{rpcs.push([name,args]);if(name==='petcare_consume_vet_share')return {data:shareUnavailable?{unavailable:true}:{allowed:shareQuota,retryAfter:30},error:null};if(name==='petcare_recent_session')return {data:recent,error:null};if(name==='petcare_get_push_runtime_secrets')return {data:{cronToken:'cron-token-012345678901234567890123456789'},error:null};if(name==='petcare_account_objects')return {data:[{bucket_id:'petcare-documents',name:args.p_user+'/doc-a/original.pdf'}],error:null};if(name==='petcare_account_backups')return {data:[],error:null};if(name==='petcare_accept_care')return {data:true,error:null};throw Error('unexpected rpc '+name)},
+ from:query,rpc:async(name,args)=>{rpcs.push([name,args]);if(['petcare_consume_vet_share','petcare_consume_collar'].includes(name))return {data:shareUnavailable?{unavailable:true}:{allowed:shareQuota,retryAfter:30},error:null};if(name==='petcare_recent_session')return {data:recent,error:null};if(name==='petcare_get_push_runtime_secrets')return {data:{cronToken:'cron-token-012345678901234567890123456789'},error:null};if(name==='petcare_account_objects')return {data:[{bucket_id:'petcare-documents',name:args.p_user+'/doc-a/original.pdf'}],error:null};if(name==='petcare_account_backups')return {data:[],error:null};if(name==='petcare_accept_care')return {data:true,error:null};throw Error('unexpected rpc '+name)},
  storage:{from:bucket=>({
   download:async path=>{downloads.push([bucket,path]);return {data:new Blob(['original bytes']),error:null};},
   remove:async paths=>{removals.push([bucket,paths]);return {data:[],error:null};}
@@ -36,6 +36,17 @@ const request=(data,jwt='',headers={})=>new Request('https://app.invalid',{metho
 (async()=>{
  assert.equal((await handler(new Request('https://app.invalid',{method:'PUT'}))).status,405);
  const before=authCalls;assert.equal((await handler(request({action:'backups'},'alice',{origin:'https://evil.invalid'}))).status,403);assert.equal(authCalls,before);
+ const collar={name:'Public pet',kind:'phone',contact:'+7 900 123-45-67',photo:''};
+ assert.equal((await handler(request({action:'collar-save',petId:'pet-a',tokenHash:digest(token),card:collar}))).status,401);
+ assert.notEqual((await handler(request({action:'collar-save',petId:'pet-a',tokenHash:digest(token),card:collar},'bob'))).status,200);
+ for(const card of [{...collar,contact:'javascript:alert(1)'},{...collar,photo:'data:image/svg+xml;base64,PHN2Zz4='},{...collar,kind:'url',contact:'https://evil.invalid'},{...collar,photo:'data:image/jpeg;base64,/9j/'+ 'A'.repeat(30000)}])assert.equal((await handler(request({action:'collar-save',petId:'pet-a',tokenHash:digest(token),card},'alice'))).status,400);
+ const savedCard=await handler(request({action:'collar-save',petId:'pet-a',tokenHash:digest(token),card:{...collar,health:'PRIVATE',email:'PRIVATE',user_id:other}},'alice'));assert.equal(savedCard.status,200);
+ const publicCard=await handler(request({action:'collar-view',token}));assert.equal(publicCard.status,200);assert.deepEqual(await publicCard.json(),{card:collar});assert.equal(publicCard.headers.get('cache-control'),'no-store');
+ shareQuota=false;assert.equal((await handler(request({action:'collar-view',token}))).status,429);shareQuota=true;
+ assert.deepEqual(await (await handler(request({action:'collar-get',petId:'pet-a'},'alice'))).json().then(r=>r.card),collar);
+ await handler(request({action:'collar-revoke',petId:'pet-a',userId:uid},'bob'));assert.equal((await handler(request({action:'collar-view',token}))).status,200,'Other account cannot revoke');
+ await handler(request({action:'collar-revoke',petId:'pet-a'},'alice'));assert.equal((await handler(request({action:'collar-view',token}))).status,404);
+ assert.equal(Object.keys(tables.petcare_collar_cards[0].card).length,0,'Revocation removes published contact and photo');
  assert.equal((await handler(request({action:'backups'}))).status,401);
  assert.equal((await handler(request({action:'backups'},'alice',{'content-type':'application/jsonp'}))).status,415);
  assert.equal((await handler(request('not json'))).status,400);

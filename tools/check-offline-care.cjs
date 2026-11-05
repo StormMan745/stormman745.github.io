@@ -9,7 +9,7 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
 (async()=>{
  const root=path.resolve(__dirname,'..'),profiles=new Map([[uid,{data:initial(),revision:1}],[other,{data:{...initial(),pets:[{id:'pet-other',name:'Other private'}],pet:{id:'pet-other',name:'Other private'},activePetId:'pet-other'},revision:1}]]),documents=[],objects=new Map(),reports=[],events=[];
  let available=true,consent=false,deleted=false,holdSync=false,releaseSync=null,recoveryRequests=0,holdDocument=false,releaseDocument=null,revoked=false;
- const sharedMembers=[{owner_id:other,member_id:uid,pet_id:'pet-other'}];
+ const sharedMembers=[{owner_id:other,member_id:uid,pet_id:'pet-other'}],collars=[];
  profiles.get(other).data.pets.push({id:'pet-b-private',name:'Never shared'});
  profiles.get(other).data.healthRecords=[{id:'b-allowed',petId:'pet-other',name:'Shared visit',date:'2026-11-04'},{id:'b-private',petId:'pet-b-private',name:'Never shared visit',date:'2026-11-04'}];
  const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname;const file=path.resolve(root,'.'+(name==='/'?'/index.html':name));if(!file.startsWith(root+path.sep))return res.writeHead(403).end();fs.readFile(file,(error,bytes)=>{if(error)return res.writeHead(404).end();res.writeHead(200,{'Content-Type':({'.html':'text/html','.js':'text/javascript','.css':'text/css','.wasm':'application/wasm','.webmanifest':'application/manifest+json','.png':'image/png'})[path.extname(file)]||'application/octet-stream'});res.end(bytes)})});
@@ -64,6 +64,10 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
    }
    if(url.pathname==='/functions/v1/petcare-assistant')return reply({profileContext:{source:'account',petId:body.petId,petName:'Барни',availableEntries:0,signature:'revision-'+profiles.get(actor).revision},answer:'Тестовый ответ'});
    if(url.pathname==='/functions/v1/petcare-platform'){
+    if(body.action==='collar-get')return reply(collars.find(c=>c.user_id===actor&&c.pet_id===body.petId&&!c.revoked_at)||{});
+    if(body.action==='collar-save'){let c=collars.find(c=>c.user_id===actor&&c.pet_id===body.petId);if(!c){c={id:'collar-'+collars.length,user_id:actor,pet_id:body.petId};collars.push(c);}Object.assign(c,{card:body.card,token_hash:body.tokenHash,revoked_at:null});return reply({id:c.id});}
+    if(body.action==='collar-revoke'){const c=collars.find(c=>c.user_id===actor&&c.pet_id===body.petId);if(c)c.revoked_at=new Date().toISOString();return reply({ok:true});}
+    if(body.action==='collar-view'){const hash=require('node:crypto').createHash('sha256').update(body.token||'').digest('hex'),c=collars.find(c=>c.token_hash===hash&&!c.revoked_at);return c?reply({card:c.card}):reply({error:'card_unavailable'},404);}
     if(body.action==='analytics-status')return reply({enabled:consent});
     if(body.action==='analytics-consent'){consent=body.enabled;return reply({ok:true});}
     if(body.action==='analytics-event'){events.push(body);return reply({ok:true});}
@@ -85,6 +89,7 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   const base=`http://127.0.0.1:${server.address().port}`;
   await page.goto(base);await page.waitForFunction(()=>window.PetCareCare&&activeUserId&&document.getElementById('homePage').style.display==='block');
   await page.waitForFunction(()=>PetCareSync.state.phase==='saved');
+  if(process.argv.includes('--extras')){await require('./check-extras.cjs')({page,context,profiles,uid,other,documents,collars,base,session,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
   // IndexedDB read/compare/write must be atomic across two actual browser tabs.
   const second=await context.newPage();await second.goto(base);await second.waitForFunction(()=>window.PetCareSync&&activeUserId&&PetCareSync.state.phase==='saved');
   const increment=tab=>tab.evaluate(async()=>{for(let n=0;n<20;n++)await PetCareSync.mutate('preferences','atomic-test',row=>({key:'atomic-test',userId:activeUserId,count:(row?.count||0)+1}));});

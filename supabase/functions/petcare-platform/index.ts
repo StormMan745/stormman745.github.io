@@ -63,6 +63,17 @@ Deno.serve(async request => {
             }
             return reply({ok:true,removed});
         }
+        if (action === 'collar-view') {
+            if (typeof body.token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(body.token)) return reply({error:'card_unavailable'},404);
+            const tag=check(await admin.from('petcare_collar_cards').select('id,user_id,pet_id,card').eq('token_hash',await hash(body.token)).is('revoked_at',null).maybeSingle());
+            if(!tag)return reply({error:'card_unavailable'},404);
+            const budget=check(await admin.rpc('petcare_consume_collar',{p_card:tag.id}));
+            if(budget?.unavailable)return reply({error:'card_unavailable'},404);
+            if(budget?.allowed!==true){const retry=Math.max(1,Math.min(86400,Number(budget?.retryAfter)||60));return reply({error:'rate_limited'},429,{'Retry-After':String(retry)});}
+            const account=check(await admin.from('petcare_data').select('data').eq('user_id',tag.user_id).maybeSingle());
+            if(!account?.data?.pets?.some((p:any)=>petKey(p)===tag.pet_id))return reply({error:'card_unavailable'},404);
+            return reply({card:tag.card});
+        }
         if (action === 'share-view' || action === 'share-file') {
             if (typeof body.token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(body.token)) return reply({ error: 'share_unavailable' }, 404);
             const share = check(await admin.from('petcare_vet_shares').select('*').eq('token_hash', await hash(body.token))
@@ -101,6 +112,27 @@ Deno.serve(async request => {
             const account = await profile(); const pet = (account.data.pets || []).find((p: any) => petKey(p) === body.petId);
             if (!pet) throw new Error('pet_not_found'); return { account, pet };
         };
+        if (action === 'collar-get') {
+            await ownPet();
+            return reply(check(await admin.from('petcare_collar_cards').select('id,card,updated_at').eq('user_id',uid).eq('pet_id',body.petId).is('revoked_at',null).maybeSingle())||{});
+        }
+        if (action === 'collar-save') {
+            await ownPet();
+            const c=body.card;
+            if(typeof body.tokenHash!=='string'||!/^[a-f0-9]{64}$/.test(body.tokenHash)||!c||typeof c!=='object'||typeof c.name!=='string'||!c.name.trim()||c.name.length>80||typeof c.contact!=='string'||c.contact.length>160)return reply({error:'invalid_card'},400);
+            const contact=c.contact.trim(),kind=c.kind;
+            if(!((kind==='phone'&&/^\+?[0-9() -]{7,25}$/.test(contact)&&contact.replace(/\D/g,'').length>=7)||(kind==='email'&&/^[a-z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(contact))||(kind==='telegram'&&/^@?[a-zA-Z][a-zA-Z0-9_]{4,31}$/.test(contact))))return reply({error:'invalid_contact'},400);
+            const photo=c.photo||'';
+            if(typeof photo!=='string'||photo.length>28000||(photo&&!/^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]*={0,2}$/.test(photo)))return reply({error:'invalid_photo'},400);
+            const card={name:c.name.trim(),kind,contact,photo};
+            const saved=check(await admin.from('petcare_collar_cards').upsert({user_id:uid,pet_id:body.petId,token_hash:body.tokenHash,card,revoked_at:null,updated_at:new Date().toISOString()},{onConflict:'user_id,pet_id'}).select('id').single());
+            if(!(await profile()).data.pets?.some((p:any)=>petKey(p)===body.petId)){await admin.from('petcare_collar_cards').delete().eq('id',saved.id).eq('user_id',uid);return reply({error:'pet_not_found'},404);}
+            return reply(saved);
+        }
+        if (action === 'collar-revoke') {
+            check(await admin.from('petcare_collar_cards').update({revoked_at:new Date().toISOString(),card:{}}).eq('user_id',uid).eq('pet_id',body.petId));
+            return reply({ok:true});
+        }
         if (action === 'share-create') {
             if (!allowedIds(body.recordIds) || !allowedIds(body.documentIds) || typeof body.tokenHash !== 'string' || !/^[a-f0-9]{64}$/.test(body.tokenHash)) return reply({ error: 'invalid_selection' }, 400);
             const { account, pet } = await ownPet();
@@ -163,7 +195,8 @@ Deno.serve(async request => {
             const reports=check(await admin.from('petcare_support_reports').select('*').eq('user_id',uid));
             const events=check(await admin.from('petcare_product_events').select('*').eq('user_id',uid));
             const errorEvents=check(await admin.from('petcare_error_events').select('*').eq('user_id',uid));
-            return reply({format:'petcare-export-v1',exportedAt:new Date().toISOString(),user:{id:uid,email:auth.user.email},profile:account,documents,pets,backups,shares,memberships,invites,consent,reports,events,errorEvents,files});
+            const collarCards=check(await admin.from('petcare_collar_cards').select('id,pet_id,card,revoked_at,updated_at').eq('user_id',uid));
+            return reply({format:'petcare-export-v1',exportedAt:new Date().toISOString(),user:{id:uid,email:auth.user.email},profile:account,documents,pets,backups,shares,memberships,invites,consent,reports,events,errorEvents,collarCards,files});
         }
         if (action === 'export-file') {
             if(!safeObject(body.bucket,body.path))return reply({error:'invalid_path'},400);

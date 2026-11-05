@@ -51,7 +51,8 @@ function createInitialAppData() {
         completedTasks: [],
         activityHistory: [],
         assistantConversation: [],
-        storyProjects: []
+        storyProjects: [],
+        wellbeingEntries: [], expenses: [], foodStocks: []
     };
 }
 
@@ -152,6 +153,7 @@ function normalizeAppData() {
     appData.activityHistory = Array.isArray(appData.activityHistory) ? appData.activityHistory : [];
     appData.assistantConversation = Array.isArray(appData.assistantConversation) ? appData.assistantConversation : [];
     appData.storyProjects = Array.isArray(appData.storyProjects) ? appData.storyProjects : [];
+    for (const key of ['wellbeingEntries','expenses','foodStocks']) appData[key] = Array.isArray(appData[key]) ? appData[key].filter(row => row && typeof row === 'object' && typeof row.id === 'string' && typeof row.petId === 'string') : [];
 
     const legacyPetId = previousPet ? getPetKey(previousPet) : getPetKey(activePet);
     const legacyTaskIds = new Map([
@@ -872,6 +874,7 @@ async function deletePet() {
     const deletedPetId = getPetKey(pet);
     appData.medicationCourses=(appData.medicationCourses||[]).filter(r=>String(r.petId)!==deletedPetId);
     appData.medicationIntakes=(appData.medicationIntakes||[]).filter(r=>String(r.petId)!==deletedPetId);
+    for (const key of ['wellbeingEntries','expenses','foodStocks']) appData[key]=(appData[key]||[]).filter(r=>String(r.petId)!==deletedPetId);
     const remainingPets = appData.pets.filter(item => getPetKey(item) !== deletedPetId);
     appData.healthRecords = appData.healthRecords.filter(record => String(record.petId ?? deletedPetId) !== deletedPetId);
     appData.reminders = appData.reminders.filter(reminder => String(reminder.petId ?? deletedPetId) !== deletedPetId);
@@ -3929,7 +3932,8 @@ function renderAssistantConversation() {
 
     messages.forEach(message => {
         if (message && (!message.petId || String(message.petId) === getActivePetKey()) && ["user", "assistant"].includes(message.role) && typeof message.content === "string") {
-            addAssistantBubble(message.role, message.content, false);
+            const bubble = addAssistantBubble(message.role, message.content, false);
+            if (message.role === 'assistant') window.PetCareExtras?.renderDraft(message, bubble);
         }
     });
     if (activeAssistantRequest?.phase === "waiting" && activeAssistantRequest.petId === getActivePetKey()) {
@@ -3967,6 +3971,8 @@ async function getAssistantErrorMessage(error) {
 }
 
 async function sendAssistantMessage(event) {
+    event?.preventDefault();
+    if (await window.PetCareExtras?.handleChatRequest(event)) return;
     if(!navigator.onLine){event?.preventDefault?.();alert('История чата доступна без связи. Для нового ответа помощника нужен интернет.');return;}
     event?.preventDefault();
     const input = document.getElementById("assistantQuestion");

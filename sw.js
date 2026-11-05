@@ -1,4 +1,4 @@
-const CACHE_NAME = "petcare-shell-v46-routine-checks";
+const CACHE_NAME = "petcare-shell-v47-everyday-tools";
 const SHELL_FILES = [
     "/",
     "/index.html",
@@ -14,6 +14,10 @@ const SHELL_FILES = [
     "/install.js",
     "/clinics.bundle.js",
     "/frameguard.js",
+    "/collar.html",
+    "/collar.js",
+    "/collar.css",
+    "/assets/vendor/qrcode/qrcode-2.0.4.min.js",
     "/manifest.webmanifest",
     "/assets/petcare-192.png",
     "/assets/petcare-512.png",

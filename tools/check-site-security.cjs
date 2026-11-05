@@ -1,6 +1,6 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..');
-for(const file of ['index.html','vet.html','document-print.html']){
+for(const file of ['index.html','vet.html','document-print.html','collar.html']){
  const html=fs.readFileSync(path.join(root,file),'utf8');
  const policy=html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1];assert(policy,file+' requires CSP');
  for(const rule of ["object-src 'none'","base-uri 'none'","form-action 'none'"])assert(policy.includes(rule),file+' missing '+rule);
