@@ -12,6 +12,8 @@
 - [Клиники и карты](clinics_setup.md)
 - [Ежедневный план и обновление интерфейса](DAILY_CARE.md)
 
+В ежедневном плане можно выбрать от 1 до 12 независимых отметок на дело. Галочки стоят в ряд, сохраняются офлайн и отдельно для каждого питомца, а прогресс учитывает их все.
+
 Клиент — статические HTML/CSS/JavaScript; сервер — Supabase Auth, PostgreSQL, Storage и Edge Functions. Секреты сервера остаются в Supabase Secrets/Vault. Для локальной разработки удобнее HTTP-сервер; Service Worker и установка требуют HTTPS или localhost.
 
 Проверки серверных обработчиков: `npm ci --prefix tools`, затем `npm run --prefix tools test:security`. Полные проверки офлайн-сценариев и печати: `npm run --prefix tools test:care` (требуются Chrome и Playwright, пути описаны в CARE_PLATFORM.md).

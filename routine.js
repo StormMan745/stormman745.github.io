@@ -8,10 +8,21 @@
     const icons = new Set(['🍖', '🚶', '💊', '💧', '🪮', '🎾', '🐾']);
     const $ = id => document.getElementById(id);
     const dialog = $('routineDialog');
-    let editing = null, busy = false, midnightTimer, renderedKey = '';
-    const pendingTasks = new Set();
+    let editing = null, busy = false, midnightTimer, renderedKey = '', markedFocus = null;
+    const pendingTasks = new Map();
     const copy = value => JSON.parse(JSON.stringify(value));
     const validTime = value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+    const checkCount = value => Number.isInteger(Number(value)) ? Math.max(1, Math.min(12, Number(value))) : 1;
+    // Keep the first mark's legacy ID. Extra marks also survive older profile
+    // normalizers, which preserve id/date/petId but discard unknown properties.
+    const markId = (id, step) => step === 1 ? id : `${id}::check:${step}`;
+    const pendingKey = (uid, petId, date, id) => JSON.stringify([uid, petId, date, id]);
+    const completedIds = (date = getLocalDateInputValue(), petId = getActivePetKey()) => new Set(appData.completedTasks.filter(row => row.date === date && row.petId === petId).map(row => row.id));
+    const marks = (task, completed) => Array.from({ length: task.checks }, (_, index) => completed.has(markId(task.id, index + 1)));
+    function isCompleted(id, date = getLocalDateInputValue()) {
+        const task = items().find(row => row.id === id);
+        return task ? marks(task, completedIds(date)).every(Boolean) : completedIds(date).has(id);
+    }
     function items(pet = appData.pet) {
         if (!pet || pet.isPlaceholder) return [];
         const source = Array.isArray(pet.dailyRoutine) ? pet.dailyRoutine : defaults;
@@ -19,7 +30,7 @@
         return source.filter(row => row && typeof row.id === 'string' && row.id && !seen.has(row.id) && seen.add(row.id))
             .slice(0, 20).map(row => ({
                 id: row.id, name: String(row.name || 'Ежедневное дело').slice(0, 80),
-                time: validTime(row.time) ? row.time : '09:00', icon: icons.has(row.icon) ? row.icon : '🐾'
+                time: validTime(row.time) ? row.time : '09:00', icon: icons.has(row.icon) ? row.icon : '🐾', checks: checkCount(row.checks)
             }));
     }
     function node(tag, text, className) {
@@ -39,33 +50,50 @@
         if (editing && (editing.userId !== activeUserId || editing.petId !== getActivePetKey())) dialog.close();
         setTodayDate();
         const tasks = items().sort((a, b) => a.time.localeCompare(b.time));
-        const done = tasks.filter(task => isHomeTaskCompleted(task.id)).length;
-        const key = JSON.stringify([activeUserId, getActivePetKey(), getLocalDateInputValue(), tasks, tasks.map(t => isHomeTaskCompleted(t.id))]);
+        const date = getLocalDateInputValue(), petId = getActivePetKey(), completed = completedIds(date, petId);
+        const states = tasks.map(task => marks(task, completed));
+        const done = states.filter(state => state.every(Boolean)).length;
+        const total = states.flat().length, checked = states.flat().filter(Boolean).length;
+        const key = JSON.stringify([activeUserId, petId, date, tasks, states]);
         if (!force && renderedKey === key) return;
         renderedKey = key;
         const focused = document.activeElement?.closest('[data-routine][data-task-id]');
-        const restoreFocus = focused ? { action: focused.dataset.routine, id: focused.dataset.taskId } : null;
-        $('routineProgressLabel').textContent = tasks.length ? (done === tasks.length ? 'Все дела сделаны. Вы отличная команда!' : `${done} из ${tasks.length} дел выполнено`) : 'Маленькие дела, большая забота';
-        $('routineProgress').max = Math.max(tasks.length, 1);
-        $('routineProgress').value = done;
+        const restoreFocus = focused ? { action: focused.dataset.routine, id: focused.dataset.taskId, step: focused.dataset.step } : null;
+        $('routineProgressLabel').textContent = tasks.length ? (done === tasks.length ? 'Все дела сделаны. Вы отличная команда!' : total === tasks.length ? `${done} из ${tasks.length} дел выполнено` : `${checked} из ${total} отметок · ${done} из ${tasks.length} дел выполнено`) : 'Маленькие дела, большая забота';
+        $('routineProgress').max = Math.max(total, 1);
+        $('routineProgress').value = checked;
         $('routineProgress').hidden = !tasks.length;
         const list = $('dailyTaskList');
+        const scrollPositions = new Map([...list.querySelectorAll('.routine-checks')].map(group => [group.dataset.taskId, group.scrollLeft]));
         list.replaceChildren();
         for (const task of tasks) {
+            const state = marks(task, completed), count = state.filter(Boolean).length;
             const row = node('div', undefined, 'task'); row.dataset.task = task.id;
+            row.classList.toggle('task-multiple', task.checks > 1);
+            row.classList.toggle('done', count === task.checks);
             const icon = node('div', task.icon, 'task-icon'); icon.setAttribute('aria-hidden', 'true');
             const info = node('div', undefined, 'task-info');
             const time = node('time', task.time); time.dateTime = task.time;
             const subline = node('p'); subline.append(time, node('span', ' · каждый день', 'routine-frequency'));
+            if (task.checks > 1) subline.append(node('span', ` · ${count} из ${task.checks}`, 'routine-count'));
             info.append(node('strong', task.name), subline);
             const actions = node('div', undefined, 'routine-row-actions');
             const edit = control('Изменить', 'edit', 'routine-edit', task.id);
             edit.setAttribute('aria-label', `Изменить дело «${task.name}»`);
-            const complete = control('○', 'toggle', 'task-complete', task.id);
-            complete.disabled = pendingTasks.has(`${activeUserId}:${getActivePetKey()}:${task.id}`);
-            actions.append(edit, complete); row.append(icon, info, actions);
-            list.append(row); updateHomeTaskState(row);
-            complete.setAttribute('aria-label', `${isHomeTaskCompleted(task.id) ? 'Снять отметку' : 'Выполнить'}: ${task.name}`);
+            const group = node('div', undefined, 'routine-checks'); group.dataset.taskId = task.id;
+            group.setAttribute('role', 'group'); group.setAttribute('aria-label', `Отметки выполнения: ${task.name}`);
+            for (let step = 1; step <= task.checks; step++) {
+                const marked = state[step - 1];
+                const complete = control(marked ? '✓' : task.checks > 1 ? String(step) : '○', 'toggle', 'task-complete', task.id);
+                complete.dataset.step = String(step);
+                complete.disabled = pendingTasks.has(pendingKey(activeUserId, petId, date, markId(task.id, step)));
+                complete.setAttribute('aria-pressed', String(marked));
+                complete.setAttribute('aria-label', `${marked ? 'Снять отметку' : 'Отметить выполнение'}: ${task.name}, ${step} из ${task.checks}`);
+                complete.title = `${step} из ${task.checks}`;
+                group.append(complete);
+            }
+            actions.append(edit, group); row.append(icon, info, actions); list.append(row);
+            group.scrollLeft = scrollPositions.get(task.id) || 0;
         }
         if (!tasks.length) {
             const empty = node('div', undefined, 'routine-empty');
@@ -75,7 +103,7 @@
         }
         document.querySelector('.routine-footer').hidden = Boolean(appData.pet?.isPlaceholder);
         document.querySelector('[data-routine="add"]').disabled = tasks.length >= 20;
-        if (restoreFocus) [...list.querySelectorAll('[data-routine]')].find(b => b.dataset.routine === restoreFocus.action && b.dataset.taskId === restoreFocus.id)?.focus({ preventScroll: true });
+        if (restoreFocus) [...list.querySelectorAll('[data-routine]')].find(b => b.dataset.routine === restoreFocus.action && b.dataset.taskId === restoreFocus.id && b.dataset.step === restoreFocus.step)?.focus({ preventScroll: true });
     }
     function open(id) {
         if (!activeUserId || appData.pet?.isPlaceholder) return;
@@ -87,6 +115,7 @@
         $('routineName').value = task?.name || '';
         $('routineTime').value = task?.time || '09:00';
         $('routineIcon').value = task?.icon || '🐾';
+        $('routineChecks').value = task?.checks || 1;
         $('routineDelete').hidden = !task;
         $('routineFormStatus').textContent = '';
         $('routineStatus').textContent = '';
@@ -107,14 +136,15 @@
         if (draft.id && JSON.stringify(current.find(task => task.id === draft.id)) !== draft.original) {
             $('routineFormStatus').textContent = 'Это дело уже изменилось на другом устройстве. Закройте редактор и откройте его заново, чтобы увидеть актуальные данные.'; return;
         }
-        const name = $('routineName').value.trim(), time = $('routineTime').value;
+        const name = $('routineName').value.trim(), time = $('routineTime').value, checks = Number($('routineChecks').value);
         if (!remove && (!name || !validTime(time))) { $('routineFormStatus').textContent = 'Введите название и время.'; $('routineName').focus(); return; }
+        if (!remove && (!Number.isInteger(checks) || checks < 1 || checks > 12)) { $('routineFormStatus').textContent = 'Выберите от 1 до 12 отметок.'; $('routineChecks').focus(); return; }
         if (!draft.id && current.length >= 20) { $('routineFormStatus').textContent = 'Можно добавить до 20 ежедневных дел.'; return; }
         if (remove && !confirm('Удалить дело из ежедневного плана? Прошлые отметки останутся в истории.')) return;
         const previous = appData.pet.dailyRoutine;
         const next = remove ? current.filter(task => task.id !== draft.id) : current.slice();
         if (!remove) {
-            const task = { id: draft.id || createEntryId('routine'), name, time, icon: icons.has($('routineIcon').value) ? $('routineIcon').value : '🐾' };
+            const task = { id: draft.id || createEntryId('routine'), name, time, checks, icon: icons.has($('routineIcon').value) ? $('routineIcon').value : '🐾' };
             const index = next.findIndex(row => row.id === task.id);
             if (index < 0) next.push(task); else next[index] = task;
         }
@@ -141,26 +171,30 @@
         const id = taskId || element?.dataset.taskId || element?.closest('[data-task]')?.dataset.task;
         const task = items().find(row => row.id === id);
         if (!task) return;
-        const uid = activeUserId, petId = getActivePetKey(), date = getLocalDateInputValue(), pending = `${uid}:${petId}:${id}`;
+        const step = Number(element?.dataset.step || 1);
+        if (!Number.isInteger(step) || step < 1 || step > task.checks) return;
+        const completionId = markId(id, step), token = Symbol();
+        const uid = activeUserId, petId = getActivePetKey(), date = getLocalDateInputValue(), pending = pendingKey(uid, petId, date, completionId);
         if (pendingTasks.has(pending)) return;
-        pendingTasks.add(pending);
-        const match = row => row.id === id && row.date === date && row.petId === petId;
+        pendingTasks.set(pending, token);
+        if (document.activeElement === element) markedFocus = { token, id, step };
+        const match = row => row.id === completionId && row.date === date && row.petId === petId;
         const previous = appData.completedTasks.find(match);
-        const historyId = `task-${petId}-${id}-${date}`;
+        const historyId = `task-${petId}-${completionId}-${date}`;
         const hadHistory = appData.activityHistory.some(row => row.id === historyId);
-        const priorEvents = appData.activityHistory.filter(row => row.petId === petId && row.date === date && [historyId, `task-${id}-${date}`].includes(row.id));
+        const priorEvents = appData.activityHistory.filter(row => row.petId === petId && row.date === date && [historyId, `task-${completionId}-${date}`].includes(row.id));
         if (previous) {
             appData.completedTasks = appData.completedTasks.filter(row => !match(row));
             appData.activityHistory = appData.activityHistory.filter(row => !priorEvents.includes(row));
         }
         else {
-            appData.completedTasks.push({ id, date, petId });
-            addActivityEvent('task', `Выполнено: ${task.name}`, date, `Ежедневный уход · ${task.time}`, historyId);
+            appData.completedTasks.push({ id: completionId, date, petId });
+            addActivityEvent('task', `Выполнено: ${task.name}${task.checks > 1 ? ` · ${step} из ${task.checks}` : ''}`, date, `Ежедневный уход · ${task.time}`, historyId);
         }
         render(true);
         try { await saveData(); }
         catch {
-            if (activeUserId === uid) {
+            if (activeUserId === uid && pendingTasks.get(pending) === token) {
                 appData.completedTasks = appData.completedTasks.filter(row => !match(row));
                 if (previous) appData.completedTasks.push(copy(previous));
                 if (!hadHistory) appData.activityHistory = appData.activityHistory.filter(row => row.id !== historyId);
@@ -168,8 +202,14 @@
                 $('routineStatus').textContent = 'Отметка не сохранена. Освободите место на устройстве и повторите попытку.';
             }
         } finally {
-            pendingTasks.delete(pending);
-            if (activeUserId === uid) { render(true); renderEventHistory(); renderCalendar(); }
+            if (pendingTasks.get(pending) === token) pendingTasks.delete(pending);
+            if (activeUserId === uid) {
+                render(true); renderEventHistory(); renderCalendar();
+                if (markedFocus?.token === token && petId === getActivePetKey() && date === getLocalDateInputValue() && document.activeElement === document.body) {
+                    const button = [...$('dailyTaskList').querySelectorAll('[data-routine="toggle"]')].find(button => button.dataset.taskId === id && Number(button.dataset.step) === step);
+                    if (button?.offsetParent) button.focus({ preventScroll: true });
+                }
+            }
         }
     }
     $('routineForm').addEventListener('submit', event => { event.preventDefault(); commit(); });
@@ -200,8 +240,8 @@
     }
     window.addEventListener('petcare:data-changed', () => render());
     window.addEventListener('petcare:account-ready', refreshDay);
-    window.addEventListener('petcare:account-reset', () => { dialog.close(); renderedKey = ''; pendingTasks.clear(); $('routineStatus').textContent = ''; });
+    window.addEventListener('petcare:account-reset', () => { dialog.close(); renderedKey = ''; markedFocus = null; pendingTasks.clear(); $('routineStatus').textContent = ''; });
     document.addEventListener('visibilitychange', refreshDay);
-    window.PetCareRoutine = { render, items, toggle };
+    window.PetCareRoutine = { render, items, toggle, isCompleted };
     render(); refreshDay();
 })();

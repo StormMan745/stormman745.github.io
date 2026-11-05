@@ -3289,23 +3289,11 @@ async function saveStoryCollage(button) {
 
 
 function isHomeTaskCompleted(taskId, date = getLocalDateInputValue()) {
+    if (window.PetCareRoutine) return PetCareRoutine.isCompleted(taskId, date);
     const petId = getActivePetKey();
     return appData.completedTasks.some(task =>
         task.id === taskId && task.date === date && task.petId === petId
     );
-}
-
-function updateHomeTaskState(taskElement) {
-    const taskId = taskElement?.getAttribute("data-task");
-    if (!taskId) return;
-
-    const completed = isHomeTaskCompleted(taskId);
-    taskElement.classList.toggle("done", completed);
-    const button = taskElement.querySelector(".task-complete");
-    if (!button) return;
-    button.textContent = completed ? "✓" : "○";
-    button.setAttribute("aria-pressed", String(completed));
-    button.setAttribute("aria-label", completed ? "Снять отметку выполнения" : "Отметить выполненным");
 }
 
 async function completeTask(element, taskId) {

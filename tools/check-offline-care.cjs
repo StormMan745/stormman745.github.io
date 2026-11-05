@@ -136,14 +136,42 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   assert.equal(profiles.get(uid).data.pet.dailyRoutine.find(r=>r.id==='walk').time,'18:45');
   await page.locator('[data-routine="edit"][data-task-id="walk"]').click();await page.locator('#routineName').fill('Не должно сохраниться');
   await page.evaluate(()=>{window.savedSync=PetCareSync.save;PetCareSync.save=async()=>{throw new Error('test disk full')}});await page.locator('#routineSave').click();await page.waitForFunction(()=>document.getElementById('routineFormStatus').textContent.includes('Не удалось сохранить'));assert.equal(await page.evaluate(()=>PetCareRoutine.items().find(r=>r.id==='walk').name),'Прогулка');await page.evaluate(()=>{PetCareSync.save=window.savedSync});await page.keyboard.press('Escape');
+  // Multiple marks preserve the legacy first mark and save independently.
+  const setChecks=async count=>{await page.locator('[data-routine="edit"][data-task-id="feeding"]').click();await page.locator('#routineChecks').fill(String(count));await page.locator('#routineSave').click();await page.waitForFunction(()=>!document.getElementById('routineDialog').open);};
+  const marks=()=>page.locator('[data-task="feeding"] [data-routine="toggle"]');
+  const markStates=()=>marks().evaluateAll(buttons=>buttons.map(button=>button.getAttribute('aria-pressed')==='true'));
+  await setChecks(3);assert.deepEqual(await markStates(),[true,false,false]);assert.equal(await page.evaluate(()=>isHomeTaskCompleted('feeding')),false);
+  assert.equal(await page.locator('#routineProgress').evaluate(e=>e.max),5);
+  await marks().nth(2).click();await page.waitForFunction(()=>PetCareSync.state.phase==='saved'&&!document.querySelector('[data-task="feeding"] [data-step="3"]').disabled);
+  assert.equal(await page.evaluate(()=>document.activeElement?.dataset.step),'3','Mark retains keyboard focus after saving');
+  assert.deepEqual(await markStates(),[true,false,true]);assert.equal(await page.locator('#routineProgress').evaluate(e=>e.value),2);
+  await marks().nth(2).click();await page.waitForFunction(()=>!document.querySelector('[data-task="feeding"] [data-step="3"]').disabled);assert.deepEqual(await markStates(),[true,false,false]);
+  await page.evaluate(()=>{document.querySelector('[data-task="feeding"] [data-step="2"]').click();document.querySelector('[data-task="feeding"] [data-step="3"]').click();});
+  await page.waitForFunction(()=>PetCareSync.state.phase==='saved'&&[...document.querySelectorAll('[data-task="feeding"] .task-complete')].every(button=>!button.disabled&&button.getAttribute('aria-pressed')==='true'));
+  assert.equal(await page.evaluate(()=>isHomeTaskCompleted('feeding')),true);
+  assert.equal(profiles.get(uid).data.completedTasks.filter(row=>row.petId==='pet-one'&&row.date===new Date().toLocaleDateString('en-CA',{timeZone:'Europe/Moscow'})&&row.id.startsWith('feeding')).length,3);
+  await setChecks(1);assert.deepEqual(await markStates(),[true]);await setChecks(3);assert.deepEqual(await markStates(),[true,true,true],'Reducing and restoring the count keeps prior marks');
+  await page.locator('[data-routine="edit"][data-task-id="feeding"]').click();
+  for(const invalid of ['0','13','1.5']){await page.locator('#routineChecks').fill(invalid);assert.equal(await page.locator('#routineChecks').evaluate(e=>e.checkValidity()),false);await page.locator('#routineSave').click();assert(await page.locator('#routineDialog').evaluate(e=>e.open));}
+  await page.keyboard.press('Escape');
+  available=false;await context.setOffline(true);await marks().nth(1).click();await page.waitForFunction(()=>!document.querySelector('[data-task="feeding"] [data-step="2"]').disabled);
+  await page.reload();await page.waitForFunction(()=>window.PetCareRoutine&&activeUserId&&document.querySelectorAll('[data-task="feeding"] .task-complete').length===3);
+  assert.deepEqual(await markStates(),[true,false,true],'Offline reload retains independent marks');
+  available=true;await context.setOffline(false);await page.evaluate(()=>PetCareSync.flush());await page.waitForFunction(()=>PetCareSync.state.phase==='saved');
+  await page.evaluate(()=>switchPet('pet-two'));assert.equal(await marks().count(),1,'Count is per pet');await page.evaluate(()=>switchPet('pet-one'));assert.deepEqual(await markStates(),[true,false,true]);
+  await page.evaluate(()=>{window.savedSync=PetCareSync.save;PetCareSync.save=async()=>{throw new Error('test disk full')}});await marks().nth(1).click();await page.waitForFunction(()=>document.getElementById('routineStatus').textContent.includes('Отметка не сохранена'));assert.deepEqual(await markStates(),[true,false,true],'Failed mark rolls back only its own slot');await page.evaluate(()=>{PetCareSync.save=window.savedSync});
+  await setChecks(12);
   for(const width of [320,390,1440]){
    await page.setViewportSize({width,height:960});await page.evaluate(()=>showHome());
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Home fits '+width);
    assert(await page.locator('[data-routine="edit"]').first().evaluate(e=>e.scrollWidth<=e.clientWidth&&parseFloat(getComputedStyle(e).fontSize)<=16),'Edit label fits its button');
+   assert(await marks().evaluateAll(buttons=>buttons.every(button=>Math.abs(button.getBoundingClientRect().top-buttons[0].getBoundingClientRect().top)<1)),'Marks stay on one row at '+width);
+   await page.locator('[data-task="feeding"]').screenshot({path:path.join(root,`.tools/routine-checks-${width}.png`)});
    await page.screenshot({path:path.join(root,`.tools/polish-home-${width}.png`),fullPage:true});
    await page.locator('[data-routine="edit"]').first().click();assert(await page.locator('#routineDialog').evaluate(e=>e.scrollWidth<=e.clientWidth),'Editor fits '+width);
    await page.screenshot({path:path.join(root,`.tools/polish-editor-${width}.png`)});await page.keyboard.press('Escape');
   }
+  await setChecks(3);
   await page.setViewportSize({width:390,height:844});
   await page.locator('[data-care="navigation-more"]').click();await page.locator('[data-care="navigation-open"][data-target="nav-profile"]').click();assert.equal(await page.locator('#profilePage').isVisible(),true);assert.equal(await page.locator('#careDialog').isVisible(),false);
   await page.screenshot({path:path.join(root,'.tools/care-profile-mobile.png'),fullPage:true});

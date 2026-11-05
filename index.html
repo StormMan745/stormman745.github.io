@@ -15,7 +15,7 @@
     <meta name="apple-mobile-web-app-title" content="PetCare">
     <script src="frameguard.js"></script>
     <script src="install.js?v=20261028-studio"></script>
-    <link rel="stylesheet" href="app.bundle.css?v=2bca768d2496">
+    <link rel="stylesheet" href="app.bundle.css?v=9850f059547c">
 </head>
 <body>
 <div class="app">
@@ -875,7 +875,10 @@
             <div><label for="routineTime">Время каждый день</label><input id="routineTime" type="time" required></div>
             <div><label for="routineIcon">Значок</label><select id="routineIcon"><option value="🍖">🍖 Кормление</option><option value="🚶">🚶 Прогулка</option><option value="💊">💊 Лекарства</option><option value="💧">💧 Вода</option><option value="🪮">🪮 Уход</option><option value="🎾">🎾 Игры</option><option value="🐾">🐾 Другое</option></select></div>
         </div>
-        <p class="routine-field-hint">Изменения относятся только к выбранному питомцу. Отметки выполнения за прошлые дни сохранятся.</p>
+        <label for="routineChecks">Количество отметок на дело</label>
+        <input id="routineChecks" type="number" min="1" max="12" step="1" value="1" required inputmode="numeric" aria-describedby="routineChecksHint">
+        <p id="routineChecksHint" class="routine-field-hint">От 1 до 12. Например, три кормления — три отдельные галочки в ряд. Если ряд не помещается, его можно прокрутить вбок.</p>
+        <p class="routine-field-hint">Настройки относятся только к выбранному питомцу. Уже поставленные отметки сохранятся, даже если уменьшить их количество.</p>
         <p id="routineFormStatus" class="routine-status" role="alert"></p>
         <div class="routine-form-actions"><button type="button" class="routine-cancel" data-routine="close">Отмена</button><button id="routineSave" type="submit" class="primary-button">Сохранить</button></div>
         <button id="routineDelete" type="button" class="routine-delete" data-routine="delete">Удалить это дело</button>
@@ -884,6 +887,6 @@
 
 <!-- Same-origin pinned SDK; classic loading also supports opening index.html from disk. -->
 <script src="assets/vendor/supabase/supabase-2.118.0.min.js"></script>
-<script src="app.bundle.js?v=7031ad62637a"></script>
+<script src="app.bundle.js?v=7f613c39b7e5"></script>
 </body>
 </html>
