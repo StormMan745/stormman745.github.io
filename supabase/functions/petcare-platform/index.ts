@@ -80,11 +80,15 @@ Deno.serve(async request => {
         const { data: auth, error: authError } = await admin.auth.getUser(token);
         if (authError || !auth?.user) return reply({ error: 'authentication_required' }, 401);
         const uid = auth.user.id;
+        const key = request.headers.get('apikey');
+        if (!key) return reply({ error: 'api_key_required' }, 401);
+        const client = createClient(url, key, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } });
+        // A signed JWT can outlive sign-out. All private actions, including
+        // file export and analytics, also require its server session to exist.
+        const active = await client.rpc('petcare_account_active');
+        if (active.error || active.data !== true) return reply({ error: 'authentication_required' }, 401);
         // Quotas use the verified user's JWT, not the privileged service role.
         if (!['export-file','analytics-event'].includes(action)) {
-            const key = request.headers.get('apikey');
-            if (!key) return reply({ error: 'api_key_required' }, 401);
-            const client = createClient(url, key, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } });
             const limit = check(await client.rpc('petcare_consume_request', { p_action: 'profile-status' }));
             if (!limit?.allowed) return reply({ error: 'rate_limited', retryAfter: limit?.retryAfter || 60 }, 429);
         }

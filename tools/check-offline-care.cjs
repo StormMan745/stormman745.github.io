@@ -8,7 +8,7 @@ const initial=()=>({pet:{id:'pet-one',name:'Барни',animal:'🐶'},pets:[{id
 function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32LE(cursor)===0x04034b50){const size=buffer.readUInt32LE(cursor+18),length=buffer.readUInt16LE(cursor+26),extra=buffer.readUInt16LE(cursor+28),name=buffer.subarray(cursor+30,cursor+30+length).toString('utf8'),start=cursor+30+length+extra;result.push({name,bytes:buffer.subarray(start,start+size)});cursor=start+size;}assert.equal(buffer.readUInt32LE(cursor),0x02014b50);return result;}
 (async()=>{
  const root=path.resolve(__dirname,'..'),profiles=new Map([[uid,{data:initial(),revision:1}],[other,{data:{...initial(),pets:[{id:'pet-other',name:'Other private'}],pet:{id:'pet-other',name:'Other private'},activePetId:'pet-other'},revision:1}]]),documents=[],objects=new Map(),reports=[],events=[];
- let available=true,consent=false,deleted=false,holdSync=false,releaseSync=null,recoveryRequests=0;
+ let available=true,consent=false,deleted=false,holdSync=false,releaseSync=null,recoveryRequests=0,holdDocument=false,releaseDocument=null,revoked=false;
  const sharedMembers=[{owner_id:other,member_id:uid,pet_id:'pet-other'}];
  profiles.get(other).data.pets.push({id:'pet-b-private',name:'Never shared'});
  profiles.get(other).data.healthRecords=[{id:'b-allowed',petId:'pet-other',name:'Shared visit',date:'2026-11-04'},{id:'b-private',petId:'pet-b-private',name:'Never shared visit',date:'2026-11-04'}];
@@ -42,8 +42,9 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
     if(body.p_data){if(profile.revision!==body.p_revision)return reply({conflict:true,revision:profile.revision});const next=body.p_data;profile.data.pets=profile.data.pets.map(p=>p.id===body.p_pet?next.pet:p);if(profile.data.activePetId===body.p_pet)profile.data.pet=next.pet;for(const key of ['healthRecords','reminders','medicationCourses','medicationIntakes'])profile.data[key]=[...(profile.data[key]||[]).filter(r=>r.petId!==body.p_pet),...(next[key]||[])];profile.revision++;}
     const data={pet:profile.data.pets.find(p=>p.id===body.p_pet)};for(const key of ['healthRecords','reminders','medicationCourses','medicationIntakes'])data[key]=(profile.data[key]||[]).filter(r=>r.petId===body.p_pet);return reply({conflict:false,data,revision:profile.revision});
    }
-   if(url.pathname==='/rest/v1/petcare_data')return reply(profiles.has(actor)?[profiles.get(actor)]:[]);
+   if(url.pathname==='/rest/v1/petcare_data')return revoked?reply({code:'42501',message:'Authentication required'},403):reply(profiles.has(actor)?[profiles.get(actor)]:[]);
    if(url.pathname==='/rest/v1/petcare_documents'){
+    if(method==='PATCH'&&holdDocument){holdDocument=false;await new Promise(resolve=>{releaseDocument=resolve;});}
     const id=url.searchParams.get('id')?.replace('eq.',''),pet=url.searchParams.get('pet_id')?.replace('eq.','');
     const matches=r=>r.user_id===actor&&(!id||r.id===id)&&(!pet||r.pet_id===pet);
     if(method==='POST'){const rows=Array.isArray(body)?body:[body];for(const row of rows)if(!documents.some(r=>r.id===row.id))documents.push({...row,revision:1,deleted_at:null});return reply(rows,201);}
@@ -84,6 +85,24 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   const base=`http://127.0.0.1:${server.address().port}`;
   await page.goto(base);await page.waitForFunction(()=>window.PetCareCare&&activeUserId&&document.getElementById('homePage').style.display==='block');
   await page.waitForFunction(()=>PetCareSync.state.phase==='saved');
+  // IndexedDB read/compare/write must be atomic across two actual browser tabs.
+  const second=await context.newPage();await second.goto(base);await second.waitForFunction(()=>window.PetCareSync&&activeUserId&&PetCareSync.state.phase==='saved');
+  const increment=tab=>tab.evaluate(async()=>{for(let n=0;n<20;n++)await PetCareSync.mutate('preferences','atomic-test',row=>({key:'atomic-test',userId:activeUserId,count:(row?.count||0)+1}));});
+  await Promise.all([increment(page),increment(second)]);
+  assert.equal(await page.evaluate(async()=>(await PetCareSync.get('preferences','atomic-test')).count),40,'Cross-tab updates must not overwrite each other');
+  await page.evaluate(()=>PetCareSync.remove('preferences','atomic-test'));
+  holdSync=true;
+  await page.evaluate(()=>{appData.healthRecords.push({id:'cross-tab-first',petId:'pet-one',name:'First tab'});window.crossTabSave=saveData();});
+  for(let n=0;n<100&&!releaseSync;n++)await new Promise(resolve=>setTimeout(resolve,10));assert(releaseSync);
+  await second.evaluate(()=>{appData.healthRecords.push({id:'cross-tab-newer',petId:'pet-one',name:'Second tab'});window.crossTabSave=saveData();});
+  await second.waitForFunction(async()=>(await PetCareSync.get('profiles',activeUserId)).data.healthRecords.some(r=>r.id==='cross-tab-newer'));
+  releaseSync();releaseSync=null;await Promise.all([page.evaluate(()=>window.crossTabSave),second.evaluate(()=>window.crossTabSave)]);
+  assert(profiles.get(uid).data.healthRecords.some(r=>r.id==='cross-tab-first'));assert(profiles.get(uid).data.healthRecords.some(r=>r.id==='cross-tab-newer'),'In-flight profile acknowledgement keeps edits from another tab');
+  await second.close();
+  const beforeRevocation=await page.evaluate(async()=>(await PetCareSync.get('profiles',activeUserId)).data);
+  revoked=true;await page.evaluate(()=>PetCareSync.flush());assert.equal(await page.evaluate(()=>PetCareSync.state.phase),'auth');
+  assert.deepEqual(await page.evaluate(async()=>(await PetCareSync.get('profiles',activeUserId)).data),beforeRevocation,'Revocation cannot erase local data');
+  revoked=false;await page.evaluate(()=>PetCareSync.flush());
   // The visible daily checklist is editable without changing actual push reminders.
   await page.locator('[data-routine="edit"][data-task-id="feeding"]').click();
   await page.locator('#routineName').fill('Завтрак после прогулки');await page.locator('#routineTime').fill('09:30');
@@ -175,6 +194,15 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   available=true;await context.setOffline(false);await page.evaluate(async()=>{await PetCareSync.flush();await PetCareFiles.flush()});
   await page.waitForFunction(()=>PetCareSync.state.phase==='saved');await page.waitForFunction(async()=>await PetCareFiles.pending()===0);
   assert(profiles.get(uid).data.healthRecords.some(r=>r.id==='offline-visit'));assert(profiles.get(uid).data.healthRecords.some(r=>r.id==='remote-visit'));assert.equal(documents.length,1);assert.equal(objects.size,1);
+  // An acknowledgement of an older upload must not delete a newer local edit.
+  holdDocument=true;
+  await page.evaluate(async()=>{const row=(await PetCareFiles.documentRows())[0];await PetCareFiles.editDocument(row,{title:'First pending title'});});
+  for(let n=0;n<100&&!releaseDocument;n++)await new Promise(resolve=>setTimeout(resolve,10));assert(releaseDocument);
+  await page.evaluate(async()=>{const row=(await PetCareFiles.documentRows(activeUserId,false))[0];await PetCareFiles.editDocument(row,{title:'Newer pending title'});});
+  releaseDocument();await page.evaluate(()=>PetCareFiles.flush());
+  assert.equal(await page.evaluate(async()=>(await PetCareSync.all('outbox',activeUserId)).find(j=>j.type==='document-edit')?.fields.title),'Newer pending title');
+  await page.evaluate(()=>PetCareFiles.flush());assert.equal(documents[0].title,'Newer pending title');
+  assert.equal(await page.evaluate(async()=>{try{const row=(await PetCareFiles.documentRows())[0];await PetCareFiles.editDocument({...row,user_id:'other-account'},{title:'Invalid edit'});return false;}catch{return true;}}),true,'Foreign metadata cannot enter this account queue');
   // Metadata conflicts require an explicit choice; the original stays intact.
   available=false;await context.setOffline(true);
   await page.evaluate(async()=>{const row=(await PetCareFiles.documentRows())[0];await PetCareFiles.editDocument(row,{title:'Название на устройстве',category:row.category,document_date:row.document_date,record_id:row.record_id??null});});

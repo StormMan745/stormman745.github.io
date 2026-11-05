@@ -8,7 +8,7 @@ const tables={petcare_data:[{user_id:uid,data:{pets:[{id:'pet-a',name:'Alice pet
  petcare_documents:[{id:'doc-a',user_id:uid,pet_id:'pet-a',title:'Selected PDF',file_name:'result.pdf',mime_type:'application/pdf',file_size:12,storage_path:uid+'/doc-a/original.pdf',deleted_at:null},{id:'doc-b',user_id:other,pet_id:'pet-b',title:'Private other PDF',file_name:'private.pdf',mime_type:'application/pdf',storage_path:other+'/doc-b/original.pdf',deleted_at:null}],
  petcare_care_members:[],petcare_care_invites:[],petcare_support_reports:[],petcare_analytics_consent:[],petcare_product_events:[],petcare_file_trash:[],pets:[]};
 const credential=alias=>['e30',Buffer.from(JSON.stringify({sub:alias==='alice'?uid:other,session_id:'c4000000-0000-4000-8000-000000000003'})).toString('base64url'),'c2ln'].join('.');
-let authCalls=0,downloads=[],removals=[],signouts=[],deletions=[],recent=true,quota=true,rpcs=[];
+let authCalls=0,downloads=[],removals=[],signouts=[],deletions=[],recent=true,quota=true,active=true,rpcs=[];
 function query(table){let op='select',payload,projection='*',single=false,filters=[],count=10000;const q={
  select(fields='*'){projection=fields;return q},eq:(key,value)=>(filters.push(row=>row[key]===value),q),is:(key,value)=>(filters.push(row=>row[key]===value),q),
  gt:(key,value)=>(filters.push(row=>row[key]>value),q),lt:(key,value)=>(filters.push(row=>row[key]!=null&&row[key]<value),q),
@@ -30,7 +30,7 @@ const admin={auth:{getUser:async jwt=>{authCalls++;const id=jwt===credential('al
 let handler;const logs=[];
 const runtime={Request,Response,Headers,URL,TextEncoder,TextDecoder,Uint8Array,crypto:globalThis.crypto,atob,console:{error:(...args)=>logs.push(args)},exports:{},
  Deno:{env:{get:name=>({SUPABASE_URL:'https://database.invalid',SUPABASE_SERVICE_ROLE_KEY:'server-test-secret'}[name])},serve:fn=>handler=fn},
- require:name=>{assert.equal(name,'@supabase/supabase-js');return {createClient:(_url,key,options)=>key==='server-test-secret'?admin:{rpc:async()=>({data:{allowed:quota,retryAfter:20},error:null})}}}};
+ require:name=>{assert.equal(name,'@supabase/supabase-js');return {createClient:(_url,key,options)=>key==='server-test-secret'?admin:{rpc:async name=>({data:name==='petcare_account_active'?active:{allowed:quota,retryAfter:20},error:null})}}}};
 vm.runInNewContext(transformSync(fs.readFileSync('supabase/functions/petcare-platform/index.ts','utf8'),{loader:'ts',format:'cjs'}).code,runtime);
 const request=(data,jwt='',headers={})=>new Request('https://app.invalid',{method:'POST',headers:{origin:'https://stormman745.github.io',apikey:'public-test-key','content-type':'application/json',...(jwt?{authorization:'Bearer '+credential(jwt)}:{}),...headers},body:typeof data==='string'?data:JSON.stringify(data)});
 (async()=>{
@@ -47,6 +47,9 @@ const request=(data,jwt='',headers={})=>new Request('https://app.invalid',{metho
  assert.equal((await handler(request({action:'share-create',petId:'pet-a',recordIds:['h2'],documentIds:[],tokenHash:digest(otherToken)},'alice'))).status,400);
  assert.equal((await handler(request({action:'export-file',bucket:'petcare-documents',path:other+'/doc-b/original.pdf'},'alice'))).status,404);
  const own=await handler(request({action:'export-file',bucket:'petcare-documents',path:uid+'/doc-a/original.pdf'},'alice'));assert.equal(own.status,200);
+ active=false;const downloadsBefore=downloads.length;
+ for(const action of ['backups','export-file','analytics-event','support','delete-account'])assert.equal((await handler(request({action,confirm:'УДАЛИТЬ',bucket:'petcare-documents',path:uid+'/doc-a/original.pdf'},'alice'))).status,401,'Revoked session: '+action);
+ assert.equal(downloads.length,downloadsBefore);assert.equal(deletions.length,0);active=true;
  quota=false;assert.equal((await handler(request({action:'backups'},'alice'))).status,429);quota=true;
  assert.equal((await handler(request({action:'support',message:'Problem',diagnostics:{version:'test',browser:'Chrome',online:true,pending:2,errorCodes:['script_error','SECRET QUESTION?'],medicalRecords:['PRIVATE'],email:'PRIVATE'}},'alice'))).status,200);
  const report=tables.petcare_support_reports[0];assert.equal(report.user_id,uid);assert.deepEqual(Object.keys(report.diagnostics).sort(),['browser','errorCodes','online','pending','version']);assert.equal(report.diagnostics.errorCodes.length,1);assert(!JSON.stringify(report).includes('PRIVATE'));

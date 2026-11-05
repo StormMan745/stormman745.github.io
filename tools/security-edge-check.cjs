@@ -9,11 +9,11 @@ function runtime(file,env,fetcher,requireMock=()=>{}){
 const ok=data=>new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}});
 const uid='00000000-0000-4000-8000-000000000001';
 (async()=>{
- const calls=[];let quota=true,auth=true;
+ const calls=[];let quota=true,auth=true,active=true;
  const assistant=runtime('supabase/functions/petcare-assistant/index.ts',{SUPABASE_URL:'https://database.invalid',SUPABASE_ANON_KEY:'test-key',GIGACHAT_AUTH_KEY:'test-provider-key'},async(input,options={})=>{
   const url=String(input);calls.push(url);
   if(url.endsWith('/auth/v1/user'))return auth?ok({id:uid}):new Response('{}',{status:401});
-  if(url.endsWith('/rpc/petcare_consume_request'))return ok({allowed:quota,retryAfter:30});
+  if(url.endsWith('/rpc/petcare_consume_request'))return active?ok({allowed:quota,retryAfter:30}):new Response('{}',{status:403});
   if(url.includes('/rest/v1/petcare_data')){assert.equal(new URL(url).searchParams.get('user_id'),'eq.'+uid);return ok([{data:{pet:{id:'pet-a',name:'Test pet'},pets:[{id:'pet-a',name:'Test pet'}],healthRecords:[]},updated_at:'2026-10-30T00:00:00Z'}]);}
   if(url.includes('/oauth'))return ok({access_token:'test-access-token',expires_at:Math.floor(Date.now()/1000)+1800});
   if(url.includes('/chat/completions'))return ok({choices:[{message:{content:'Test answer'}}]});
@@ -22,6 +22,7 @@ const uid='00000000-0000-4000-8000-000000000001';
  const request=(body,headers={})=>new Request('https://app.invalid',{method:'POST',headers:{origin:'https://stormman745.github.io',authorization:'Bearer test-token','content-type':'application/json',...headers},body:typeof body==='string'?body:JSON.stringify(body)});
  const question={messages:[{role:'user',content:'Test question'}],petId:'pet-a'};
  assert.equal((await assistant(request(question))).status,200);
+ active=false;calls.length=0;assert.equal((await assistant(request(question))).status,401);assert(!calls.some(x=>x.includes('petcare_data')||x.includes('giga.chat')));active=true;
  calls.length=0;quota=false;
  const limited=await assistant(request(question));assert.equal(limited.status,429);assert.equal(limited.headers.get('Retry-After'),'30');assert(!calls.some(x=>x.includes('petcare_data')||x.includes('giga.chat')));
  quota=true;auth=false;calls.length=0;assert.equal((await assistant(request(question))).status,401);assert.equal(calls.length,1);

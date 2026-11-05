@@ -21,7 +21,6 @@ const supabaseClient = supabase.createClient(
 const STORAGE_KEY = "petcareData";
 const CLOUD_TABLE = "petcare_data";
 let activeUserId = null;
-let cloudSaveQueue = Promise.resolve();
 let activeDataLoadToken = 0;
 const storyMediaUrlCache = new Map();
 const storyCollageBlobCache = new Map();
@@ -230,28 +229,6 @@ async function saveData() {
 // ==============================
 // ЗАГРУЗКА ДАННЫХ
 // ==============================
-
-function loadData() {
-    if (!activeUserId) return;
-
-    const savedData = localStorage.getItem(`${STORAGE_KEY}:${activeUserId}`);
-
-    if (!savedData) {
-        return;
-    }
-
-    try {
-        const parsedData = JSON.parse(savedData);
-
-        appData = {
-            ...appData,
-            ...parsedData
-        };
-        normalizeAppData();
-    } catch (error) {
-        console.error("Ошибка загрузки данных:", error);
-    }
-}
 
 function applyAccountData(savedData) {
     const defaults = createInitialAppData();
@@ -2509,18 +2486,7 @@ async function deleteWeightEntry(entryId, petId = getActivePetKey()) {
     appData.activityHistory = appData.activityHistory.filter(event =>
         String(event.petId ?? petId) !== petId || String(event.id) !== `weight-${entry.id}`
     );
-    const weight = pet.weight;
-    const synced = await saveEntryDeletion(userId);
-    const currentPet = appData.pets.find(item => getPetKey(item) === petId);
-    if (synced && pet.dbId != null && activeUserId === userId && currentPet?.weight === weight) {
-        try {
-            const { error } = await supabaseClient.from("pets").update({ weight })
-                .eq("id", pet.dbId).eq("user_id", userId);
-            if (error) console.warn("Вес сохранён в карточке аккаунта, но не обновлён в таблице питомцев:", error);
-        } catch (error) {
-            console.warn("Вес сохранён в карточке аккаунта:", error);
-        }
-    }
+    await saveEntryDeletion(userId);
 }
 
 async function deleteActivityEntry(entryId, petId = getActivePetKey()) {
@@ -3417,120 +3383,63 @@ function showRegisterForm() {
 // РЕГИСТРАЦИЯ ПОЛЬЗОВАТЕЛЯ
 // ==============================
 
-async function registerUser() {
-    const emailInput = document.getElementById("registerEmail");
-    const passwordInput = document.getElementById("registerPassword");
-    const password2Input = document.getElementById("registerPassword2");
+let authSubmitting = false;
+const registerUser = () => submitAuth(true);
+const loginUser = () => submitAuth(false);
+
+async function submitAuth(register) {
+    if (authSubmitting) return;
+    const prefix = register ? "register" : "login";
+    const email = document.getElementById(prefix + "Email")?.value.trim();
+    const password = document.getElementById(prefix + "Password")?.value;
+    const confirmation = document.getElementById("registerPassword2")?.value;
     const message = document.getElementById("authMessage");
-
-    if (!emailInput || !passwordInput || !password2Input || !message) {
-        console.error("Не найдены поля регистрации в index.html");
+    if (!message) return;
+    if (!email || !password || (register && !confirmation)) {
+        message.textContent = register ? "Заполни все поля." : "Введите email и пароль.";
         return;
     }
-
-    const email = emailInput.value.trim();
-    const password = passwordInput.value;
-    const password2 = password2Input.value;
-
-    if (!email || !password || !password2) {
-        message.textContent = "Заполни все поля.";
-        return;
-    }
-
-    if (password.length < 6) {
+    if (register && password.length < 6) {
         message.textContent = "Пароль должен содержать минимум 6 символов.";
         return;
     }
-
-    if (password !== password2) {
+    if (register && password !== confirmation) {
         message.textContent = "Пароли не совпадают.";
         return;
     }
-
-    message.textContent = "Регистрация...";
-
+    const controls = ["loginButton", "registerButton", "loginTab", "registerTab"]
+        .map(id => document.getElementById(id)).filter(Boolean);
+    const disabled = controls.map(control => control.disabled);
+    authSubmitting = true;
+    controls.forEach(control => { control.disabled = true; });
+    message.setAttribute("aria-busy", "true");
+    message.textContent = register ? "Регистрация..." : "Выполняется вход...";
     try {
-        const { data, error } = await supabaseClient.auth.signUp({
-            email: email,
-            password: password,
-            options: {
-                emailRedirectTo: "https://stormman745.github.io/"
-            }
-        });
-
+        const { data, error } = register
+            ? await supabaseClient.auth.signUp({ email, password, options: { emailRedirectTo: "https://stormman745.github.io/" } })
+            : await supabaseClient.auth.signInWithPassword({ email, password });
         if (error) {
-            console.error("Ошибка регистрации:", error);
-            message.textContent = "Ошибка регистрации: " + error.message;
+            message.textContent = error.message.toLowerCase().includes("email not confirmed")
+                ? "Сначала подтверди email через письмо."
+                : (register ? "Ошибка регистрации: " : "Ошибка входа: ") + error.message;
             return;
         }
-
-        if (!data.session) {
-            message.textContent =
-                "Регистрация успешна! Проверь почту и подтверди email.";
+        if (register && !data.session) {
+            message.textContent = "Регистрация успешна! Проверь почту и подтверди email.";
             return;
         }
-
-        message.textContent = "Регистрация успешна! 🐾";
-        openMainAfterLogin();
-
-    } catch (error) {
-        console.error("Ошибка регистрации:", error);
-        message.textContent = "Не удалось выполнить регистрацию.";
-    }
-}
-
-
-// ==============================
-// ВХОД ПОЛЬЗОВАТЕЛЯ
-// ==============================
-
-async function loginUser() {
-    const emailInput = document.getElementById("loginEmail");
-    const passwordInput = document.getElementById("loginPassword");
-    const message = document.getElementById("authMessage");
-
-    if (!emailInput || !passwordInput || !message) {
-        console.error("Не найдены поля входа в index.html");
-        return;
-    }
-
-    const email = emailInput.value.trim();
-    const password = passwordInput.value;
-
-    if (!email || !password) {
-        message.textContent = "Введите email и пароль.";
-        return;
-    }
-
-    message.textContent = "Выполняется вход...";
-
-    try {
-        const { data, error } =
-            await supabaseClient.auth.signInWithPassword({
-                email: email,
-                password: password
-            });
-
-        if (error) {
-            console.error("Ошибка входа:", error);
-            message.textContent =
-                error.message.toLowerCase().includes("email not confirmed")
-                    ? "Сначала подтверди email через письмо."
-                    : "Ошибка входа: " + error.message;
-            return;
-        }
-
-        if (!data.user) {
+        if (!data.user || !data.session) {
             message.textContent = "Не удалось подтвердить вход.";
             return;
         }
-
-        message.textContent = "Вход выполнен! 🐾";
+        message.textContent = register ? "Регистрация успешна! 🐾" : "Вход выполнен! 🐾";
         await openMainAfterLogin();
-
-    } catch (error) {
-        console.error("Ошибка входа:", error);
-        message.textContent = "Не удалось выполнить вход. Проверь интернет и консоль F12.";
+    } catch {
+        message.textContent = "Не удалось завершить вход. Проверьте подключение и попробуйте ещё раз.";
+    } finally {
+        authSubmitting = false;
+        controls.forEach((control, index) => { control.disabled = disabled[index]; });
+        message.removeAttribute("aria-busy");
     }
 }
 
@@ -4104,7 +4013,6 @@ async function sendAssistantMessage(event) {
     try {
         request.timeoutId = window.setTimeout(() => request.controller.abort(), 85000);
         // Only a newly changed profile needs to finish saving before the question.
-        if (profilePendingWrites.get(userId)) await cloudSaveQueue;
         if (!isCurrent()) return;
         if (assistantLive.localDirty && !await saveData()) throw new Error("PETCARE_PROFILE_SYNC_FAILED");
         if (!isCurrent()) return;
@@ -4274,6 +4182,13 @@ function bindAuthControls() {
     document.getElementById("registerTab")?.addEventListener("click", showRegisterForm);
     document.getElementById("loginButton")?.addEventListener("click", loginUser);
     document.getElementById("registerButton")?.addEventListener("click", registerUser);
+    for (const mode of ["login", "register"]) {
+        document.getElementById(mode + "Form")?.addEventListener("keydown", event => {
+            if (event.key !== "Enter" || event.isComposing || !(event.target instanceof HTMLInputElement)) return;
+            event.preventDefault();
+            submitAuth(mode === "register");
+        });
+    }
 }
 
 bindAuthControls();

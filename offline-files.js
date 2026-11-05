@@ -2,6 +2,8 @@
 (() => {
     const sync=window.PetCareSync, urls=new Set(),handlers=new Map();let running=null;
     const BUCKETS=new Set(['petcare-documents','petcare-stories']);
+    const sameJob=(current,job)=>current?.generation===job.generation&&current?.version===job.version&&current?.createdAt===job.createdAt;
+    const updateJob=(job,change)=>sync.mutate('outbox',job.key,current=>sameJob(current,job)?change(current):undefined);
     const fileKey=(uid,bucket,path)=>`${uid}:${bucket}:${path}`;
     const goodPath=(uid,path)=>typeof path==='string'&&path.startsWith(uid+'/')&&!/[\\\u0000-\u001f]/.test(path)&&!path.split('/').some(p=>p==='..'||p==='.');
     const check=result=>{if(result.error)throw result.error;return result.data};
@@ -10,11 +12,11 @@
         return window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{global:{headers:{Authorization:`Bearer ${session.access_token}`}},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
     }
     async function cache(uid,bucket,path,blob) {
-        if(!goodPath(uid,path))throw new Error('invalid_file_path');
+        if(!uid||!BUCKETS.has(bucket)||!goodPath(uid,path))throw new Error('invalid_file_path');
         const key=fileKey(uid,bucket,path);await sync.put('files',key,{key,userId:uid,bucket,path,blob,cachedAt:Date.now()});
     }
     async function download(bucket,path,uid=activeUserId) {
-        if(!uid||!goodPath(uid,path))throw new Error('Войдите в аккаунт владельца файла.');
+        if(!uid||uid!==activeUserId||!BUCKETS.has(bucket)||!goodPath(uid,path))throw new Error('Войдите в аккаунт владельца файла.');
         const cached=await sync.get('files',fileKey(uid,bucket,path));
         if(cached?.blob)return cached.blob;
         if(!navigator.onLine)throw new Error('Этот файл ещё не сохранён для работы без связи. Подключитесь к интернету и откройте его один раз.');
@@ -58,8 +60,17 @@
         await enqueue({key:`${uid}:document-put:${row.id}`,userId:uid,type:'document-put',row});
     }
     const metadata=row=>Object.fromEntries(['title','category','document_date','record_id'].map(key=>[key,row[key]??null]));
-    async function editDocument(row,fields) {const key=`${activeUserId}:document-edit:${row.id}`,old=await sync.get('outbox',key);await enqueue({key,userId:activeUserId,type:'document-edit',id:row.id,petId:row.pet_id,row:old?.row||row,base:old?.base||metadata(row),fields,conflict:old?.conflict});}
-    async function deleteDocument(row) {await enqueue({userId:activeUserId,type:'document-delete',id:row.id,petId:row.pet_id});}
+    async function editDocument(row,fields) {
+        const uid=activeUserId,key=`${uid}:document-edit:${row.id}`;
+        if(!uid||row.user_id!==uid)throw new Error('Аккаунт изменился.');
+        const patch=Object.fromEntries(Object.entries(fields).filter(([key])=>Object.hasOwn(metadata(row),key)));
+        await sync.mutate('outbox',key,old=>{
+            if(activeUserId!==uid)throw new Error('Аккаунт изменился.');
+            return {key,userId:uid,type:'document-edit',id:row.id,petId:row.pet_id,row:old?.row||row,base:old?.base||metadata(row),fields:{...metadata(row),...old?.fields,...patch},conflict:old?.conflict,generation:crypto.randomUUID(),createdAt:Date.now()};
+        });
+        window.dispatchEvent(new Event('petcare:files-changed'));flush();
+    }
+    async function deleteDocument(row) {if(row.user_id!==activeUserId)throw new Error('Аккаунт изменился.');await enqueue({userId:activeUserId,type:'document-delete',id:row.id,petId:row.pet_id});}
     async function removePet(petId,uid) {await enqueue({userId:uid,type:'pet-documents-delete',petId});}
     async function sendFile(client,uid,bucket,path,options={}) {
         const item=await sync.get('files',fileKey(uid,bucket,path));if(!item?.blob)throw new Error('missing_local_original');
@@ -82,20 +93,19 @@
         }
         if(job.type==='document-edit'){
             const remote=check(await client.from('petcare_documents').select('*').eq('user_id',uid).eq('id',job.id).eq('pet_id',job.petId).maybeSingle());
-            const sameJob=current=>current?.generation===job.generation&&current?.createdAt===job.createdAt;
-            if(!remote||remote.deleted_at){const current=await sync.get('outbox',job.key);if(sameJob(current))await sync.put('outbox',job.key,{...current,conflict:{remote:remote?metadata(remote):null,deleted:true,missing:!remote},errorCode:'document_deleted'});throw new Error('document_deleted');}
+            if(!remote||remote.deleted_at){await updateJob(job,current=>({...current,conflict:{remote:remote?metadata(remote):null,deleted:true,missing:!remote},errorCode:'document_deleted'}));throw new Error('document_deleted');}
             const conflicts=[],fields=sync.merge(job.base,job.fields,metadata(remote),'document',conflicts);
-            if(conflicts.length){const current=await sync.get('outbox',job.key);if(sameJob(current))await sync.put('outbox',job.key,{...current,conflict:{remote:metadata(remote),revision:remote.revision}});throw new Error('document_conflict');}
+            if(conflicts.length){await updateJob(job,current=>({...current,conflict:{remote:metadata(remote),revision:remote.revision}}));throw new Error('document_conflict');}
             const updated=check(await client.from('petcare_documents').update(fields).eq('user_id',uid).eq('id',job.id).eq('revision',remote.revision).is('deleted_at',null).select('id'));
             if(!updated.length)throw new Error('document_conflict');
             // Rebase a newer local edit onto this acknowledged version. An older
             // response must never replace the newer draft or conflict with itself.
-            const latest=await sync.get('outbox',job.key);
-            if(latest&&!sameJob(latest)){
+            await sync.mutate('outbox',job.key,latest=>{
+                if(!latest||sameJob(latest,job))return;
                 const sent={...metadata(remote),...fields},rebaseConflicts=[];
                 const rebased=sync.merge(job.fields,latest.fields,sent,'document',rebaseConflicts);
-                await sync.put('outbox',job.key,{...latest,base:sent,fields:rebased,conflict:rebaseConflicts.length?{remote:sent}:null});
-            }
+                return {...latest,base:sent,fields:rebased,conflict:rebaseConflicts.length?{remote:sent}:null};
+            });
         }
         if(job.type==='document-delete')check(await client.from('petcare_documents').update({deleted_at:new Date().toISOString()}).eq('user_id',uid).eq('id',job.id).eq('pet_id',job.petId));
         if(job.type==='pet-documents-delete')check(await client.from('petcare_documents').update({deleted_at:new Date().toISOString()}).eq('user_id',uid).eq('pet_id',job.petId));
@@ -108,23 +118,24 @@
     async function flush() {
         if(running||!navigator.onLine||!activeUserId)return running;
         const uid=activeUserId;
-        running=(async()=>{
+        const work=async()=>{
+            if(activeUserId!==uid)return;
             const client=await bound(uid);
             for(const job of (await sync.all('outbox',uid)).sort((a,b)=>a.createdAt-b.createdAt)) {
                 if(activeUserId!==uid)break;
                 try{await process(job,client);}catch(error){
                     if(activeUserId!==uid)break;
-                    if(['document_conflict','document_deleted','care_conflict','care_access_denied'].includes(error.message)){const current=await sync.get('outbox',job.key);if(current?.generation===job.generation&&current?.createdAt===job.createdAt)await sync.put('outbox',job.key,{...current,errorCode:error.message});window.dispatchEvent(new CustomEvent('petcare:files-error',{detail:{code:error.message}}));continue;}
+                    if(['document_conflict','document_deleted','care_conflict','care_access_denied'].includes(error.message)){await updateJob(job,current=>({...current,errorCode:error.message}));window.dispatchEvent(new CustomEvent('petcare:files-error',{detail:{code:error.message}}));continue;}
                     throw error;
                 }
-                const latest=await sync.get('outbox',job.key);
-                if(latest?.generation===job.generation&&latest?.version===job.version&&latest?.createdAt===job.createdAt)await sync.remove('outbox',job.key);
+                await updateJob(job,()=>null);
             }
             if(activeUserId===uid) {
                 await documentRows(uid,true);
                 window.dispatchEvent(new Event('petcare:files-changed'));
             }
-        })().catch(()=>{if(activeUserId===uid)window.dispatchEvent(new CustomEvent('petcare:files-error',{detail:{code:'file_sync_failed'}}));}).finally(()=>{running=null});
+        };
+        running=(navigator.locks?navigator.locks.request('petcare-files-'+uid,work):work()).catch(()=>{if(activeUserId===uid)window.dispatchEvent(new CustomEvent('petcare:files-error',{detail:{code:'file_sync_failed'}}));}).finally(()=>{running=null;if(activeUserId&&activeUserId!==uid)flush();});
         return running;
     }
     const originalFrom=supabaseClient.storage.from.bind(supabaseClient.storage);
@@ -143,7 +154,7 @@
     window.addEventListener('petcare:account-reset',()=>{urls.forEach(url=>URL.revokeObjectURL(url));urls.clear()});
     setInterval(()=>{if(activeUserId&&navigator.onLine)flush()},30000);
     window.PetCareFiles={download,upload,documentRows,putDocument,editDocument,deleteDocument,removePet,flush,platform,cache,
-        async resolveDocument(id,choice){const uid=activeUserId;for(const job of await sync.all('outbox',uid))if(job.type==='document-edit'&&job.id===id){if(choice==='remote')await sync.remove('outbox',job.key);else if(job.conflict&&!job.conflict.missing){if(job.conflict.deleted)await platform('restore-document',{id},uid);await sync.put('outbox',job.key,{...job,base:job.conflict.remote,conflict:null,errorCode:null,createdAt:Date.now()});}}await flush();window.dispatchEvent(new Event('petcare:files-changed'));},
+        async resolveDocument(id,choice){const uid=activeUserId;for(const job of await sync.all('outbox',uid))if(job.type==='document-edit'&&job.id===id){if(activeUserId!==uid)throw new Error('Аккаунт изменился.');if(choice==='remote')await updateJob(job,()=>null);else if(choice==='local'&&job.conflict&&!job.conflict.missing){if(job.conflict.deleted)await platform('restore-document',{id},uid);await updateJob(job,current=>({...current,base:job.conflict.remote,conflict:null,errorCode:null,generation:crypto.randomUUID(),createdAt:Date.now()}));}}await flush();window.dispatchEvent(new Event('petcare:files-changed'));},
         register:(type,handler)=>handlers.set(type,handler),
         queue:enqueue,
         legacyDelete:id=>enqueue({userId:activeUserId,type:'legacy-pet-delete',id}),

@@ -112,6 +112,7 @@ async function readOwnProfile(request: Request, action: "chat" | "profile-status
     method: "POST", headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({ p_action: action }), signal: AbortSignal.timeout(5000),
   });
+  if (quotaResponse.status === 401 || quotaResponse.status === 403) throw new ProfileAccessError(401, "Сессия завершена. Войдите в PetCare снова.");
   if (!quotaResponse.ok) throw new ProfileAccessError(503, "Помощник временно недоступен. Попробуйте немного позже.");
   const quota = await quotaResponse.json();
   if (quota?.allowed === false) throw new ProfileAccessError(429, "Слишком много запросов к помощнику. Попробуйте позже.", Math.max(1, Math.min(86400, Number(quota.retryAfter) || 60)));

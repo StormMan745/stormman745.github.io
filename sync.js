@@ -65,6 +65,18 @@
     const get=(name,key)=>store(name,'readonly',s=>s.get(key));
     const put=(name,key,value)=>store(name,'readwrite',s=>s.put(value,key));
     const remove=(name,key)=>store(name,'readwrite',s=>s.delete(key));
+    // The comparison and write share one transaction, including across tabs.
+    // undefined keeps the row; null deletes it; any other value replaces it.
+    async function mutate(name,key,change) {
+        const db=await openDB();
+        return new Promise((resolve,reject)=>{
+            const tx=db.transaction(name,'readwrite'),table=tx.objectStore(name);let result,failure;
+            const read=table.get(key);
+            read.onsuccess=()=>{try{result=change(read.result);if(result===null)table.delete(key);else if(result!==undefined)table.put(result,key);}catch(error){failure=error;tx.abort();}};
+            tx.oncomplete=()=>resolve(result);
+            tx.onerror=tx.onabort=()=>reject(failure||tx.error||new Error('local_write_failed'));
+        });
+    }
     async function all(name,uid) { return store(name,'readonly',s=>s.index('userId').getAll(IDBKeyRange.only(uid))); }
     function serial(uid, action) {
         const result=(queues.get(uid)||Promise.resolve()).catch(()=>{}).then(()=>navigator.locks?navigator.locks.request('petcare-local-'+uid,action):action());
@@ -82,7 +94,7 @@
             const response=await fetch(`${SUPABASE_URL}/${path}`,{method:body===undefined?'GET':'POST',
                 headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${auth.access_token}`,'Content-Type':'application/json'},
                 body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal,cache:'no-store'});
-            if(!response.ok)throw new Error(response.status===401?'authentication_required':`sync_http_${response.status}`);
+            if(!response.ok)throw new Error([401,403].includes(response.status)?'authentication_required':`sync_http_${response.status}`);
             return await response.json();
         } finally { clearTimeout(timer); }
     }
@@ -95,7 +107,7 @@
         window.dispatchEvent(new CustomEvent('petcare:sync-status',{detail:displayed}));
         const bar=document.getElementById('syncStatusBar');if(!bar)return;
         bar.hidden=!activeUserId;
-        const labels={loading:'Проверяю сохранение…',saved:'Сохранено',pending:'Ожидает отправки',offline:'Нет связи · изменения сохраняются на устройстве',error:'Не удалось синхронизировать',conflict:'Есть изменения с другого устройства',storage:'Не удалось сохранить на устройстве. Освободите место и повторите действие.'};
+        const labels={loading:'Проверяю сохранение…',saved:'Сохранено',pending:'Ожидает отправки',offline:'Нет связи · изменения сохраняются на устройстве',auth:'Войдите в аккаунт снова для отправки. Изменения сохранены на устройстве.',error:'Не удалось синхронизировать',conflict:'Есть изменения с другого устройства',storage:'Не удалось сохранить на устройстве. Освободите место и повторите действие.'};
         bar.querySelector('[role="status"]').textContent=labels[phase]||labels.pending;
         bar.dataset.phase=phase;
         bar.querySelector('button').hidden=phase==='saved'||phase==='loading';
@@ -169,7 +181,8 @@
                 await serial(uid,async()=>{
                     if(activeUserId!==uid)return;
                     const latest=await get('profiles',uid);
-                    if((epochs.get(uid)||0)!==epoch){const overlaps=[];const rebased=canonical(merge(local,latest.data,canonical(result.data),'',overlaps));await put('profiles',uid,{...latest,data:rebased,base:canonical(result.data),revision:result.revision,conflict:overlaps.length?{remote:result.data,revision:result.revision,paths:overlaps}:latest.conflict});return;}
+                    if(!latest)return;
+                    if((epochs.get(uid)||0)!==epoch||!same(canonical(latest.data),local)){const overlaps=[];const rebased=canonical(merge(local,latest.data,canonical(result.data),'',overlaps));await put('profiles',uid,{...latest,data:rebased,base:canonical(result.data),revision:result.revision,conflict:overlaps.length?{remote:result.data,revision:result.revision,paths:overlaps}:latest.conflict});return;}
                     await put('profiles',uid,{...latest,data:canonical(result.data),base:canonical(result.data),revision:result.revision,pending:false,conflict:null});
                     seen.set(uid,canonical(result.data));
                     if(activeUserId===uid)window.dispatchEvent(new CustomEvent('petcare:snapshot',{detail:{userId:uid,data:canonical(result.data)}}));
@@ -178,7 +191,7 @@
                 if(!state.pending){retryDelay=1000;status('saved');window.dispatchEvent(new Event('petcare:flush-files'));return true;}
             }
             throw new Error('sync_busy');
-        }catch(error){if(activeUserId===uid){status(navigator.onLine?'error':'offline',1);schedule(uid);}return false;}
+        }catch(error){if(activeUserId===uid){const auth=error.message==='authentication_required';status(navigator.onLine?(auth?'auth':'error'):'offline',1);if(!auth)schedule(uid);}return false;}
     }
     function flush(uid=activeUserId) {
         if(!uid)return Promise.resolve(false);
@@ -212,7 +225,7 @@
         realtime=supabaseClient.channel('petcare-profile-sync-'+uid).on('postgres_changes',{event:'*',schema:'public',table:'petcare_data',filter:'user_id=eq.'+uid},()=>{if(activeUserId===uid)flush(uid)}).subscribe();
     });
     window.addEventListener('petcare:account-reset',()=>{if(realtime){supabaseClient.removeChannel(realtime);realtime=null;}for(const timer of timers.values())clearTimeout(timer);timers.clear();document.getElementById('syncStatusBar')?.setAttribute('hidden','')});
-    window.PetCareSync={load,save,flush,resolveConflict,purge,get,put,remove,all,merge,canonical,request,status,session,
+    window.PetCareSync={load,save,flush,resolveConflict,purge,get,put,remove,mutate,all,merge,canonical,request,status,session,
         async purgeAll(){await Promise.allSettled([...queues.values()]);for(const name of ['profiles','files','outbox','preferences'])await store(name,'readwrite',s=>s.clear());for(const key of Object.keys(localStorage))if(key===STORAGE_KEY||key.startsWith(STORAGE_KEY+':'))localStorage.removeItem(key);},
-        get state(){return displayed},get version(){return '2026.11.04-daily.2'}};
+        get state(){return displayed},get version(){return '2026.11.05-security.1'}};
 })();

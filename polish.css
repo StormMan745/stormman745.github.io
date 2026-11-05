@@ -24,6 +24,8 @@ input::placeholder,textarea::placeholder { color: #778579; opacity: 1; }
 :is(button,a,summary,input,select,textarea):focus-visible { outline: 3px solid #487c60; outline-offset: 4px; }
 button { touch-action: manipulation; }
 button:disabled { cursor: default; }
+dialog { margin: auto; }
+.auth-card [data-care="password-recovery"] { margin: 14px auto 2px; }
 :is(.primary-button,.studio-button,.assistant-send,.care-section-intro>.care-button) {
     background: linear-gradient(155deg,#398466,#256347 70%); border: 1px solid #2a6b4e;
     box-shadow: var(--pc-primary-shadow); color: #fff; border-radius: 15px; min-height: 46px;

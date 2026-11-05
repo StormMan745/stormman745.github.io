@@ -6,8 +6,11 @@ do $$begin
  if not public.petcare_recent_session('a2000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000001') then raise exception 'Recent session rejected';end if;
  if public.petcare_recent_session('a2000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000002') or public.petcare_recent_session('b2000000-0000-4000-8000-000000000002','c2000000-0000-4000-8000-000000000001') then raise exception 'Old or foreign session accepted for deletion';end if;
 end$$;
+insert into auth.sessions(id,user_id,created_at) values('a2000000-0000-4000-8000-000000000009','a2000000-0000-4000-8000-000000000001',now());
+insert into auth.sessions(id,user_id,created_at) values('b2000000-0000-4000-8000-000000000009','b2000000-0000-4000-8000-000000000002',now());
 set local role authenticated;
 select set_config('request.jwt.claim.sub','a2000000-0000-4000-8000-000000000001',true);
+select set_config('request.jwt.claims','{"sub":"a2000000-0000-4000-8000-000000000001","session_id":"a2000000-0000-4000-8000-000000000009"}',true);
 select public.petcare_sync_profile(0,'{"pets":[{"id":"one","name":"First"},{"id":"two","name":"Private"}],"pet":{"id":"one","name":"First"},"activePetId":"one","healthRecords":[{"id":"h1","petId":"one","name":"Visit"},{"id":"h2","petId":"two","name":"Private visit"}],"reminders":[],"medicationCourses":[],"medicationIntakes":[],"assistantConversation":[{"id":"chat","content":"PRIVATE CHAT"}]}'::jsonb);
 do $$ declare r jsonb; begin
  r:=public.petcare_sync_profile(0,'{"pets":[]}'::jsonb);
@@ -24,6 +27,7 @@ end $$;
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','b2000000-0000-4000-8000-000000000002',true);
+select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000002","session_id":"b2000000-0000-4000-8000-000000000009"}',true);
 do $$ declare r jsonb; draft jsonb; denied boolean:=false; begin
  r:=public.petcare_care_profile('a2000000-0000-4000-8000-000000000001','one');
  if r->'data'->'pet'->>'name'<>'First' or jsonb_array_length(r->'data'->'healthRecords')<>1 or r->'data' ? 'assistantConversation' then raise exception 'Sharing boundary leak';end if;
@@ -53,6 +57,7 @@ end $$;
 reset role;
 -- Restore a real backup through the same concurrency-checked RPC as the UI.
 select set_config('request.jwt.claim.sub','a2000000-0000-4000-8000-000000000001',true);
+select set_config('request.jwt.claims','{"sub":"a2000000-0000-4000-8000-000000000001","session_id":"a2000000-0000-4000-8000-000000000009"}',true);
 do $$ declare original jsonb;revision bigint;result jsonb;begin
  select b.data into original from petcare_private.profile_backups b where b.user_id='a2000000-0000-4000-8000-000000000001' order by b.revision limit 1;
  select d.revision into revision from public.petcare_data d where user_id='a2000000-0000-4000-8000-000000000001';
