@@ -93,6 +93,7 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   if(process.argv.includes('--routine-times')){await require('./check-routine-times.cjs')({page,context,profiles,uid,other,base,session,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--assistant-records')){await require('./check-assistant-records-browser.cjs')({page,uid});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--memories')){await require('./check-memories.cjs')({page,context,profiles,uid,other,objects,base});assert.deepEqual(errors,[]);return;}
+  if(process.argv.includes('--map-location')){await require('./check-map-location.cjs')({page,context});assert.deepEqual(errors,[]);return;}
   // IndexedDB read/compare/write must be atomic across two actual browser tabs.
   const second=await context.newPage();await second.goto(base);await second.waitForFunction(()=>window.PetCareSync&&activeUserId&&PetCareSync.state.phase==='saved');
   const increment=tab=>tab.evaluate(async()=>{for(let n=0;n<20;n++)await PetCareSync.mutate('preferences','atomic-test',row=>({key:'atomic-test',userId:activeUserId,count:(row?.count||0)+1}));});

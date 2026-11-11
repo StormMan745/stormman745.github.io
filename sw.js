@@ -1,4 +1,4 @@
-const CACHE_NAME = "petcare-shell-v55-memories";
+const CACHE_NAME = "petcare-shell-v56-map-location";
 const SHELL_FILES = [
     "/",
     "/index.html",

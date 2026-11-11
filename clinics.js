@@ -27,9 +27,18 @@ function removeMap() { mapFrame?.remove(); mapFrame = null; }
 function externalUrl() {
     const url = new URL('https://yandex.ru/maps/');
     const category = currentCategory();
-    const query = `${category.query}${category.openOnly && $('clinicOpenOnly').checked ? ' открыто сейчас' : ''}${address ? ` рядом с ${address}` : ''}`;
+    const searchAddress = mapMode === '__location__' ? '' : address;
+    const query = `${category.query}${category.openOnly && $('clinicOpenOnly').checked ? ' открыто сейчас' : ''}${searchAddress ? ` рядом с ${searchAddress}` : ''}`;
     url.searchParams.set('text', query);
-    if (point && !address) { url.searchParams.set('ll', `${point.lon},${point.lat}`); url.searchParams.set('z', '13'); }
+    if (point) {
+        url.searchParams.set('pt', `${point.lon},${point.lat},pm2blm`);
+        if (!searchAddress) {
+            url.searchParams.set('ll', `${point.lon},${point.lat}`);
+            url.searchParams.set('z', mapMode === '__location__' ? '16' : '13');
+            // Keep the initial search area around the device instead of a single result.
+            url.searchParams.set('spn', mapMode === '__location__' ? '0.015,0.01' : '0.12,0.08');
+        }
+    }
     return url;
 }
 function updateCategoryControls() {
@@ -46,18 +55,12 @@ function renderMap() {
     const url = new URL('https://yandex.ru/map-widget/v1/');
     url.searchParams.set('lang', 'ru_RU');
     const ownLocation = point && mapMode === '__location__';
-    if (point) { url.searchParams.set('ll', `${point.lon},${point.lat}`); url.searchParams.set('z', ownLocation ? '16' : '13'); }
-    if (ownLocation) {
-        url.searchParams.set('mode', 'whatshere');
-        url.searchParams.set('whatshere[point]', `${point.lon},${point.lat}`);
-        url.searchParams.set('whatshere[zoom]', '16');
-    } else {
-        url.searchParams.set('mode', 'search');
-        url.searchParams.set('text', externalUrl().searchParams.get('text'));
-    }
+    const searchUrl = externalUrl();
+    url.searchParams.set('mode', 'search');
+    for (const key of ['text', 'll', 'z', 'pt', 'spn']) if (searchUrl.searchParams.has(key)) url.searchParams.set(key, searchUrl.searchParams.get(key));
     const frame = document.createElement('iframe');
     frame.className = 'clinic-yandex-map';
-    frame.title = ownLocation ? 'Яндекс Карты — моя геопозиция' : `Яндекс Карты — ${currentCategory().label}`;
+    frame.title = `Яндекс Карты — ${currentCategory().label}${point ? ' и моя геопозиция' : ''}`;
     frame.referrerPolicy = 'no-referrer';
     frame.allowFullscreen = true;
     frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox');
@@ -65,8 +68,7 @@ function renderMap() {
     frame.addEventListener('load', () => {
         if (mapFrame !== frame) return;
         busy(false);
-        status(ownLocation ? 'На карте показано ваше местоположение. Переключитесь на «Найденные места» для поиска.'
-            : `Найдены ${currentCategory().label}. Откройте карточку места для подробностей и маршрута.`);
+        status(`На карте: ${currentCategory().label}.${point ? ' Синяя метка — ваше местоположение.' : ' Разрешите геопозицию, чтобы добавить вашу метку.'}`);
     });
     frame.addEventListener('error', () => {
         if (mapFrame !== frame) return;
@@ -77,11 +79,12 @@ function renderMap() {
     $('clinicMap').replaceChildren(frame);
     frame.src = url.href;
     $('clinicMapControls').hidden = !point;
+    $('clinicLocationLegend').hidden = !point;
     $('clinicMapSelect').value = mapMode;
     $('clinicRefresh').hidden = false;
-    $('clinicAreaLabel').textContent = address ? `Поиск по адресу: ${address}` : `Рядом с вами · точность около ${Math.round(point.accuracy)} м`;
+    $('clinicAreaLabel').textContent = address && !ownLocation ? `Поиск по адресу: ${address}` : `Рядом с вами · точность около ${Math.round(point.accuracy)} м`;
     $('clinicResultSummary').textContent = `Поиск: ${currentCategory().label}. Результаты показывает Яндекс.`;
-    $('clinicMapNote').textContent = ownLocation ? 'Ваша геопозиция на Яндекс Картах.' : 'Нажмите на название или метку места, чтобы открыть его карточку.';
+    $('clinicMapNote').textContent = `${point ? 'Синяя метка — вы. ' : ''}Нажмите на метку места, чтобы открыть его карточку и маршрут.`;
     $('clinicExternalSearch').href = externalUrl().href;
     busy(false);
     $('clinicCancel').hidden = false;
@@ -95,7 +98,7 @@ function search(event) {
     if (Date.now() - lastSearch < 700) return;
     if (!navigator.onLine) { status('Нет интернета. Для поиска мест нужно подключение к сети.', 'error'); return; }
     lastSearch = Date.now(); generation++;
-    address = query; point = null; mapMode = '__results__';
+    address = query; mapMode = '__results__';
     renderMap();
 }
 function permissionUi(state) {
@@ -114,7 +117,7 @@ async function checkPermission() {
         permission = permission || await navigator.permissions.query({ name: 'geolocation' });
         const changed = () => {
             permissionUi(permission.state);
-            if (permission.state === 'granted' && !point && !address && !isBusy() && $('clinicsPage').offsetParent) locate();
+            if (permission.state === 'granted' && !point && !isBusy() && $('clinicsPage').offsetParent) locate();
         };
         permission.onchange = changed; changed();
     } catch { /* The request button also works without the Permissions API. */ }
@@ -127,10 +130,12 @@ function locate() {
     const geolocation = window.PetCareNative || navigator.geolocation;
     geolocation.getCurrentPosition(position => {
         if (token !== generation) return;
-        const coords = position.coords;
+        const coords = position?.coords;
+        if (!coords || !Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude) || Math.abs(coords.latitude) > 90 || Math.abs(coords.longitude) > 180) {
+            busy(false); status('Не удалось определить координаты. Повторите попытку или укажите адрес.', 'error'); return;
+        }
         point = { lat: coords.latitude, lon: coords.longitude, accuracy: coords.accuracy };
-        address = ''; mapMode = '__results__';
-        $('clinicAddress').value = '';
+        mapMode = '__results__';
         $('clinicLocateButton').textContent = '⌖ Обновить геопозицию';
         $('clinicLocationStatus').textContent = `Геопозиция определена. Точность — около ${Math.round(coords.accuracy)} м.`;
         renderMap();
@@ -139,7 +144,7 @@ function locate() {
         busy(false);
         status(error.code === 1 ? 'Доступ к геопозиции запрещён. Разрешите его в настройках браузера или введите адрес.'
             : 'Не удалось определить местоположение. Введите город и адрес вручную.', 'error');
-    }, { enableHighAccuracy: false, timeout: 12000, maximumAge: 60000 });
+    }, { enableHighAccuracy: false, timeout: 12000, maximumAge: 0 });
 }
 function cancel() {
     generation++; busy(false); removeMap();
@@ -169,9 +174,9 @@ export function open() {
 }
 function close() { generation++; busy(false); removeMap(); }
 function reset() {
-    close(); point = null; address = ''; mapMode = '__results__';
+    close(); point = null; address = ''; mapMode = '__results__'; lastSearch = 0;
     $('clinicAddress').value = ''; $('clinicOpenOnly').checked = true; $('clinicCategory').value = 'clinics';
-    $('clinicMapControls').hidden = true; $('clinicRefresh').hidden = true;
+    $('clinicMapControls').hidden = true; $('clinicLocationLegend').hidden = true; $('clinicRefresh').hidden = true;
     ['clinicAreaLabel', 'clinicResultSummary'].forEach(id => { $(id).textContent = ''; });
     const placeholder = document.createElement('div');
     placeholder.className = 'clinic-map-empty'; placeholder.textContent = 'Яндекс Карты · разрешите геопозицию или укажите адрес';
