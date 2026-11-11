@@ -90,6 +90,7 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   await page.goto(base);await page.waitForFunction(()=>window.PetCareCare&&activeUserId&&document.getElementById('homePage').style.display==='block');
   await page.waitForFunction(()=>PetCareSync.state.phase==='saved');
   if(process.argv.includes('--extras')){await require('./check-extras.cjs')({page,context,profiles,uid,other,documents,collars,base,session,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
+  if(process.argv.includes('--routine-times')){await require('./check-routine-times.cjs')({page,context,profiles,uid,other,base,session,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
   // IndexedDB read/compare/write must be atomic across two actual browser tabs.
   const second=await context.newPage();await second.goto(base);await second.waitForFunction(()=>window.PetCareSync&&activeUserId&&PetCareSync.state.phase==='saved');
   const increment=tab=>tab.evaluate(async()=>{for(let n=0;n<20;n++)await PetCareSync.mutate('preferences','atomic-test',row=>({key:'atomic-test',userId:activeUserId,count:(row?.count||0)+1}));});
@@ -142,7 +143,7 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   await page.locator('[data-routine="edit"][data-task-id="walk"]').click();await page.locator('#routineName').fill('Не должно сохраниться');
   await page.evaluate(()=>{window.savedSync=PetCareSync.save;PetCareSync.save=async()=>{throw new Error('test disk full')}});await page.locator('#routineSave').click();await page.waitForFunction(()=>document.getElementById('routineFormStatus').textContent.includes('Не удалось сохранить'));assert.equal(await page.evaluate(()=>PetCareRoutine.items().find(r=>r.id==='walk').name),'Прогулка');await page.evaluate(()=>{PetCareSync.save=window.savedSync});await page.keyboard.press('Escape');
   // Multiple marks preserve the legacy first mark and save independently.
-  const setChecks=async count=>{await page.locator('[data-routine="edit"][data-task-id="feeding"]').click();await page.locator('#routineChecks').fill(String(count));await page.locator('#routineSave').click();await page.waitForFunction(()=>!document.getElementById('routineDialog').open);};
+  const setChecks=async count=>{await page.locator('[data-routine="edit"][data-task-id="feeding"]').click();await page.locator('#routineChecks').fill(String(count));const fields=page.locator('#routineTimesGrid input');for(let i=0;i<await fields.count();i++)if(!await fields.nth(i).inputValue())await fields.nth(i).fill('09:30');await page.locator('#routineSave').click();await page.waitForFunction(()=>!document.getElementById('routineDialog').open);};
   const marks=()=>page.locator('[data-task="feeding"] [data-routine="toggle"]');
   const markStates=()=>marks().evaluateAll(buttons=>buttons.map(button=>button.getAttribute('aria-pressed')==='true'));
   await setChecks(3);assert.deepEqual(await markStates(),[true,false,false]);assert.equal(await page.evaluate(()=>isHomeTaskCompleted('feeding')),false);

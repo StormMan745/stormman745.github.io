@@ -28,10 +28,15 @@
         const source = Array.isArray(pet.dailyRoutine) ? pet.dailyRoutine : defaults;
         const seen = new Set();
         return source.filter(row => row && typeof row.id === 'string' && row.id && !seen.has(row.id) && seen.add(row.id))
-            .slice(0, 20).map(row => ({
-                id: row.id, name: String(row.name || 'Ежедневное дело').slice(0, 80),
-                time: validTime(row.time) ? row.time : '09:00', icon: icons.has(row.icon) ? row.icon : '🐾', checks: checkCount(row.checks)
-            }));
+            .slice(0, 20).map(row => {
+                const checks = checkCount(row.checks), fallback = validTime(row.time) ? row.time : '09:00';
+                const savedTimes = Array.isArray(row.times) ? row.times.slice(0, 12) : [];
+                const times = Array.from({ length: Math.max(checks, savedTimes.length) }, (_, index) => validTime(savedTimes[index]) ? savedTimes[index] : fallback);
+                // Older clients edit only time; keep that change as the first event.
+                if (validTime(row.time)) times[0] = row.time;
+                return { id: row.id, name: String(row.name || 'Ежедневное дело').slice(0, 80),
+                    time: times[0], times, icon: icons.has(row.icon) ? row.icon : '🐾', checks };
+            });
     }
     function node(tag, text, className) {
         const element = document.createElement(tag);
@@ -74,7 +79,9 @@
             const icon = node('div', task.icon, 'task-icon'); icon.setAttribute('aria-hidden', 'true');
             const info = node('div', undefined, 'task-info');
             const time = node('time', task.time); time.dateTime = task.time;
-            const subline = node('p'); subline.append(time, node('span', ' · каждый день', 'routine-frequency'));
+            const subline = node('p');
+            if (task.checks === 1) subline.append(time, node('span', ' · каждый день', 'routine-frequency'));
+            else subline.append(node('span', `${task.checks} раз в день`));
             if (task.checks > 1) subline.append(node('span', ` · ${count} из ${task.checks}`, 'routine-count'));
             info.append(node('strong', task.name), subline);
             const actions = node('div', undefined, 'routine-row-actions');
@@ -88,9 +95,14 @@
                 complete.dataset.step = String(step);
                 complete.disabled = pendingTasks.has(pendingKey(activeUserId, petId, date, markId(task.id, step)));
                 complete.setAttribute('aria-pressed', String(marked));
-                complete.setAttribute('aria-label', `${marked ? 'Снять отметку' : 'Отметить выполнение'}: ${task.name}, ${step} из ${task.checks}`);
-                complete.title = `${step} из ${task.checks}`;
-                group.append(complete);
+                const scheduledTime = task.times[step - 1];
+                complete.setAttribute('aria-label', `${marked ? 'Снять отметку' : 'Отметить выполнение'}: ${task.name}, ${step} из ${task.checks}, ${scheduledTime}`);
+                complete.title = `${step} из ${task.checks} · ${scheduledTime}`;
+                if (task.checks > 1) {
+                    const slot = node('div', undefined, 'routine-check-slot');
+                    const label = node('time', scheduledTime, 'routine-check-time'); label.dateTime = scheduledTime;
+                    slot.append(complete, label); group.append(slot);
+                } else group.append(complete);
             }
             actions.append(edit, group); row.append(icon, info, actions); list.append(row);
             group.scrollLeft = scrollPositions.get(task.id) || 0;
@@ -109,18 +121,38 @@
         if (!activeUserId || appData.pet?.isPlaceholder) return;
         const task = id ? items().find(row => row.id === id) : null;
         if ((id && !task) || (!id && items().length >= 20)) return;
-        editing = { userId: activeUserId, petId: getActivePetKey(), id, original: task ? JSON.stringify(task) : null };
+        editing = { userId: activeUserId, petId: getActivePetKey(), id, original: task ? JSON.stringify(task) : null,
+            times: task ? [...task.times] : ['09:00'] };
         $('routineDialogTitle').textContent = task ? 'Изменить дело' : 'Новое дело';
         $('routineDialogDescription').textContent = `Ежедневный план · ${appData.pet.name || 'Ваш питомец'}`;
         $('routineName').value = task?.name || '';
-        $('routineTime').value = task?.time || '09:00';
         $('routineIcon').value = task?.icon || '🐾';
         $('routineChecks').value = task?.checks || 1;
+        renderTimeInputs(false);
         $('routineDelete').hidden = !task;
         $('routineFormStatus').textContent = '';
         $('routineStatus').textContent = '';
         busy = false; setBusy(false);
         dialog.showModal(); $('routineName').focus();
+    }
+    function rememberTimes() {
+        if (!editing) return;
+        for (const input of $('routineTimesGrid').querySelectorAll('input')) editing.times[Number(input.dataset.routineTime)] = input.value;
+    }
+    function renderTimeInputs(capture = true) {
+        if (!editing) return;
+        if (capture) rememberTimes();
+        const count = Number($('routineChecks').value);
+        if (!Number.isInteger(count) || count < 1 || count > 12) return;
+        const fields = [];
+        for (let index = 0; index < count; index++) {
+            const field = node('div'), id = index === 0 ? 'routineTime' : `routineTime${index + 1}`;
+            const label = node('label', count === 1 ? 'Время каждый день' : `${index + 1}-е выполнение`); label.htmlFor = id;
+            const input = node('input'); input.id = id; input.type = 'time'; input.required = true;
+            input.dataset.routineTime = String(index); input.value = editing.times[index] || '';
+            field.append(label, input); fields.push(field);
+        }
+        $('routineTimesGrid').replaceChildren(...fields);
     }
     function setBusy(value) {
         busy = value;
@@ -136,15 +168,24 @@
         if (draft.id && JSON.stringify(current.find(task => task.id === draft.id)) !== draft.original) {
             $('routineFormStatus').textContent = 'Это дело уже изменилось на другом устройстве. Закройте редактор и откройте его заново, чтобы увидеть актуальные данные.'; return;
         }
-        const name = $('routineName').value.trim(), time = $('routineTime').value, checks = Number($('routineChecks').value);
-        if (!remove && (!name || !validTime(time))) { $('routineFormStatus').textContent = 'Введите название и время.'; $('routineName').focus(); return; }
+        const name = $('routineName').value.trim(), checks = Number($('routineChecks').value);
+        if (!remove && !name) { $('routineFormStatus').textContent = 'Введите название дела.'; $('routineName').focus(); return; }
         if (!remove && (!Number.isInteger(checks) || checks < 1 || checks > 12)) { $('routineFormStatus').textContent = 'Выберите от 1 до 12 отметок.'; $('routineChecks').focus(); return; }
+        rememberTimes();
+        if (!remove) {
+            const missing = Array.from({ length: checks }, (_, index) => index).find(index => !validTime(draft.times[index]));
+            if (missing !== undefined) {
+                $('routineFormStatus').textContent = 'Укажите время для каждого выполнения.';
+                $('routineTimesGrid').querySelector(`[data-routine-time="${missing}"]`)?.focus(); return;
+            }
+        }
         if (!draft.id && current.length >= 20) { $('routineFormStatus').textContent = 'Можно добавить до 20 ежедневных дел.'; return; }
         if (remove && !confirm('Удалить дело из ежедневного плана? Прошлые отметки останутся в истории.')) return;
         const previous = appData.pet.dailyRoutine;
         const next = remove ? current.filter(task => task.id !== draft.id) : current.slice();
         if (!remove) {
-            const task = { id: draft.id || createEntryId('routine'), name, time, checks, icon: icons.has($('routineIcon').value) ? $('routineIcon').value : '🐾' };
+            const times = draft.times.slice(0, 12).map(time => validTime(time) ? time : draft.times[0]);
+            const task = { id: draft.id || createEntryId('routine'), name, time: times[0], times, checks, icon: icons.has($('routineIcon').value) ? $('routineIcon').value : '🐾' };
             const index = next.findIndex(row => row.id === task.id);
             if (index < 0) next.push(task); else next[index] = task;
         }
@@ -189,7 +230,7 @@
         }
         else {
             appData.completedTasks.push({ id: completionId, date, petId });
-            addActivityEvent('task', `Выполнено: ${task.name}${task.checks > 1 ? ` · ${step} из ${task.checks}` : ''}`, date, `Ежедневный уход · ${task.time}`, historyId);
+            addActivityEvent('task', `Выполнено: ${task.name}${task.checks > 1 ? ` · ${step} из ${task.checks}` : ''}`, date, `Ежедневный уход · ${task.times[step - 1]}`, historyId);
         }
         render(true);
         try { await saveData(); }
@@ -213,6 +254,8 @@
         }
     }
     $('routineForm').addEventListener('submit', event => { event.preventDefault(); commit(); });
+    $('routineChecks').addEventListener('input', () => renderTimeInputs());
+    $('routineTimesGrid').addEventListener('input', rememberTimes);
     document.addEventListener('click', event => {
         const button = event.target.closest?.('[data-routine]');
         if (!button || button.disabled) return;

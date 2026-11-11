@@ -6,6 +6,7 @@
     "check:build": "node build-app.cjs --check",
     "test:auth": "node check-auth-controls.cjs",
     "test:push": "node check-push.cjs && node check-push-browser.cjs",
+    "test:routine-times": "node check-offline-care.cjs --routine-times && node check-routine-day.cjs",
     "test:extras": "node check-offline-care.cjs --extras",
     "test:site-security": "node check-site-security.cjs && node check-browser-security.cjs",
     "build:pet-scene": "node build-pet-scene.cjs",
