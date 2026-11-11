@@ -15,7 +15,7 @@
     <meta name="apple-mobile-web-app-title" content="PetCare">
     <script src="frameguard.js"></script>
     <script src="install.js?v=20261028-studio"></script>
-    <link rel="stylesheet" href="app.bundle.css?v=f106b3ea56ef">
+    <link rel="stylesheet" href="app.bundle.css?v=37428a8c8106">
 </head>
 <body>
 <div class="app">
@@ -729,12 +729,20 @@
         <h2>PetCare ассистент 🐾</h2>
     </div>
 
-    <p class="assistant-disclaimer">Ответы с учётом записей вашего питомца. Помощник не заменяет ветеринара.</p>
-    <details class="assistant-privacy"><summary>Какие данные получает ИИ?</summary><p>Для ответа в GigaChat передаются вопрос, переписка об этом питомце и его записи из аккаунта: карточка, здоровье, лекарства, вес, самочувствие, ежедневные дела со временем, напоминания, расходы и запас корма. У документов доступны названия, типы и даты; содержимое файлов и фото не анализируется. В большой истории подбираются записи по вопросу, и помощник сообщает, если учтена только часть.</p></details>
-    <div class="pet-switcher compact-pet-switcher assistant-pet-context">
-        <label for="assistantPetSwitcher">О каком питомце поговорим?</label>
-        <select id="assistantPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для PetCare ассистента"></select>
-        <span id="assistantLiveBadge" class="assistant-live-badge" data-state="loading">Обновляю записи</span>
+    <div class="assistant-toolbar">
+        <div class="pet-switcher compact-pet-switcher assistant-pet-context">
+            <label for="assistantPetSwitcher">Питомец</label>
+            <select id="assistantPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для PetCare ассистента"></select>
+        </div>
+        <details class="assistant-privacy" id="assistantInfo">
+            <summary id="assistantInfoSummary" aria-controls="assistantInfoPanel">Что видит ИИ</summary>
+            <div class="assistant-info-panel" id="assistantInfoPanel">
+                <strong>Какие данные получает помощник</strong>
+                <p>Для ответа в GigaChat передаются вопрос, переписка об этом питомце и его записи из аккаунта: карточка, здоровье, лекарства, вес, самочувствие, ежедневные дела со временем, напоминания, расходы и запас корма. У документов доступны названия, типы и даты; содержимое файлов и фото не анализируется. В большой истории подбираются записи по вопросу, и помощник сообщает, если учтена только часть.</p>
+                <p class="assistant-disclaimer">Помощник не заменяет ветеринара.</p>
+                <span id="assistantLiveBadge" class="assistant-live-badge" data-state="loading">Обновляю записи</span>
+            </div>
+        </details>
     </div>
     <div id="assistantMessages" aria-live="polite" aria-label="Переписка с PetCare ассистентом"></div>
 
@@ -890,6 +898,6 @@
 
 <!-- Same-origin pinned SDK; classic loading also supports opening index.html from disk. -->
 <script src="assets/vendor/supabase/supabase-2.118.0.min.js"></script>
-<script src="app.bundle.js?v=b60fe0ab0019"></script>
+<script src="app.bundle.js?v=6caa8a4b87db"></script>
 </body>
 </html>

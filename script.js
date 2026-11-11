@@ -3741,12 +3741,26 @@ function showAssistant() {
     const assistantPage = document.getElementById("assistantPage");
 
     if (assistantPage) assistantPage.style.display = "block";
+    const information = document.getElementById('assistantInfo');
+    if (information) information.open = false;
 
     renderPetSwitcher();
     startAssistantProfileLive();
     updateAssistantProfileStatus();
     renderAssistantConversation();
 }
+
+document.addEventListener('pointerdown', event => {
+    const information = document.getElementById('assistantInfo');
+    if (information?.open && !information.contains(event.target)) information.open = false;
+});
+document.addEventListener('keydown', event => {
+    const information = document.getElementById('assistantInfo');
+    if (event.key === 'Escape' && information?.open) {
+        information.open = false;
+        document.getElementById('assistantInfoSummary')?.focus({ preventScroll: true });
+    }
+});
 
 function cancelAssistantRequest() {
     const request = activeAssistantRequest;
