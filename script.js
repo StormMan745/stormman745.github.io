@@ -3766,14 +3766,18 @@ function getAssistantLocalProfileKey(data = appData, petId = getActivePetKey()) 
     const values = (row, keys) => keys.map(key => row?.[key] ?? null);
     const own = row => String(row.petId ?? getPetKey(data.pet)) === petId;
     return JSON.stringify([
-        petId, values(pet, ["name", "animal", "breed", "birthDate", "weight", "allergies", "medications", "vetClinic", "vetPhone"]),
+        petId, values(pet, ["name", "animal", "breed", "birthDate", "sex", "color", "chipNumber", "weight", "allergies", "medications", "vetClinic", "vetPhone"]),
+        (pet.dailyRoutine || []).map(row => values(row, ["id", "name", "time", "times", "checks"])),
         (pet.weightHistory || []).map(row => values(row, ["id", "date", "value"])),
         (data.healthRecords || []).filter(own).map(row => [...values(row, ["id", "name", "type", "date", "nextDate", "note", "diagnosis", "prescription", "clinic"]), getAttachmentPhotos(row).length]),
-        (data.reminders || []).filter(own).map(row => values(row, ["id", "name", "type", "date", "time", "repeat", "completed", "completedForDate", "note"])),
+        (data.reminders || []).filter(own).map(row => values(row, ["id", "name", "type", "date", "time", "repeat", "endDate", "completed", "completedForDate", "completedDates", "note", "appointmentPurpose", "appointmentClinic"])),
         (data.activityHistory || []).filter(own).map(row => values(row, ["id", "title", "kind", "date", "note"])),
         (data.completedTasks || []).filter(own).map(row => values(row, ["id", "date"])),
-        (data.medicationCourses || []).filter(own).map(row => values(row,["id","name","dosage","instructions","prescriber","startDate","endDate","times","stopped"])),
-        (data.medicationIntakes || []).filter(own).map(row => values(row,["id","courseId","date","time","status"])),
+        (data.medicationCourses || []).filter(own).map(row => values(row,["id","name","dosage","instructions","prescriber","startDate","endDate","times","stopped","initialStock","unitsPerDose","restock"])),
+        (data.medicationIntakes || []).filter(own).map(row => values(row,["id","courseId","date","time","status","units"])),
+        (data.wellbeingEntries || []).filter(own).map(row => values(row,["id","date","appetite","activity","mood","note"])),
+        (data.expenses || []).filter(own).map(row => values(row,["id","title","category","amountKopecks","date","note"])),
+        (data.foodStocks || []).filter(own).map(row => values(row,["id","name","grams","dailyGrams","date","leadDays"])),
         (data.storyProjects || []).filter(own).map(row => [row.id, row.month, row.startDate, Boolean(row.collagePath), (row.photos || []).map(photo => [photo.week, photo.date])])
     ]);
 }
@@ -3821,8 +3825,35 @@ function startAssistantProfileLive() {
             updateAssistantProfileStatus();
         });
     scheduleAssistantProfileRefresh(0);
+    refreshAssistantDocumentState();
     updateAssistantProfileStatus();
 }
+
+async function assistantPendingDocuments(userId, petId) {
+    if (!window.PetCareSync) return [];
+    const jobs = await PetCareSync.all('outbox', userId);
+    return jobs.filter(job => ['document-put', 'document-edit', 'document-delete', 'pet-documents-delete'].includes(job.type)
+        && String(job.petId ?? job.row?.pet_id) === petId);
+}
+
+async function refreshAssistantDocumentState() {
+    const userId = activeUserId, petId = getActivePetKey(), generation = assistantLiveGeneration;
+    if (!userId || assistantLive.userId !== userId || !window.PetCareFiles) return;
+    try {
+        const [rows, jobs] = await Promise.all([PetCareFiles.documentRows(userId, false), assistantPendingDocuments(userId, petId)]);
+        if (activeUserId !== userId || getActivePetKey() !== petId || assistantLiveGeneration !== generation) return;
+        const key = JSON.stringify([rows.filter(row => String(row.pet_id) === petId).map(row => [row.id, row.title, row.category, row.document_date, row.record_id, row.revision, Boolean(row.pending)]), jobs.map(job => [job.type, job.id || job.row?.id, job.generation])]);
+        const previous = assistantLive.documentKey;
+        assistantLive.documentKey = key;
+        assistantLive.documentsPending = jobs.length > 0;
+        if (previous !== key) {
+            assistantLive.answerContext = null;
+            if (previous !== undefined && !jobs.length) scheduleAssistantProfileRefresh();
+        }
+        updateAssistantProfileStatus();
+    } catch { /* The next question still reads the authoritative document list. */ }
+}
+window.addEventListener('petcare:files-changed', refreshAssistantDocumentState);
 
 function scheduleAssistantProfileRefresh(delay = 200) {
     if(!navigator.onLine)return;
@@ -3933,11 +3964,15 @@ function updateAssistantProfileStatus(context) {
     } else if (["offline", "error"].includes(live.phase)) {
         label = "Ожидаю подключение";
         state = "offline";
+    } else if (live.documentsPending) {
+        label = "Сохраняю документы";
     } else if (live.localDirty || live.phase === "saving") {
         label = "Сохраняю записи";
     } else if (live.snapshot && live.petId === getActivePetKey()) {
         label = live.connected ? "Записи актуальны · онлайн" : "Записи актуальны · автообновление";
         state = "ready";
+        const coverage = live.answerContext || live.snapshot;
+        if (coverage.partial) label = `Для ответа учтено ${coverage.includedEntries} из ${coverage.availableEntries} записей`;
     }
     if (badge) { badge.textContent = label; badge.dataset.state = state; }
 }
@@ -4046,6 +4081,9 @@ async function getAssistantErrorMessage(error) {
     if (error?.message === "PETCARE_PROFILE_SYNC_FAILED") {
         return "Не удалось синхронизировать записи профиля. Проверьте подключение и попробуйте снова — для ответа нужны актуальные данные.";
     }
+    if (error?.message === 'PETCARE_DOCUMENT_SYNC_FAILED') {
+        return 'Новые изменения документов пока не отправлены в аккаунт. Дождитесь сохранения или устраните конфликт в разделе «Мои данные», затем повторите вопрос.';
+    }
     if (error?.name === "AbortError") {
         return "Ответ занял слишком много времени. Попробуйте задать вопрос ещё раз.";
     }
@@ -4097,6 +4135,12 @@ async function sendAssistantMessage(event) {
         // Only a newly changed profile needs to finish saving before the question.
         if (!isCurrent()) return;
         if (assistantLive.localDirty && !await saveData()) throw new Error("PETCARE_PROFILE_SYNC_FAILED");
+        if (!isCurrent()) return;
+        if ((await assistantPendingDocuments(userId, petId)).length) {
+            await window.PetCareFiles?.flush();
+            if (!isCurrent()) return;
+            if ((await assistantPendingDocuments(userId, petId)).length) throw new Error('PETCARE_DOCUMENT_SYNC_FAILED');
+        }
         if (!isCurrent()) return;
         saveAssistantConversation();
         const data = await requestAssistantEndpoint({ messages, petId, today: getLocalDateInputValue() }, request.controller.signal);

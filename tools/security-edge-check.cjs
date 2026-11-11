@@ -15,6 +15,7 @@ const uid='00000000-0000-4000-8000-000000000001';
   if(url.endsWith('/auth/v1/user'))return auth?ok({id:uid}):new Response('{}',{status:401});
   if(url.endsWith('/rpc/petcare_consume_request'))return active?ok({allowed:quota,retryAfter:30}):new Response('{}',{status:403});
   if(url.includes('/rest/v1/petcare_data')){assert.equal(new URL(url).searchParams.get('user_id'),'eq.'+uid);return ok([{data:{pet:{id:'pet-a',name:'Test pet'},pets:[{id:'pet-a',name:'Test pet'}],healthRecords:[]},updated_at:'2026-10-30T00:00:00Z'}]);}
+  if(url.includes('/rest/v1/petcare_documents')){assert.equal(new URL(url).searchParams.get('user_id'),'eq.'+uid);assert.equal(new URL(url).searchParams.get('pet_id'),'eq.pet-a');return ok([]);}
   if(url.includes('/oauth'))return ok({access_token:'test-access-token',expires_at:Math.floor(Date.now()/1000)+1800});
   if(url.includes('/chat/completions'))return ok({choices:[{message:{content:'Test answer'}}]});
   throw Error('Unexpected destination '+url);

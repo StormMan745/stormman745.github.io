@@ -1,4 +1,4 @@
-const CACHE_NAME = "petcare-shell-v51-routine-times";
+const CACHE_NAME = "petcare-shell-v52-assistant-records";
 const SHELL_FILES = [
     "/",
     "/index.html",
