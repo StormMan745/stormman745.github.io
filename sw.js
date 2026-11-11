@@ -1,4 +1,4 @@
-const CACHE_NAME = "petcare-shell-v47-everyday-tools";
+const CACHE_NAME = "petcare-shell-v48-extras-buttons";
 const SHELL_FILES = [
     "/",
     "/index.html",
