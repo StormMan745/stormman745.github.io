@@ -1,9 +1,10 @@
-const CACHE_NAME = "petcare-shell-v54-assistant-compact";
+const CACHE_NAME = "petcare-shell-v55-memories";
 const SHELL_FILES = [
     "/",
     "/index.html",
     "/app.bundle.js",
     "/app.bundle.css",
+    "/memories.bundle.js",
     "/vet.html",
     "/vet.js",
     "/vet.css",

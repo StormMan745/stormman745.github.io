@@ -25,6 +25,7 @@ jobs:
           package-manager-cache: false
       - run: npm ci --prefix tools --ignore-scripts
       - run: npm run --prefix tools check:build
+      - run: node tools/build-memories.cjs --check
       - run: node tools/check-site-security.cjs
       - run: node tools/security-edge-check.cjs
       - run: node tools/check-assistant-records.cjs
