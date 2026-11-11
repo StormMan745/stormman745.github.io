@@ -11,13 +11,14 @@ const admin = createClient(supabaseUrl, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-function jsonResponse(body: Record<string, unknown>, status = 200) {
+function jsonResponse(body: Record<string, unknown>, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
+      ...headers,
     },
   });
 }
@@ -144,7 +145,93 @@ function formatPushError(error: unknown) {
   return statusCode ? `push_service_${statusCode}` : "push_service_error";
 }
 
+// A test uses the same encrypted Web Push transport as scheduled reminders.
+// It can only address the caller's current subscription, never another account.
+async function testPush(request: Request, reply: (body: Record<string, unknown>, status?: number) => Response) {
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || "";
+  const apiKey = request.headers.get("apikey");
+  if (!token || !apiKey) return reply({ error: "authentication_required" }, 401);
+  const { data: auth, error: authError } = await admin.auth.getUser(token);
+  if (authError || !auth?.user) return reply({ error: "authentication_required" }, 401);
+  const client = createClient(supabaseUrl, apiKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: active, error: activeError } = await client.rpc("petcare_account_active");
+  if (activeError || active !== true) return reply({ error: "authentication_required" }, 401);
+  const { data: budget, error: budgetError } = await client.rpc("petcare_consume_request", { p_action: "profile-status" });
+  if (budgetError || !budget?.allowed) return reply({ error: "rate_limited" }, 429);
+  if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") || "")) return reply({ error: "json_required" }, 415);
+  const reader = request.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  if (reader) for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    length += value.byteLength;
+    if (length > 4096) { await reader.cancel(); return reply({ error: "request_too_large" }, 413); }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  let body;
+  try { body = JSON.parse(new TextDecoder().decode(bytes)); } catch { return reply({ error: "invalid_request" }, 400); }
+  if (body?.action !== "test" || !isAllowedPushEndpoint(body.endpoint)) return reply({ error: "invalid_request" }, 400);
+  const uid = auth.user.id;
+  const { data: device, error } = await admin.from("petcare_push_subscriptions")
+    .select("endpoint,subscription").eq("user_id", uid).eq("endpoint", body.endpoint).maybeSingle();
+  if (error) return reply({ error: "lookup_failed" }, 503);
+  if (!device) return reply({ error: "subscription_missing" }, 404);
+  if (device.subscription?.endpoint !== device.endpoint || !isAllowedPushEndpoint(device.subscription?.endpoint)) {
+    return reply({ error: "subscription_expired" }, 410);
+  }
+  const { data: secrets, error: secretError } = await admin.rpc("petcare_get_push_runtime_secrets");
+  if (secretError || !secrets?.vapid?.publicKey || !secrets?.vapid?.privateKey || !secrets?.vapid?.subject) {
+    return reply({ error: "push_not_configured" }, 503);
+  }
+  const now = new Date();
+  const endpointHash = await hashText(device.endpoint);
+  const notificationKey = `${uid}:test:${Math.floor(now.getTime() / 60000)}`;
+  const { data: attempt, error: claimError } = await admin.rpc("petcare_claim_push_delivery", {
+    p_endpoint_hash: endpointHash, p_notification_key: notificationKey, p_user_id: uid,
+    p_reminder_id: "__push_test__", p_due_date: now.toISOString().slice(0, 10),
+  });
+  if (claimError) return reply({ error: "claim_failed" }, 503);
+  if (!attempt) return reply({ error: "test_recently_sent" }, 429);
+  const log = (values: Record<string, unknown>) => admin.from("petcare_push_delivery_log").update(values)
+    .eq("endpoint_hash", endpointHash).eq("notification_key", notificationKey).eq("attempt_count", attempt);
+  try {
+    await webpush.sendNotification(device.subscription, JSON.stringify({
+      title: "PetCare · проверка уведомлений",
+      body: "Уведомления подключены. Здесь будут ваши напоминания о питомце.",
+      tag: await topicFor(notificationKey), timestamp: now.getTime(), url: "/?page=reminders",
+    }), { TTL: 300, urgency: "high", timeout: 10000, vapidDetails: secrets.vapid });
+    const { error: logError } = await log({ status: "sent", delivered_at: new Date().toISOString(), last_error: null });
+    if (logError) return reply({ error: "delivery_status_unavailable" }, 503);
+    return reply({ ok: true, accepted: true });
+  } catch (sendError) {
+    const code = formatPushError(sendError);
+    const gone = code === "push_service_404" || code === "push_service_410";
+    await log({ status: gone ? "gone" : "failed", last_error: code });
+    if (gone) await admin.from("petcare_push_subscriptions").delete().eq("user_id", uid).eq("endpoint", device.endpoint);
+    return reply({ error: gone ? "subscription_expired" : "push_service_unavailable" }, gone ? 410 : 502);
+  }
+}
+
 Deno.serve(async request => {
+  const origin = request.headers.get("origin");
+  const allowed = !origin || ["https://stormman745.github.io", "https://www.stormman745.github.io", "null", "capacitor://localhost", "petcare://localhost"].includes(origin)
+    || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+  if (!allowed) return jsonResponse({ error: "forbidden" }, 403);
+  const cors = { "Access-Control-Allow-Origin": origin || "https://stormman745.github.io", "Vary": "Origin",
+    "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+    "Access-Control-Allow-Methods": "POST, OPTIONS" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+  if (request.method === "POST" && !request.headers.has("x-petcare-cron-token") && request.headers.has("authorization")) {
+    try { return await testPush(request, (body, status = 200) => jsonResponse(body, status, cors)); }
+    catch { return jsonResponse({ error: "push_test_failed" }, 503, cors); }
+  }
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
   const suppliedToken = request.headers.get("x-petcare-cron-token") || "";
   if (suppliedToken.length < 24 || suppliedToken.length > 256) return jsonResponse({ error: "Unauthorized" }, 401);
@@ -243,7 +330,7 @@ Deno.serve(async request => {
             .from("petcare_push_delivery_log")
             .update({ status: errorCode === "push_service_404" || errorCode === "push_service_410" ? "gone" : "failed", last_error: errorCode })
             .eq("endpoint_hash", endpointHash)
-            .eq("notification_key", notificationKey);
+            .eq("notification_key", notificationKey).eq("attempt_count", attemptCount);
           if (errorCode === "push_service_404" || errorCode === "push_service_410") {
             await admin.from("petcare_push_subscriptions").delete().eq("endpoint", device.endpoint).eq("user_id", userId);
           }

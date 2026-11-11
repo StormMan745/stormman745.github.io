@@ -1,4 +1,4 @@
-const CACHE_NAME = "petcare-shell-v49-extras-buttons";
+const CACHE_NAME = "petcare-shell-v50-push-delivery";
 const SHELL_FILES = [
     "/",
     "/index.html",
@@ -92,6 +92,7 @@ self.addEventListener("push", event => {
     } catch {
         payload = { body: event.data?.text() || "У вас есть напоминание." };
     }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) payload = {};
 
     const title = typeof payload.title === "string" && payload.title.trim()
         ? payload.title.trim().slice(0, 100)
