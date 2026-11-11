@@ -34,6 +34,8 @@ module.exports = async ({ page, context, profiles, uid, base, setAvailable }) =>
   const draft = await values(); await page.locator('#routineChecks').fill('3'); await page.locator('#routineChecks').fill('8');
   assert.deepEqual(await values(), draft, 'Draft times survive count changes');
   await page.keyboard.press('Escape'); assert.deepEqual(await displayed(), times, 'Cancel does not save the draft');
+  await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
+  await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   setAvailable(false); await context.setOffline(true);
   await edit(); await fields().nth(4).fill('22:30'); times[4] = '22:30'; await save();
   await page.reload(); await page.waitForFunction(() => window.PetCareRoutine && activeUserId && document.querySelectorAll('[data-task="walk"] .routine-check-time').length === 5);
