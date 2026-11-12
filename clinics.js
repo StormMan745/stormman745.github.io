@@ -3,6 +3,7 @@
 const $ = id => document.getElementById(id);
 let initialized = false, point = null, address = '', mapMode = '__results__';
 let mapFrame = null, permission = null, generation = 0, lastSearch = 0;
+let locationRequest = null, locationAttempted = false;
 const categories = Object.freeze({
     clinics: { query: 'ветеринарные клиники', label: 'ветеринарные клиники', mapLayer: 0, openOnly: true },
     hospital: { query: 'круглосуточные ветеринарные стационары', label: 'круглосуточные стационары', mapLayer: 1, openOnly: false },
@@ -18,7 +19,8 @@ function status(message, kind = '') {
     $('clinicStatus').dataset.kind = kind;
 }
 function busy(value) {
-    ['clinicSearchButton', 'clinicLocateButton', 'clinicCategory'].forEach(id => { $(id).disabled = value; });
+    ['clinicSearchButton', 'clinicCategory'].forEach(id => { $(id).disabled = value; });
+    $('clinicLocateButton').disabled = value || locationRequest !== null;
     $('clinicCancel').hidden = !value;
     $('clinicSearchPanel').setAttribute('aria-busy', String(value));
 }
@@ -97,9 +99,12 @@ function search(event) {
     if (query.length < 3) { status('Укажите город и адрес — не менее трёх символов.'); $('clinicAddress').focus(); return; }
     if (Date.now() - lastSearch < 700) return;
     if (!navigator.onLine) { status('Нет интернета. Для поиска мест нужно подключение к сети.', 'error'); return; }
-    lastSearch = Date.now(); generation++;
+    lastSearch = Date.now();
     address = query; mapMode = '__results__';
     renderMap();
+    // Safari and installed mobile apps may have no Permissions API. Request GPS
+    // from this user gesture; keep address results usable while permission is pending.
+    if (!point && !locationAttempted) locate({ background: true });
 }
 function permissionUi(state) {
     $('clinicLocateButton').textContent = state === 'granted' ? '⌖ Обновить геопозицию' : '⌖ Разрешить геопозицию';
@@ -109,7 +114,13 @@ function permissionUi(state) {
 }
 async function checkPermission() {
     if (window.PetCareNative) {
-        try { permissionUi(await window.PetCareNative.checkLocationPermission()); } catch { permissionUi('prompt'); }
+        const token = generation;
+        try {
+            const state = await window.PetCareNative.checkLocationPermission();
+            if (token !== generation || !$('clinicsPage').offsetParent) return;
+            permissionUi(state);
+            if (state === 'granted' && !point && !isBusy()) locate();
+        } catch { if (token === generation) permissionUi('prompt'); }
         return;
     }
     if (!navigator.permissions?.query) return;
@@ -122,32 +133,47 @@ async function checkPermission() {
         permission.onchange = changed; changed();
     } catch { /* The request button also works without the Permissions API. */ }
 }
-function locate() {
-    if (isBusy()) return;
-    if (!window.PetCareNative && (!navigator.geolocation || !window.isSecureContext)) { status('Геопозиция недоступна. Введите адрес вручную.', 'error'); return; }
+function locate({ background = false } = {}) {
+    if (isBusy() || locationRequest !== null) return;
+    locationAttempted = true;
+    if (!window.PetCareNative && (!navigator.geolocation || !window.isSecureContext)) {
+        $('clinicLocationStatus').textContent = 'Геопозиция недоступна. Введите адрес вручную.';
+        if (!background) status('Геопозиция недоступна. Введите адрес вручную.', 'error');
+        return;
+    }
     const token = ++generation;
-    busy(true); status('Разрешите определение геопозиции в окне браузера…', 'loading');
+    locationRequest = token;
+    $('clinicLocateButton').disabled = true;
+    $('clinicLocationStatus').textContent = 'Определяем ваше местоположение. Разрешите геопозицию в окне браузера.';
+    if (!background) { busy(true); status('Разрешите определение геопозиции в окне браузера…', 'loading'); }
     const geolocation = window.PetCareNative || navigator.geolocation;
-    geolocation.getCurrentPosition(position => {
+    const failed = error => {
+        if (token !== generation) return;
+        locationRequest = null;
+        busy(false);
+        const message = error.code === 1 ? 'Доступ к геопозиции запрещён. Разрешите его в настройках браузера или введите адрес.'
+            : 'Не удалось определить местоположение. Повторите геопозицию или введите город и адрес вручную.';
+        $('clinicLocationStatus').textContent = message;
+        if (!background) status(message, 'error');
+    };
+    const found = position => {
         if (token !== generation) return;
         const coords = position?.coords;
         if (!coords || !Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude) || Math.abs(coords.latitude) > 90 || Math.abs(coords.longitude) > 180) {
-            busy(false); status('Не удалось определить координаты. Повторите попытку или укажите адрес.', 'error'); return;
+            failed({ code: 2 }); return;
         }
+        locationRequest = null;
         point = { lat: coords.latitude, lon: coords.longitude, accuracy: coords.accuracy };
-        mapMode = '__results__';
+        if (!background) mapMode = '__results__';
         $('clinicLocateButton').textContent = '⌖ Обновить геопозицию';
         $('clinicLocationStatus').textContent = `Геопозиция определена. Точность — около ${Math.round(coords.accuracy)} м.`;
         renderMap();
-    }, error => {
-        if (token !== generation) return;
-        busy(false);
-        status(error.code === 1 ? 'Доступ к геопозиции запрещён. Разрешите его в настройках браузера или введите адрес.'
-            : 'Не удалось определить местоположение. Введите город и адрес вручную.', 'error');
-    }, { enableHighAccuracy: false, timeout: 12000, maximumAge: 0 });
+    };
+    try { geolocation.getCurrentPosition(found, failed, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }); }
+    catch { failed({ code: 2 }); }
 }
 function cancel() {
-    generation++; busy(false); removeMap();
+    generation++; locationRequest = null; locationAttempted = false; busy(false); removeMap();
     $('clinicMap').textContent = '';
     const placeholder = document.createElement('div');
     placeholder.className = 'clinic-map-empty'; placeholder.textContent = 'Яндекс Карты · поиск отменён';
@@ -172,7 +198,7 @@ export function open() {
     $('clinicAddress').focus({ preventScroll: true });
     checkPermission();
 }
-function close() { generation++; busy(false); removeMap(); }
+function close() { generation++; locationRequest = null; locationAttempted = false; busy(false); removeMap(); }
 function reset() {
     close(); point = null; address = ''; mapMode = '__results__'; lastSearch = 0;
     $('clinicAddress').value = ''; $('clinicOpenOnly').checked = true; $('clinicCategory').value = 'clinics';

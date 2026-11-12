@@ -23,6 +23,7 @@ module.exports=async({page,context})=>{
   await page.evaluate(()=>{window.dispatchEvent(new Event('petcare:account-reset'));delayedLocation({coords:{latitude:56,longitude:38,accuracy:5}});});
   assert.equal(await map().count(),0,'A late GPS response cannot restore another account map');assert(!await page.locator('#clinicLocationLegend').isVisible());assert.equal(await page.locator('#clinicAddress').inputValue(),'');
   await page.locator('#clinicAddress').fill('Санкт-Петербург, Невский 20');await page.locator('#clinicSearchButton').click();current=await url();assert(!current.searchParams.has('pt'),'No stale GPS after account reset');
-  await page.locator('#clinicLocateButton').click();await page.evaluate(()=>delayedLocationError({code:1}));assert.match(await page.locator('#clinicStatus').innerText(),/запрещён/);assert.equal((await url()).searchParams.get('pt'),null,'Denial leaves address results available');
+  await page.evaluate(()=>delayedLocationError({code:1}));assert.match(await page.locator('#clinicLocationStatus').innerText(),/запрещён/);assert.equal((await url()).searchParams.get('pt'),null,'Denial leaves address results available');
+  await page.locator('#clinicLocateButton').click();await page.evaluate(()=>delayedLocationError({code:1}));assert.match(await page.locator('#clinicStatus').innerText(),/запрещён/);
   console.log('PASS: results and GPS together; categories, filters, address/Enter, zoom and external link retain the point; GPS refresh keeps the address; no native navigation, no iframe GPS permission, no profile persistence, responsive layouts, late-response/account reset and denied location. Map and auth services mocked.');
 };

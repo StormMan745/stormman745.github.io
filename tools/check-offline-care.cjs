@@ -16,7 +16,8 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',args:['--enable-unsafe-swiftshader']});
  try{
-  const context=await browser.newContext({viewport:{width:390,height:844},timezoneId:'Europe/Moscow'}),errors=[];
+  const mobile=process.argv.includes('--map-mobile')?{isMobile:true,hasTouch:true,userAgent:process.argv.includes('--iphone')?'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1':'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36'}:{};
+  const context=await browser.newContext({viewport:{width:390,height:844},timezoneId:'Europe/Moscow',...mobile}),errors=[];
   context.on('page',page=>page.on('pageerror',e=>errors.push(e.message)));
   await context.addInitScript(({auth,uid})=>{try{if(!localStorage.getItem('test-seeded')){localStorage.setItem('sb-qexiyikdmdbdxgusqnee-auth-token',JSON.stringify(auth));localStorage.setItem('test-seeded','yes');}}catch{}window.print=()=>{window.testPrintCalls=(window.testPrintCalls||0)+1};},{auth:session(uid),uid});
   await context.route('https://qexiyikdmdbdxgusqnee.supabase.co/**',async route=>{
@@ -94,6 +95,7 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   if(process.argv.includes('--routine-push')){await require('./check-routine-push.cjs')({page,context,profiles,uid,other,base,session,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--assistant-records')){await require('./check-assistant-records-browser.cjs')({page,uid});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--memories')){await require('./check-memories.cjs')({page,context,profiles,uid,other,objects,base});assert.deepEqual(errors,[]);return;}
+  if(process.argv.includes('--map-mobile')){await require('./check-map-mobile.cjs')({page,context});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--map-location')){await require('./check-map-location.cjs')({page,context});assert.deepEqual(errors,[]);return;}
   // IndexedDB read/compare/write must be atomic across two actual browser tabs.
   const second=await context.newPage();await second.goto(base);await second.waitForFunction(()=>window.PetCareSync&&activeUserId&&PetCareSync.state.phase==='saved');
