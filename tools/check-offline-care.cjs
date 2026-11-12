@@ -91,6 +91,7 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   await page.waitForFunction(()=>PetCareSync.state.phase==='saved');
   if(process.argv.includes('--extras')){await require('./check-extras.cjs')({page,context,profiles,uid,other,documents,collars,base,session,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--routine-times')){await require('./check-routine-times.cjs')({page,context,profiles,uid,other,base,session,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
+  if(process.argv.includes('--routine-push')){await require('./check-routine-push.cjs')({page,context,profiles,uid,other,base,session,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--assistant-records')){await require('./check-assistant-records-browser.cjs')({page,uid});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--memories')){await require('./check-memories.cjs')({page,context,profiles,uid,other,objects,base});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--map-location')){await require('./check-map-location.cjs')({page,context});assert.deepEqual(errors,[]);return;}

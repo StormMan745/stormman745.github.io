@@ -9,6 +9,9 @@
     const $ = id => document.getElementById(id);
     const dialog = $('routineDialog');
     let editing = null, busy = false, midnightTimer, renderedKey = '', markedFocus = null;
+    let pushSave = null;
+    const pushPreferences = (pet = appData.pet) => ({ enabled: pet?.dailyRoutinePush?.enabled === true,
+        minutes: [5, 10, 15, 30].includes(Number(pet?.dailyRoutinePush?.minutes)) ? Number(pet.dailyRoutinePush.minutes) : 10 });
     const pendingTasks = new Map();
     const copy = value => JSON.parse(JSON.stringify(value));
     const validTime = value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
@@ -35,7 +38,7 @@
                 // Older clients edit only time; keep that change as the first event.
                 if (validTime(row.time)) times[0] = row.time;
                 return { id: row.id, name: String(row.name || 'Ежедневное дело').slice(0, 80),
-                    time: times[0], times, icon: icons.has(row.icon) ? row.icon : '🐾', checks };
+                    time: times[0], times, icon: icons.has(row.icon) ? row.icon : '🐾', checks, pushEnabled: row.pushEnabled !== false };
             });
     }
     function node(tag, text, className) {
@@ -59,9 +62,17 @@
         const states = tasks.map(task => marks(task, completed));
         const done = states.filter(state => state.every(Boolean)).length;
         const total = states.flat().length, checked = states.flat().filter(Boolean).length;
-        const key = JSON.stringify([activeUserId, petId, date, tasks, states]);
+        const preference = pushPreferences();
+        const key = JSON.stringify([activeUserId, petId, date, tasks, states, preference, Boolean(pushSave)]);
         if (!force && renderedKey === key) return;
         renderedKey = key;
+        $('routinePushSettings').hidden = Boolean(appData.pet?.isPlaceholder);
+        $('routinePushEnabled').checked = preference.enabled;
+        $('routinePushMinutes').value = String(preference.minutes);
+        $('routinePushEnabled').disabled = Boolean(pushSave) || !activeUserId;
+        $('routinePushMinutes').disabled = Boolean(pushSave) || !preference.enabled;
+        $('routinePushControls').hidden = !preference.enabled;
+        $('routinePushHint').textContent = preference.enabled ? `Отдельный push за ${preference.minutes} минут до каждого времени. Выполненные дела пропускаются. На устройстве должны быть подключены push.` : 'Push ежедневных дел выключен для этого питомца. Обычные напоминания работают отдельно.';
         const focused = document.activeElement?.closest('[data-routine][data-task-id]');
         const restoreFocus = focused ? { action: focused.dataset.routine, id: focused.dataset.taskId, step: focused.dataset.step } : null;
         $('routineProgressLabel').textContent = tasks.length ? (done === tasks.length ? 'Все дела сделаны. Вы отличная команда!' : total === tasks.length ? `${done} из ${tasks.length} дел выполнено` : `${checked} из ${total} отметок · ${done} из ${tasks.length} дел выполнено`) : 'Маленькие дела, большая забота';
@@ -128,6 +139,7 @@
         $('routineName').value = task?.name || '';
         $('routineIcon').value = task?.icon || '🐾';
         $('routineChecks').value = task?.checks || 1;
+        $('routineTaskPush').checked = task?.pushEnabled !== false;
         renderTimeInputs(false);
         $('routineDelete').hidden = !task;
         $('routineFormStatus').textContent = '';
@@ -185,7 +197,7 @@
         const next = remove ? current.filter(task => task.id !== draft.id) : current.slice();
         if (!remove) {
             const times = draft.times.slice(0, 12).map(time => validTime(time) ? time : draft.times[0]);
-            const task = { id: draft.id || createEntryId('routine'), name, time: times[0], times, checks, icon: icons.has($('routineIcon').value) ? $('routineIcon').value : '🐾' };
+            const task = { id: draft.id || createEntryId('routine'), name, time: times[0], times, checks, icon: icons.has($('routineIcon').value) ? $('routineIcon').value : '🐾', pushEnabled: $('routineTaskPush').checked };
             const index = next.findIndex(row => row.id === task.id);
             if (index < 0) next.push(task); else next[index] = task;
         }
@@ -256,6 +268,29 @@
     $('routineForm').addEventListener('submit', event => { event.preventDefault(); commit(); });
     $('routineChecks').addEventListener('input', () => renderTimeInputs());
     $('routineTimesGrid').addEventListener('input', rememberTimes);
+    async function savePushPreferences() {
+        if (pushSave || !activeUserId || appData.pet?.isPlaceholder) return;
+        const pet = appData.pet, uid = activeUserId, petId = getActivePetKey(), previous = pet.dailyRoutinePush, previousRoutine = pet.dailyRoutine;
+        const preference = { enabled: $('routinePushEnabled').checked, minutes: Number($('routinePushMinutes').value) };
+        if (![5, 10, 15, 30].includes(preference.minutes)) return;
+        const operation = {}; pushSave = operation;
+        pet.dailyRoutinePush = preference;
+        if (preference.enabled && !Array.isArray(pet.dailyRoutine)) pet.dailyRoutine = items(pet);
+        render(true);
+        try {
+            const saved = await saveData();
+            if (activeUserId !== uid || getActivePetKey() !== petId) return;
+            $('routineStatus').textContent = saved ? preference.enabled ? `Push ежедневных дел включён за ${preference.minutes} минут. Подключите уведомления на этом устройстве, если ещё не сделали этого.` : 'Push ежедневных дел выключен для этого питомца.' : 'Настройка сохранена на устройстве. На сервере она применится после синхронизации.';
+        } catch {
+            if (activeUserId === uid && appData.pet === pet) {
+                if (previous === undefined) delete pet.dailyRoutinePush; else pet.dailyRoutinePush = previous;
+                if (previousRoutine === undefined) delete pet.dailyRoutine; else pet.dailyRoutine = previousRoutine;
+                $('routineStatus').textContent = 'Не удалось сохранить настройку. Повторите попытку.';
+            }
+        } finally { if (pushSave === operation) pushSave = null; if (activeUserId === uid) render(true); }
+    }
+    $('routinePushEnabled').addEventListener('change', savePushPreferences);
+    $('routinePushMinutes').addEventListener('change', savePushPreferences);
     document.addEventListener('click', event => {
         const button = event.target.closest?.('[data-routine]');
         if (!button || button.disabled) return;
@@ -266,6 +301,7 @@
         else if (action === 'close') dialog.close();
         else if (action === 'delete') commit(true);
         else if (action === 'pet') openPetForm(true);
+        else if (action === 'connect-push') enablePushNotifications();
     });
     dialog.addEventListener('close', () => {
         const previous = editing; editing = null;
@@ -283,7 +319,7 @@
     }
     window.addEventListener('petcare:data-changed', () => render());
     window.addEventListener('petcare:account-ready', refreshDay);
-    window.addEventListener('petcare:account-reset', () => { dialog.close(); renderedKey = ''; markedFocus = null; pendingTasks.clear(); $('routineStatus').textContent = ''; });
+    window.addEventListener('petcare:account-reset', () => { dialog.close(); renderedKey = ''; markedFocus = null; pushSave = null; pendingTasks.clear(); $('routineStatus').textContent = ''; });
     document.addEventListener('visibilitychange', refreshDay);
     window.PetCareRoutine = { render, items, toggle, isCompleted };
     render(); refreshDay();

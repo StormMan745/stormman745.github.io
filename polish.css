@@ -134,6 +134,15 @@ section.today .task.done .task-icon { filter: saturate(.55); }
 .routine-form-actions button { flex: 1; width: auto; margin: 0; font: inherit; font-size: 14px; font-weight: 600; padding: 12px 10px; cursor: pointer; white-space: nowrap; overflow-wrap: normal; }
 .routine-delete { display: block; width: 100%; min-height: 44px; padding: 10px; background: transparent; border: 1px solid transparent; border-radius: 12px; color: #954e39; font: inherit; font-size: 12px; cursor: pointer; }
 .routine-delete:hover { background: #fcf0e8; border-color: #f0dacf; }
+.routine-push-settings { margin-top: 18px; padding: 15px; border: 1px solid var(--pc-line); border-radius: 17px; background: #f3f7ed; }
+.routine-push-settings[hidden],.routine-push-controls[hidden] { display: none; }
+.routine-push-switch { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0; color: var(--pc-ink); font-size: 13px; font-weight: 600; line-height: 1.5; cursor: pointer; }
+.routine-push-switch>input { flex: 0 0 21px; width: 21px; height: 21px; min-height: 21px; margin: 0; accent-color: #357b59; }
+.routine-push-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding-top: 10px; }
+.routine-push-controls>label { flex: 1 1 130px; margin: 0; color: var(--pc-muted); font-size: 11px; }
+.routine-push-controls select { width: 100%; min-height: 44px; margin: 7px 0 0; padding: 9px 10px; border-radius: 12px; font-size: 16px; }
+.routine-push-controls>button { min-height: 44px; margin: 0; padding: 9px 12px; white-space: normal; }
+.routine-push-settings>.routine-field-hint { margin: 9px 0 0; }
 .discover-card { box-shadow: 0 5px 0 #e6d8c7,inset 0 1px #fff; }
 .discover-assistant { box-shadow: 0 5px 0 #ded5e7,inset 0 1px #fff; }
 .clinic-entry { border-color: var(--pc-line); box-shadow: var(--pc-surface-shadow); }

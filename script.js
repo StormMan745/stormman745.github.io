@@ -4617,7 +4617,7 @@ function bindAuthControls() {
 bindAuthControls();
 bindPetCareActions();
 window.PetCareNative?.attach({
-    getState: () => ({ userId: activeUserId, reminders: appData.reminders || [] }),
+    getState: () => ({ userId: activeUserId, reminders: appData.reminders || [], pets: appData.pets || [], completedTasks: appData.completedTasks || [] }),
     showHome,
     showReminders,
     startAutoRefresh: () => supabaseClient.auth.startAutoRefresh(),

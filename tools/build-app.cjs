@@ -30,7 +30,7 @@ html=html.replace('</head>',`    <link rel="stylesheet" href="app.bundle.css?v=$
 html=html.replace(new RegExp('<script src="(?:'+pattern([...scripts,'app.bundle.js'])+')(?:\\?[^"<>]*)?"></script>\\r?\\n','g'),'');
 html=html.replace('</body>',`<script src="app.bundle.js?v=${stats[0].hash}"></script>\n</body>`);
 fs.writeFileSync(path.join(root,'index.html'),html);
-let sw=read('sw.js').replace(/petcare-shell-v\d+-[\w-]+/,'petcare-shell-v56-map-location');
+let sw=read('sw.js').replace(/petcare-shell-v\d+-[\w-]+/,'petcare-shell-v57-routine-push');
 for(const file of [...scripts,...styles])sw=sw.replace(new RegExp('    "/'+file.replaceAll('.','\\.')+'",\\r?\\n'),'');
 if(!sw.includes('"/app.bundle.js"'))sw=sw.replace('    "/index.html",','    "/index.html",\n    "/app.bundle.js",\n    "/app.bundle.css",');
 fs.writeFileSync(path.join(root,'sw.js'),sw);

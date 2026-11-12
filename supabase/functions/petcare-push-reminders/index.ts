@@ -140,6 +140,59 @@ function getPetName(user: Record<string, unknown>, reminder: Record<string, unkn
   return typeof pet?.name === "string" && pet.name.trim() ? pet.name.trim().slice(0, 60) : "вашего питомца";
 }
 
+function routinePushEvents(account: Record<string, any>, now: Date, timeZone: string) {
+  const events: Array<{ id: string; date: string; petId: string; name: string; time: string; ttl: number; expiresAt: number }> = [];
+  let parts, zone = timeZone || 'UTC';
+  try { parts = localTimeParts(now, zone); } catch { zone = 'UTC'; parts = localTimeParts(now, zone); }
+  const today = dateKeyFromParts(parts);
+  const wallNow = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+  const nowMs = now.getTime(), offset = wallNow - Math.floor(nowMs / 1000) * 1000;
+  const tomorrow = new Date(Date.UTC(+parts.year, +parts.month - 1, +parts.day + 1)).toISOString().slice(0, 10);
+  const pets = new Map<string, Record<string, any>>();
+  for (const pet of [...(Array.isArray(account.pets) ? account.pets : []), account.pet]) {
+    if (pet && typeof pet === 'object' && !pet.isPlaceholder && (pet.dbId || pet.id)) pets.set(String(pet.dbId ?? pet.id), pet);
+  }
+  const completed = new Set((Array.isArray(account.completed_tasks) ? account.completed_tasks : [])
+    .filter((row: any) => row && typeof row === 'object').map((row: any) => JSON.stringify([String(row.petId), String(row.date), String(row.id)])));
+  for (const [petId, pet] of pets) {
+    if (pet.dailyRoutinePush?.enabled !== true || !Array.isArray(pet.dailyRoutine)) continue;
+    const minutes = [5, 10, 15, 30].includes(pet.dailyRoutinePush.minutes) ? pet.dailyRoutinePush.minutes : 10;
+    const seen = new Set();
+    for (const task of pet.dailyRoutine.slice(0, 20)) {
+      if (!task || typeof task.id !== 'string' || !task.id || seen.has(task.id) || task.pushEnabled === false) continue;
+      seen.add(task.id);
+      const name = typeof task.name === 'string' ? task.name.trim().slice(0, 80) : '';
+      if (!name) continue;
+      const checks = Number.isInteger(Number(task.checks)) ? Math.max(1, Math.min(12, Number(task.checks))) : 1;
+      for (let step = 1; step <= checks; step++) {
+        const time = step === 1 && typeof task.time === 'string' ? task.time : task.times?.[step - 1] || task.time;
+        if (typeof time !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) continue;
+        const [hour, minute] = time.split(':').map(Number);
+        const completionId = step === 1 ? task.id : `${task.id}::check:${step}`;
+        for (const date of [today, tomorrow]) {
+          if (completed.has(JSON.stringify([petId, date, completionId]))) continue;
+          const [year, month, day] = date.split('-').map(Number);
+          const wallDue = Date.UTC(year, month - 1, day, hour, minute);
+          if (Math.abs(wallDue - wallNow) > 3 * 3600000) continue;
+          // Convert the event's local clock time, including an intervening DST change.
+          let due = wallDue - offset, valid = false;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const p = localTimeParts(new Date(due), zone);
+            const local = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+            if (local === wallDue) { valid = true; break; }
+            due += wallDue - local;
+          }
+          const elapsed = nowMs - (due - minutes * 60000);
+          if (!valid || elapsed < 0 || elapsed >= 15 * 60000 || nowMs >= due) continue;
+          events.push({ id: JSON.stringify(['routine', petId, task.id, step, time]), date, petId,
+            name: `${name}${checks > 1 ? ` · ${step} из ${checks}` : ''}`, time, ttl: Math.max(1, Math.ceil((due - nowMs) / 1000)), expiresAt: due });
+        }
+      }
+    }
+  }
+  return events;
+}
+
 function formatPushError(error: unknown) {
   const statusCode = Number((error as { statusCode?: number })?.statusCode || 0);
   return statusCode ? `push_service_${statusCode}` : "push_service_error";
@@ -253,7 +306,7 @@ Deno.serve(async request => {
     }
 
     const [{ data: accounts, error: accountsError }, { data: subscriptions, error: subscriptionsError }] = await Promise.all([
-      admin.rpc("petcare_get_push_reminder_data"),
+      admin.rpc("petcare_get_push_schedule_data"),
       admin.from("petcare_push_subscriptions")
         .select("user_id,endpoint,subscription,timezone_name")
         .limit(5000),
@@ -285,14 +338,17 @@ Deno.serve(async request => {
         : [];
       const endpointHash = await hashText(String(device.endpoint));
 
-      for (const reminder of reminders) {
-        const dueDate = reminderIsDueNow(reminder, now, String(device.timezone_name || "UTC"));
+      const routineEvents = routinePushEvents(account, now, String(device.timezone_name || 'UTC'));
+      for (const reminder of [...reminders, ...routineEvents]) {
+        const routine = routineEvents.includes(reminder as any);
+        const dueDate = routine ? String(reminder.date) : reminderIsDueNow(reminder, now, String(device.timezone_name || "UTC"));
         const reminderId = String(reminder.id ?? "");
         const reminderText = typeof reminder.name === "string" ? reminder.name.trim().slice(0, 180) : "";
         if (!dueDate || !reminderId || !reminderText) continue;
 
         jobs.push(async()=>{
-        const notificationKey = `${userId}:${reminderId}:${dueDate}`;
+        if (routine && Number(reminder.expiresAt) <= Date.now()) { skipped += 1; return; }
+        const notificationKey = routine ? JSON.stringify([userId, reminderId, dueDate]) : `${userId}:${reminderId}:${dueDate}`;
         const {data:attemptCount,error:claimError}=await admin.rpc("petcare_claim_push_delivery",{
             p_endpoint_hash:endpointHash,p_notification_key:notificationKey,p_user_id:userId,p_reminder_id:reminderId,p_due_date:dueDate,
         });
@@ -302,16 +358,19 @@ Deno.serve(async request => {
         const petName = getPetName(account, reminder);
         const title = petName === "вашего питомца" ? "Напоминание PetCare" : `${petName}: напоминание`;
         const notificationTag = await topicFor(notificationKey);
-        const body = `${reminderText}${reminder.time ? ` · ${reminder.time}` : ""}`;
+        const body = `${routine ? 'Скоро: ' : ''}${reminderText}${reminder.time ? ` · ${reminder.time}` : ""}`;
         try {
+          // A busy provider/claim must not turn an advance alert into a late one.
+          const ttl = routine ? Math.ceil((Number(reminder.expiresAt) - Date.now()) / 1000) : 3600;
+          if (ttl <= 0) { skipped += 1; return; }
           await webpush.sendNotification(subscription, JSON.stringify({
             title,
             body,
             tag: notificationTag,
             timestamp: now.getTime(),
-            url: "/?page=reminders",
+            url: routine ? '/?page=home' : '/?page=reminders',
           }), {
-            TTL: 3600,
+            TTL: ttl,
             urgency: "high",
             topic: notificationTag,
             vapidDetails,

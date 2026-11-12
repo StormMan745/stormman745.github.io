@@ -8,6 +8,7 @@
     "test:auth": "node check-auth-controls.cjs",
     "test:push": "node check-push.cjs && node check-push-browser.cjs",
     "test:routine-times": "node check-offline-care.cjs --routine-times && node check-routine-day.cjs",
+    "test:routine-push": "node check-push.cjs && node check-offline-care.cjs --routine-push && node --test ../mobile/tests/reminders.test.mjs",
     "test:assistant-records": "node check-assistant-records.cjs && node check-offline-care.cjs --assistant-records",
     "test:memories": "node check-offline-care.cjs --memories",
     "test:map-location": "node check-offline-care.cjs --map-location",
@@ -22,6 +23,7 @@
     "esbuild": "0.25.5",
     "mediabunny": "1.65.2",
     "pdfjs-dist": "6.5.438",
-    "qrcode-generator": "2.0.4"
+    "qrcode-generator": "2.0.4",
+    "tesseract.js": "6.0.1"
   }
 }
