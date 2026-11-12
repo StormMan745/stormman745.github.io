@@ -12,7 +12,12 @@ values ('d1000000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-00000000
 insert into storage.objects(bucket_id,name) values ('petcare-documents','a1000000-0000-4000-8000-000000000001/rls-test.pdf');
 do $$ begin
     if (select count(*) from public.petcare_documents where pet_id='test-pet') <> 1 then raise exception 'Own document hidden'; end if;
-    update public.petcare_documents set title='Changed' where pet_id='test-pet';
+    update public.petcare_documents set title='Changed', extracted_text='Проверенное назначение' where pet_id='test-pet';
+    if not exists(select 1 from public.petcare_documents where extracted_text='Проверенное назначение' and pet_id='test-pet') then raise exception 'Own transcription edit failed'; end if;
+    begin
+        update public.petcare_documents set extracted_text=repeat('x',50001) where pet_id='test-pet';
+        raise exception 'Oversized transcription allowed';
+    exception when check_violation then null; end;
     if not exists(select 1 from public.petcare_documents where title='Changed' and pet_id='test-pet') then raise exception 'Own edit failed'; end if;
     begin
         update public.petcare_documents set user_id='b1000000-0000-4000-8000-000000000002' where pet_id='test-pet';
@@ -24,7 +29,7 @@ select set_config('request.jwt.claims','{"sub":"b1000000-0000-4000-8000-00000000
 do $$ declare affected integer; begin
     if exists(select 1 from public.petcare_documents where pet_id='test-pet') then raise exception 'Cross-account read allowed'; end if;
     if exists(select 1 from storage.objects where bucket_id='petcare-documents' and name like 'a1000000-%') then raise exception 'Cross-account file read allowed'; end if;
-    update public.petcare_documents set deleted_at=now() where pet_id='test-pet';
+    update public.petcare_documents set deleted_at=now(), extracted_text='Spoof' where pet_id='test-pet';
     get diagnostics affected = row_count;
     if affected <> 0 then raise exception 'Cross-account delete allowed'; end if;
     begin

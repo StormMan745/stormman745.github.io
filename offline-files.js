@@ -59,7 +59,7 @@
         await cache(uid,'petcare-documents',row.storage_path,blob);
         await enqueue({key:`${uid}:document-put:${row.id}`,userId:uid,type:'document-put',row});
     }
-    const metadata=row=>Object.fromEntries(['title','category','document_date','record_id'].map(key=>[key,row[key]??null]));
+    const metadata=row=>Object.fromEntries(['title','category','document_date','record_id','extracted_text'].map(key=>[key,row[key]??(key==='extracted_text'?'':null)]));
     async function editDocument(row,fields) {
         const uid=activeUserId,key=`${uid}:document-edit:${row.id}`;
         if(!uid||row.user_id!==uid)throw new Error('Аккаунт изменился.');

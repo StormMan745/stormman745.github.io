@@ -31,6 +31,13 @@ test('all pets share the nearest sixty slots, with unique ids', () => {
   for (let i = 1; i < plan.length; i++) assert.ok(plan[i].schedule.at >= plan[i - 1].schedule.at);
 });
 test('empty account removes all pending work', () => assert.deepEqual(planReminders([], now), []));
+
+test('indefinite medication courses keep scheduling without a synthetic end date',()=>{
+ const plan=planReminders([{...reminder,repeat:'daily',date:'2020-01-01',endDate:null}],now,60);
+ assert.equal(plan.length,60);
+ assert(plan.every(n=>n.schedule.at>now));
+ assert.equal(plan[59].schedule.at.getHours(),13);
+});
 test('medication courses stop at their end date and suppress taken or skipped doses',()=>{
  const plan=planReminders([{...reminder,repeat:'daily',date:'2026-11-04',endDate:'2026-11-06',completedDates:['2026-11-04','2026-11-05']}],now);
  assert.equal(plan.length,1);assert.equal(plan[0].schedule.at.getDate(),6);

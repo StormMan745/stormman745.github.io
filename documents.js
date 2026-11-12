@@ -11,6 +11,9 @@
     let busy = false;
     let editingId = null;
     let returnPage = 'healthPage';
+    let recognition = null;
+    let recognitionVersion = 0;
+    let reviewRequired = false;
     const printWindows = new Set();
     const el = id => document.getElementById(id);
     const current = ctx => ctx && ctx === context && ctx.userId === activeUserId && ctx.petId === getActivePetKey();
@@ -42,7 +45,8 @@
     function setBusy(value) {
         busy = value;
         el('documentUploadForm').setAttribute('aria-busy', String(value));
-        el('documentUploadForm').querySelectorAll('input, select, button').forEach(control => { control.disabled = value; });
+        el('documentUploadForm').querySelectorAll('input, select, button, textarea').forEach(control => { control.disabled = value; });
+        el('documentRecognizeCancel').disabled = false;
         el('documentsPage').querySelectorAll('[data-document-id]').forEach(control => { control.disabled = value; });
         el('documentSave').textContent = value ? 'Сохраняю…' : editingId ? 'Сохранить изменения' : 'Загрузить документ';
     }
@@ -63,6 +67,8 @@
     }
 
     function resetEditor(recordId = '') {
+        stopRecognition();
+        reviewRequired = false;
         editingId = null;
         el('documentUploadForm').reset();
         el('documentDate').value = getLocalDateInputValue();
@@ -74,7 +80,45 @@
         setBusy(busy);
     }
 
+    function stopRecognition() {
+        recognitionVersion++;
+        recognition?.cancel(); recognition = null;
+        el('documentRecognizeCancel').hidden = true;
+        el('documentRecognitionStatus').textContent = '';
+    }
+
+    async function recognize() {
+        if (busy || !current(context)) return;
+        const ctx = context, version = ++recognitionVersion;
+        const row = editingId && rows.find(item => item.id === editingId);
+        setBusy(true);
+        el('documentRecognizeCancel').hidden = false;
+        const report = message => { if (current(ctx) && version === recognitionVersion) el('documentRecognitionStatus').textContent = message; };
+        report('Подготавливаю документ…');
+        const job = PetCareDocumentOCR.create(); recognition = job;
+        try {
+            const file = row ? await PetCareFiles.download(BUCKET, row.storage_path, ctx.userId) : el('documentFile').files[0];
+            const mime = row ? row.mime_type : (await inspectFile(file)).mime;
+            if (!current(ctx) || version !== recognitionVersion) return;
+            const result = await job.recognize(file, mime, report);
+            if (!current(ctx) || version !== recognitionVersion) return;
+            el('documentText').value = result.text;
+            if (result.title) el('documentTitle').value = result.title;
+            if (Object.hasOwn(categories, result.category)) el('documentCategory').value = result.category;
+            el('documentDate').value = result.date;
+            el('documentReviewed').checked = false;
+            reviewRequired = true;
+            report('Черновик готов. Проверьте название, дату и весь текст по оригиналу. Если дата не определена, укажите её вручную.');
+            el('documentText').focus();
+        } catch (error) { report(error.message || 'Не удалось распознать документ. Оригинал можно сохранить без распознавания.'); }
+        finally {
+            job.cancel();
+            if (current(ctx) && version === recognitionVersion) { recognition = null; setBusy(false); el('documentRecognizeCancel').hidden = true; }
+        }
+    }
+
     function resetContext() {
+        stopRecognition(); setBusy(false);
         printWindows.forEach(popup => { if (!popup.closed) popup.close(); });
         printWindows.clear();
         generation += 1;
@@ -117,7 +161,7 @@
         const recordFilter = el('documentRecordFilter').value;
         const filtered = rows.filter(row => {
             const record = findRecord(row.record_id);
-            const text = [row.title, row.file_name, categories[row.category], record?.name, record?.clinic, record?.diagnosis].filter(Boolean).join(' ').toLocaleLowerCase('ru-RU');
+            const text = [row.title, row.extracted_text, row.file_name, categories[row.category], record?.name, record?.clinic, record?.diagnosis].filter(Boolean).join(' ').toLocaleLowerCase('ru-RU');
             return (!query || text.includes(query)) && (!type || row.category === type)
                 && (!recordFilter || (recordFilter === 'unlinked' ? !record : row.record_id === recordFilter));
         });
@@ -145,6 +189,7 @@
                 const card = node('div', 'document-card');
                 const info = node('div', 'document-card-info');
                 info.append(node('strong', '', row.title), node('small', '', `${categories[row.category] || 'Документ'} · ${formatHistoryDate(row.document_date)}`), node('small', 'document-filename', `${row.file_name} · ${fileSize(row.file_size)}`));
+                if (row.extracted_text) info.append(node('small', '', 'Проверенный текст доступен в поиске'));
                 if (row.record_id && !record) info.append(node('small', '', 'Медицинская запись удалена. Документ сохранён.'));
                 const actions = node('div', 'document-actions');
                 actions.append(button('Печать', 'print', row.id), button('Открыть ↗', 'open', row.id), button('Скачать', 'download', row.id), button('Изменить', 'edit', row.id), button('Удалить', 'delete', row.id));
@@ -208,7 +253,9 @@
         const editId = editingId;
         const file = el('documentFile').files[0];
         const fields = { title: el('documentTitle').value.trim(), category: el('documentCategory').value,
-            document_date: el('documentDate').value, record_id: el('documentRecord').value || null };
+            document_date: el('documentDate').value, record_id: el('documentRecord').value || null,
+            extracted_text: el('documentText').value.trim() };
+        if ((fields.extracted_text || reviewRequired) && !el('documentReviewed').checked) { status('Сверьте название, дату и текст с оригиналом и отметьте подтверждение перед сохранением.', true); return; }
         if (!fields.title) { status('Укажите название документа.', true); return; }
         if (fields.record_id && !findRecord(fields.record_id)) { status('Выберите медицинскую запись этого питомца.', true); return; }
         setBusy(true);
@@ -242,6 +289,8 @@
         el('documentTitle').value = row.title;
         el('documentCategory').value = row.category;
         el('documentDate').value = row.document_date;
+        el('documentText').value = row.extracted_text || '';
+        el('documentReviewed').checked = true;
         el('documentFile').hidden = true;
         el('documentFile').required = false;
         el('documentFileHint').textContent = `Файл: ${row.file_name}. Чтобы заменить оригинал, загрузите новый документ.`;
@@ -375,7 +424,12 @@
     }
 
     el('documentUploadForm').addEventListener('submit', save);
+    el('documentRecognize').addEventListener('click', recognize);
+    el('documentRecognizeCancel').addEventListener('click', () => { stopRecognition(); setBusy(false); el('documentRecognitionStatus').textContent = 'Распознавание остановлено. Документ не изменён.'; });
+    ['documentTitle', 'documentDate', 'documentText'].forEach(id => el(id).addEventListener('input', () => { el('documentReviewed').checked = false; }));
     el('documentFile').addEventListener('change', () => {
+        stopRecognition(); reviewRequired = false;
+        el('documentText').value = ''; el('documentReviewed').checked = false;
         const file = el('documentFile').files[0];
         if (file && !el('documentTitle').value.trim()) el('documentTitle').value = file.name.replace(/\.[^.]+$/, '').slice(0, 160);
     });
@@ -385,7 +439,7 @@
         const control = event.target.closest('[data-document-action]');
         if (!control) return;
         const action = control.dataset.documentAction;
-        if (action === 'close') { close(); return; }
+        if (action === 'close') { if (recognition) { stopRecognition(); setBusy(false); } close(); return; }
         if (busy) return;
         if (action === 'refresh') { load(); return; }
         if (action === 'cancel') { resetEditor(); el('documentEditor').open = false; return; }

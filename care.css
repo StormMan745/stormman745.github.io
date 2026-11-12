@@ -113,3 +113,13 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline:3px solid #
  .bottom-menu .care-nav-more span { font-size:23px;line-height:1; }
  .bottom-menu:has(a:is([data-pc-click="nav-stories"],[data-pc-click="nav-profile"],[data-pc-click="nav-assistant"])[aria-current="page"]) .care-nav-more { background:#e9efdb;color:#36573e; }
 }
+.notification-checklist { flex: 1 0 100%; min-width: 0; }
+.notification-checklist dl { margin: 0; display: grid; gap: 10px; }
+.notification-checklist dl > div { padding: 12px; border: 1px solid #dce6d8; border-radius: 12px; background: #fffefa; }
+.notification-checklist dt { font-weight: 700; color: #174f3b; }
+.notification-checklist dd { margin: 5px 0 0; color: #43594c; overflow-wrap: anywhere; }
+.notification-checklist dd[data-state="ok"] { color: #1b6239; }
+.notification-checklist dd[data-state="warning"] { color: #8a432d; }
+#notificationTestConfirmation[hidden], #notificationTestHelp[hidden] { display: none; }
+.notification-checklist button { min-height: 44px; }
+#courseEndField[hidden] { display: none; }

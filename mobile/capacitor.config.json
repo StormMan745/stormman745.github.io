@@ -1,0 +1,22 @@
+{
+  "appId": "app.petcare.companion",
+  "appName": "PetCare",
+  "webDir": "www",
+  "backgroundColor": "#fcfbf7",
+  "server": {
+    "hostname": "localhost",
+    "androidScheme": "https",
+    "iosScheme": "capacitor"
+  },
+  "android": { "allowMixedContent": false },
+  "ios": { "contentInset": "automatic", "preferredContentMode": "mobile" },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "launchShowDuration": 1500,
+      "backgroundColor": "#fcfbf7",
+      "showSpinner": false
+    },
+    "LocalNotifications": { "iconColor": "#174f3b", "smallIcon": "ic_stat_petcare" }
+  }
+}

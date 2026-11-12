@@ -34,6 +34,9 @@ module.exports=async({page,context,profiles,uid,other,objects,base})=>{
   await page.evaluate(()=>showStories());
   await page.locator('[data-pc-click="story-add"]').click();await page.locator('[data-pc-click="story-create"]').click();
   await page.waitForFunction(()=>appData.storyProjects.length===1&&PetCareSync.state.phase==='saved');
+  assert.equal(await page.evaluate(()=>appData.storyProjects[0].month),null,'A memory does not require a month');
+  assert.equal(await page.evaluate(()=>appData.storyProjects[0].startDate),null,'No reminder start date without reminders');
+  assert.match(await page.locator('.story-card h3').innerText(),/без даты/);
   await page.locator('[data-pc-click="story-upload-many"]').click();
   await page.locator('#storyPhotoInput').setInputFiles(photos.map((b,i)=>({name:'pet-'+i+'.jpg',mimeType:'image/jpeg',buffer:Buffer.from(b,'base64')})));
   await page.waitForFunction(()=>appData.storyProjects[0].photos.length===4&&storyOperationsInProgress.size===0,{},{timeout:20000}).catch(async error=>{console.log(await page.evaluate(()=>({stories:appData.storyProjects,status:document.querySelector('.story-status')?.textContent,busy:[...storyOperationsInProgress]})));throw error;});

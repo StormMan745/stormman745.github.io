@@ -12,13 +12,17 @@
     "test:assistant-records": "node check-assistant-records.cjs && node check-offline-care.cjs --assistant-records",
     "test:memories": "node check-offline-care.cjs --memories",
     "test:map-location": "node check-offline-care.cjs --map-location",
+    "test:map-mobile": "node check-offline-care.cjs --map-mobile && node check-offline-care.cjs --map-mobile --iphone && node check-offline-care.cjs --map-location",
     "test:extras": "node check-offline-care.cjs --extras",
     "test:site-security": "node check-site-security.cjs && node check-browser-security.cjs",
     "build:pet-scene": "node build-pet-scene.cjs",
     "build:document-print": "node build-document-print.cjs",
     "test:security": "node security-edge-check.cjs",
     "test:care": "node check-care-edge.cjs && node check-auth-controls.cjs && node check-offline-care.cjs && node check-routine-day.cjs && node check-document-print.cjs",
-    "test:map-mobile": "node check-offline-care.cjs --map-mobile && node check-offline-care.cjs --map-mobile --iphone && node check-offline-care.cjs --map-location"
+    "build:document-ocr": "node build-document-ocr.cjs",
+    "test:document-ocr": "node check-offline-care.cjs --document-ocr",
+    "test:indefinite-courses": "node check-offline-care.cjs --indefinite-courses",
+    "test:photo-library": "node check-offline-care.cjs --photo-library"
   },
   "devDependencies": {
     "esbuild": "0.25.5",

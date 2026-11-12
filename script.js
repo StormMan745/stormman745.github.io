@@ -2525,7 +2525,7 @@ async function deleteStory(storyId, petId = getActivePetKey()) {
         alert("Дождитесь сохранения фото или создания видео, затем удалите подборку.");
         return;
     }
-    if (!window.confirm(`Удалить подборку за ${formatStoryMonth(story.month)} вместе с фото, видео и напоминаниями о съёмке?`)) return;
+    if (!window.confirm(`Удалить воспоминание «${formatStoryMonth(story.month)}» вместе с фото, видео и напоминаниями о съёмке?`)) return;
 
     storyOperationsInProgress.add(operationKey);
     try {
@@ -2621,6 +2621,7 @@ async function testPushNotification() {
     const userId = activeUserId;
     if (!userId || !('serviceWorker' in navigator)) return;
     const button = document.getElementById('pushTestButton');
+    const check = window.PetCareNotificationStatus?.begin();
     pushActionBusy = true;
     if (button) { button.disabled = true; button.textContent = 'Отправляю…'; }
     try {
@@ -2636,6 +2637,7 @@ async function testPushNotification() {
         });
         const result = await response.json();
         if (activeUserId !== userId) return;
+        if (check && !window.PetCareNotificationStatus?.isCurrent(check)) return;
         if (!response.ok || result.accepted !== true) {
             if (response.status === 410 || result.error === 'subscription_missing') {
                 await subscription.unsubscribe();
@@ -2644,6 +2646,7 @@ async function testPushNotification() {
             throw new Error(result.error || 'push_test_failed');
         }
         showPushResult('Пробное уведомление принято push-службой. Проверьте центр уведомлений. Если звука нет, проверьте звук PetCare и режим «Не беспокоить» в настройках устройства.');
+        window.PetCareNotificationStatus?.finish(check);
     } catch (error) {
         if (activeUserId !== userId) return;
         const messages = {
@@ -2655,10 +2658,12 @@ async function testPushNotification() {
             push_not_configured: 'Сервер уведомлений пока не настроен.',
             push_service_unavailable: 'Push-служба временно недоступна. Повторите проверку немного позже.'
         };
-        showPushResult(messages[error.message] || 'Не удалось отправить проверку. Проверьте интернет и повторите попытку.');
+        const message = messages[error.message] || 'Не удалось отправить проверку. Проверьте интернет и повторите попытку.';
+        showPushResult(message);
+        window.PetCareNotificationStatus?.finish(check, message, true);
     } finally {
         pushActionBusy = false;
-        if (button) { button.disabled = false; button.textContent = 'Отправить пробное уведомление'; }
+        if (button) { button.disabled = false; button.textContent = 'Проверить уведомления'; }
     }
 }
 
@@ -2684,6 +2689,11 @@ async function renderPushSettings() {
     const userId = activeUserId;
     const revision = ++pushSettingsRevision;
     const current = () => activeUserId === userId && revision === pushSettingsRevision;
+    const health = window.PetCareNotificationStatus;
+    const permission = typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+    health?.device({ schedule: 'Проверяется…', scheduleState: 'unknown',
+        permission: permission === 'granted' ? 'Разрешено браузером' : permission === 'denied' ? 'Запрещено — измените настройки устройства' : permission === 'unsupported' ? 'Недоступно в этом браузере' : 'Разрешение ещё не получено',
+        permissionState: permission === 'granted' ? 'ok' : 'warning' });
     enableButton.hidden = false;
     enableButton.disabled = false;
     disableButton.hidden = true;
@@ -2695,17 +2705,21 @@ async function renderPushSettings() {
         return;
     }
     if (pushRequiresInstallation()) {
+        health?.device({ schedule: 'Сначала установите PetCare на главный экран', scheduleState: 'warning' });
         status.textContent = "Установите PetCare на главный экран, чтобы получать push-уведомления.";
         enableButton.textContent = "Как установить";
         return;
     }
     enableButton.textContent = "Включить push";
     if (!window.isSecureContext || !("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+        health?.device({ schedule: 'Недоступна в этом браузере', scheduleState: 'warning' });
         status.textContent = "Этот браузер не поддерживает push-уведомления PetCare.";
         enableButton.disabled = true;
         return;
     }
     if (Notification.permission === "denied") {
+        health?.reset();
+        health?.device({ schedule: 'Заблокирована разрешением устройства', scheduleState: 'warning' });
         status.textContent = "Уведомления запрещены в настройках телефона или браузера.";
         enableButton.textContent = "Как разрешить";
         return;
@@ -2717,10 +2731,14 @@ async function renderPushSettings() {
         const subscription = await registration?.pushManager?.getSubscription();
         if (!current()) return;
         if (!subscription || Notification.permission !== "granted") {
+            health?.reset();
+            health?.device({ schedule: 'Выключена на этом устройстве', scheduleState: 'warning' });
             status.textContent = "Push выключен на этом устройстве.";
             return;
         }
         if (!pushKeyMatches(subscription)) {
+            health?.reset();
+            health?.device({ schedule: 'Подключение устарело — включите заново', scheduleState: 'warning' });
             status.textContent = 'Подключение устройства устарело. Включите push заново.';
             return;
         }
@@ -2733,16 +2751,20 @@ async function renderPushSettings() {
         if (linked) {
             await savePushSubscription(subscription, userId);
             if (!current()) return;
-            status.textContent = "Включено для этого аккаунта. Сервер отправляет сохранённые напоминания каждую минуту, даже когда PetCare закрыт. Звук зависит от настроек устройства.";
+            health?.device({ schedule: 'Включена для этого аккаунта. Используется сохранённое на сервере расписание', scheduleState: 'ok' });
+            status.textContent = "После изменения расписания дождитесь сохранения в аккаунте. Уведомления могут приходить при закрытом PetCare. Показ и звук зависят от сети и настроек устройства.";
             enableButton.hidden = true;
             disableButton.hidden = false;
             if (testButton) testButton.hidden = false;
         } else {
+            health?.reset();
+            health?.device({ schedule: 'Не подключена к этому аккаунту', scheduleState: 'warning' });
             status.textContent = "Разрешение на телефоне есть. Подключите push к этому аккаунту.";
             enableButton.textContent = "Подключить push";
         }
     } catch (error) {
         if (!current()) return;
+        health?.device({ schedule: navigator.onLine ? 'Не удалось проверить подключение' : 'Нет связи — подключение не проверено', scheduleState: 'unknown' });
         console.error("Не удалось проверить push-подписку:", error);
         status.textContent = navigator.onLine ? "Не удалось проверить подключение к аккаунту. Нажмите «Включить push», чтобы повторить." : "Нет связи. Ранее подключённые уведомления возобновятся при появлении интернета.";
     }
@@ -2802,6 +2824,7 @@ async function enablePushNotifications() {
         }
         await savePushSubscription(subscription, userId);
         if (activeUserId !== userId) return;
+        window.PetCareNotificationStatus?.reset();
         const status = document.getElementById("pushSettingsStatus");
         if (status) status.textContent = "Готово! Напоминания будут приходить на это устройство.";
         await renderPushSettings();
@@ -2819,6 +2842,7 @@ async function disablePushNotifications(options = {}) {
     if (window.PetCareNative) return window.PetCareNative.disableNotifications();
     const silent = Boolean(options.silent);
     if (!activeUserId) return;
+    const userId = activeUserId;
     try {
         const registration = await navigator.serviceWorker?.getRegistration("/");
         const subscription = await registration?.pushManager?.getSubscription();
@@ -2827,8 +2851,12 @@ async function disablePushNotifications(options = {}) {
                 p_endpoint: subscription.endpoint
             });
             if (error) throw error;
+            if (activeUserId !== userId) return;
+            window.PetCareNotificationStatus?.reset();
             await subscription.unsubscribe();
         }
+        if (activeUserId !== userId) return;
+        window.PetCareNotificationStatus?.reset();
         if (!silent) await renderPushSettings();
     } catch (error) {
         console.error("Не удалось отключить push-уведомления:", error);
@@ -2841,7 +2869,7 @@ async function disablePushNotifications(options = {}) {
 // ==============================
 
 function formatStoryMonth(monthKey) {
-    if (!/^\d{4}-\d{2}$/.test(String(monthKey || ""))) return "Подборка питомца";
+    if (!/^\d{4}-\d{2}$/.test(String(monthKey || ""))) return "Воспоминание без даты";
     const label = new Date(monthKey + "-01T12:00:00").toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
     return label.charAt(0).toLocaleUpperCase("ru-RU") + label.slice(1);
 }
@@ -2868,7 +2896,7 @@ function setStoryMediaSource(element, path) {
 
 function getStoryPhotos(story) {
     return Array.from({ length: STORY_MAX_PHOTOS }, (_, index) => index + 1).map(week => (story.photos || []).find(photo => Number(photo.week) === week && photo.path))
-        .filter(Boolean).sort((left, right) => String(left.date || "").localeCompare(String(right.date || "")) || Number(left.week) - Number(right.week));
+        .filter(Boolean).sort((left, right) => String(left.date || "9999-12-31").localeCompare(String(right.date || "9999-12-31")) || Number(left.week) - Number(right.week));
 }
 
 function getStoryCollageSignature(story) {
@@ -2923,7 +2951,7 @@ function makeStoryWeekCard(story, week) {
     if (photo) {
         const label = document.createElement("label");
         label.className = "story-photo-date-label";
-        label.textContent = "Дата фото";
+        label.textContent = "Дата фото (необязательно)";
         const date = document.createElement("input");
         date.type = "date";
         date.value = photo.date || "";
@@ -2976,7 +3004,7 @@ function renderStoryCard(story, container, editorOpen) {
     const subtitle = document.createElement("small");
     subtitle.textContent = `${appData.pet?.name || "Питомец"} · ${count} из ${STORY_MAX_PHOTOS} фото${count >= 2 ? ` · ${count * 5} секунд` : ''}`;
     titleBlock.append(title, subtitle);
-    heading.append(titleBlock, createEntryDeleteButton("story-delete", story.id, story.petId, `Удалить воспоминание за ${formatStoryMonth(story.month)}`));
+    heading.append(titleBlock, createEntryDeleteButton("story-delete", story.id, story.petId, `Удалить воспоминание: ${formatStoryMonth(story.month)}`));
     const progressTrack = document.createElement("div");
     progressTrack.className = "story-progress-track";
     progressTrack.setAttribute("role", "progressbar");
@@ -3030,14 +3058,15 @@ function renderStoryCard(story, container, editorOpen) {
 }
 
 function renderStories() {
+    window.PetCarePhotoLibrary?.render();
     const container = document.getElementById("storiesList");
     if (!container) return;
     const editors = new Map(container.dataset.userId === activeUserId ? [...container.querySelectorAll('[data-story-card-id]')].map(card => [card.dataset.storyCardId, card.querySelector('.story-photo-editor')?.open]) : []);
     container.dataset.userId = activeUserId || '';
     container.querySelectorAll('video').forEach(video => video.pause());
     container.replaceChildren();
-    const stories = (appData.storyProjects || []).filter(story => String(story.petId) === getActivePetKey())
-        .sort((left, right) => String(right.month || "").localeCompare(String(left.month || "")));
+    const stories = (appData.storyProjects || []).filter(story => story.kind !== 'photo-library' && String(story.petId) === getActivePetKey())
+        .sort((left, right) => String(right.month || right.createdAt || "").localeCompare(String(left.month || left.createdAt || "")));
     if (!stories.length) {
         const empty = document.createElement("p");
         empty.className = "empty-state";
@@ -3052,9 +3081,10 @@ function openStorySetup() {
         alert("Войдите в аккаунт и добавьте питомца, чтобы сохранять воспоминания.");
         return;
     }
-    const today = getLocalDateInputValue();
-    document.getElementById("storyMonthInput").value = today.slice(0, 7);
-    document.getElementById("storyStartDateInput").value = today;
+    document.getElementById("storyMonthInput").value = '';
+    document.getElementById("storyStartDateInput").value = '';
+    document.getElementById("storyStartDateInput").disabled = true;
+    document.getElementById("storyReminderStartField").hidden = true;
     document.getElementById("storyRemindersEnabled").checked = false;
     document.getElementById("storyReminderTimeInput").disabled = true;
     const dialog = document.getElementById("storySetupDialog");
@@ -3066,12 +3096,12 @@ function openStorySetup() {
 async function createStoryPlan() {
     const dialog = document.getElementById("storySetupDialog");
     if (!activeUserId || appData.pet?.isPlaceholder || dialog.dataset.userId !== activeUserId || dialog.dataset.petId !== getActivePetKey()) return;
-    const month = document.getElementById("storyMonthInput").value;
-    const startDate = document.getElementById("storyStartDateInput").value;
+    const month = document.getElementById("storyMonthInput").value || null;
     const time = document.getElementById("storyReminderTimeInput").value || "09:00";
     const remindersEnabled = document.getElementById("storyRemindersEnabled").checked;
-    if (!/^\d{4}-\d{2}$/.test(month) || !startDate) {
-        alert("Укажите месяц подборки и дату начала наблюдения.");
+    const startDate = remindersEnabled ? document.getElementById("storyStartDateInput").value : null;
+    if ((month && (!/^\d{4}-\d{2}$/.test(month) || !document.getElementById('storyMonthInput').validity.valid)) || (remindersEnabled && (!startDate || !document.getElementById('storyStartDateInput').validity.valid))) {
+        alert("Проверьте месяц подборки, если он указан, и дату первого напоминания, если напоминания включены.");
         return;
     }
     const userId = activeUserId;
@@ -3215,10 +3245,10 @@ async function updateStoryCollageSetting(input) {
         if (!["grid", "timeline"].includes(input.value)) return;
         story.collageLayout = input.value;
     } else {
-        if (!input.value || !input.validity.valid) { renderStories(); return; }
+        if (!input.validity.valid) { renderStories(); return; }
         const photo = (story.photos || []).find(item => Number(item.week) === Number(input.dataset.storyWeek));
         if (!photo) return;
-        photo.date = input.value;
+        photo.date = input.value || null;
     }
     renderStories();
     const synced = await saveData();
@@ -3300,7 +3330,7 @@ function drawStoryCollage(story, photos, images, petName) {
         drawCollagePhoto(context, images[index].image, x, y, cellWidth, photoHeight);
         context.fillStyle = "#174c3b";
         context.font = "bold 27px Arial";
-        context.fillText(`${String(index + 1).padStart(2, "0")}  ·  ${formatHistoryDate(photo.date)}`, x + 26, y + photoHeight + 48);
+        context.fillText(`${String(index + 1).padStart(2, "0")}${photo.date ? `  ·  ${formatHistoryDate(photo.date)}` : ''}`, x + 26, y + photoHeight + 48);
         context.fillStyle = "#7b8d80";
         context.font = "22px Arial";
         context.fillText(index === 0 ? "Начало нашей истории" : "Ещё один момент вместе", x + 26, y + photoHeight + 82);
@@ -3522,7 +3552,7 @@ async function generateStoryMemory(button) {
         for (const photo of photos) { loaded.push(await loadStoryImage(photo.path, 1280)); if (!isCurrent()) return; }
         const result = await runtime.create({
             images: loaded.map(item => item.image), photos, title: appData.pets.find(pet => getPetKey(pet) === String(story.petId))?.name || appData.pet?.name || 'Мой питомец',
-            month: formatStoryMonth(story.month), format: story.memoryFormat || 'portrait', music: story.memoryMusic || 'warm', signal: controller.signal, audioContext,
+            month: story.month ? formatStoryMonth(story.month) : '', format: story.memoryFormat || 'portrait', music: story.memoryMusic || 'warm', signal: controller.signal, audioContext,
             onProgress: value => {
                 if (!isCurrent()) return;
                 job.progress = value;
@@ -3595,7 +3625,7 @@ async function saveStoryMemory(button) {
             blob = data; storyMovieBlobCache.set(path, blob);
         }
         if (activeUserId !== userId || !appData.storyProjects.some(item => String(item.id) === String(story.id) && String(item.petId) === String(story.petId) && item.videoPath === path)) return;
-        const extension = /\.webm$/i.test(path) ? 'webm' : 'mp4', filename = `PetCare-${story.month}.${extension}`;
+        const extension = /\.webm$/i.test(path) ? 'webm' : 'mp4', filename = `PetCare-${story.month || story.id}.${extension}`;
         const file = new File([blob], filename, { type: extension === 'mp4' ? 'video/mp4' : 'video/webm' });
         if (window.PetCareNative) { await PetCareNative.shareFile(file, filename); return; }
         const share = { files: [file], title: 'Наши воспоминания · PetCare' };
@@ -3626,7 +3656,7 @@ async function saveStoryCollage(button) {
     const userId = activeUserId;
     if (!userId || !story || !isStoryCollageCurrent(story)) return;
     const path = story.collagePath;
-    const filename = `PetCare-${story.month}.jpg`;
+    const filename = `PetCare-${story.month || story.id}.jpg`;
     try {
         let blob = storyCollageBlobCache.get(path);
         if (!blob) {
@@ -4589,6 +4619,9 @@ function bindPetCareActions() {
             withStoryOperation(element.dataset.storyId, () => updateStoryCollageSetting(element));
         } else if (element.id === "storyRemindersEnabled") {
             document.getElementById("storyReminderTimeInput").disabled = !element.checked;
+            document.getElementById("storyReminderStartField").hidden = !element.checked;
+            document.getElementById("storyStartDateInput").disabled = !element.checked;
+            if (element.checked && !document.getElementById("storyStartDateInput").value) document.getElementById("storyStartDateInput").value = getLocalDateInputValue();
         }
     });
 

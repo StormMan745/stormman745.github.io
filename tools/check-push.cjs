@@ -45,6 +45,7 @@ const testRequest = (token = 'owner', body = { action: 'test', endpoint }, extra
   assert.equal(due({ ...reminder, repeat: 'daily', completedDates: ['2026-11-11'] }, '2026-11-11T21:02:00Z'), null);
   assert.equal(due({ ...reminder, repeat: 'weekly' }, '2026-11-18T20:59:00Z'), '2026-11-18');
   assert.equal(due({ ...reminder, repeat: 'daily', endDate: '2026-11-10' }, '2026-11-11T20:59:00Z'), null);
+  assert.equal(due({ ...reminder, repeat: 'daily', endDate: null }, '2030-11-11T20:59:00Z'), '2030-11-11', 'Indefinite course reminders have no end-date cutoff');
   const pet={id:'pet-one',name:'Барни',dailyRoutinePush:{enabled:true,minutes:10},dailyRoutine:[{id:'walk',name:'Прогулка',time:'08:00',checks:5,times:['08:00','11:00','14:00','17:00','20:00']}]};
   const routine=(date,p=pet,completed=[],zone='Europe/Moscow')=>vm.runInNewContext('routinePushEvents',runtime)({pets:[p],completed_tasks:completed},new Date(date),zone);
   assert.equal(routine('2026-11-12T04:49:59Z').length,0);

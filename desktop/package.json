@@ -1,0 +1,42 @@
+{
+  "name": "petcare-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PetCare — здоровье и уход за питомцами",
+  "author": "PetCare",
+  "main": "main.cjs",
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --win --x64 --publish never",
+    "test": "node tests/smoke.cjs"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "2.118.0",
+    "electron": "45.2.2",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2"
+  },
+  "build": {
+    "appId": "app.petcare.companion.desktop",
+    "productName": "PetCare",
+    "asar": true,
+    "directories": { "output": "releases" },
+    "files": ["main.cjs", "preload.cjs", "www/**/*", "icon.ico", "package.json"],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "icon.ico",
+      "artifactName": "PetCare-${version}-Windows-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PetCare",
+      "language": "1049"
+    },
+    "portable": { "artifactName": "PetCare-${version}-Windows-Portable.exe" }
+  }
+}

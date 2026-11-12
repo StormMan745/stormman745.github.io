@@ -1,0 +1,12 @@
+/* This stylesheet is included only in the packaged mobile application. */
+.install-app-button, #installHelpDialog { display: none !important; }
+html { -webkit-text-size-adjust: 100%; overscroll-behavior-y: none; }
+body { -webkit-tap-highlight-color: transparent; }
+input, textarea, select { font-size: max(16px, 1em); }
+.app { padding-top: max(18px, env(safe-area-inset-top)); }
+.assistant-chat { padding-top: env(safe-area-inset-top); }
+.native-notice { position: fixed; left: 16px; right: 16px; top: max(12px, env(safe-area-inset-top)); z-index: 10000; padding: 12px 16px; background: #174f3b; color: #fff; border-radius: 14px; box-shadow: 0 4px 20px #0002; }
+.native-sound-settings { margin-top: 18px; padding: 16px; border: 1px solid #cadbc5; border-radius: 16px; background: #eff5e9; }
+.native-sound-settings strong { color: #24513b; font-size: 14px; }
+.native-sound-settings p { margin: 8px 0 13px; color: #55644f; font-size: 13px; line-height: 1.65; }
+.native-sound-settings .secondary-button { width: 100%; min-height: 46px; border: 1px solid #a6c49c; color: #24513b; background: linear-gradient(145deg,#fff,#e2edd9); box-shadow: 0 3px 0 #cadcc0; white-space: normal; }

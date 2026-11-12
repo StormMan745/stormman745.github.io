@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://qexiyikdmdbdxgusqnee.supabase.co; media-src 'self' blob: https://qexiyikdmdbdxgusqnee.supabase.co; connect-src 'self' https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; frame-src https://yandex.ru https://api-maps.yandex.ru; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://qexiyikdmdbdxgusqnee.supabase.co; media-src 'self' blob: https://qexiyikdmdbdxgusqnee.supabase.co; connect-src 'self' https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; frame-src https://yandex.ru https://api-maps.yandex.ru; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>PetCare</title>
@@ -15,7 +15,7 @@
     <meta name="apple-mobile-web-app-title" content="PetCare">
     <script src="frameguard.js"></script>
     <script src="install.js?v=20261028-studio"></script>
-    <link rel="stylesheet" href="app.bundle.css?v=898878fe3483">
+    <link rel="stylesheet" href="app.bundle.css?v=a080b361fb50">
 </head>
 <body>
 <div class="app">
@@ -316,18 +316,24 @@
                 <label for="documentFile">PDF или скан</label>
                 <input type="file" id="documentFile" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" required>
                 <p id="documentFileHint" class="field-hint">Один файл до 10 МБ. PDF, JPEG, PNG или WebP. Оригинал сохраняется без уменьшения качества.</p>
+                <div class="document-actions"><button type="button" class="secondary-button" id="documentRecognize">Распознать документ</button><button type="button" class="secondary-button" id="documentRecognizeCancel" hidden>Остановить</button></div>
+                <p class="field-hint">Распознавание на устройстве, без отправки внешнему ИИ. Русский и английский текст, PDF до 20 страниц. Рукописный текст может не распознаться. Перед сохранением проверьте результат по оригиналу.</p>
+                <p id="documentRecognitionStatus" role="status" aria-live="polite"></p>
                 <label for="documentTitle">Название</label><input id="documentTitle" maxlength="160" required placeholder="Например, анализ крови или ветпаспорт">
                 <div class="document-fields">
                     <div><label for="documentCategory">Тип документа</label><select id="documentCategory"><option value="passport">Ветпаспорт</option><option value="analysis">Результаты анализов</option><option value="conclusion">Заключение врача</option><option value="prescription">Назначения</option><option value="other">Другое</option></select></div>
                     <div><label for="documentDate">Дата документа</label><input id="documentDate" type="date" required></div>
                 </div>
                 <label for="documentRecord">Медицинская запись</label><select id="documentRecord"><option value="">Без привязки</option></select>
+                <label for="documentText">Текст документа (необязательно)</label><textarea id="documentText" maxlength="50000" rows="9" placeholder="Распознайте документ или введите текст вручную. После проверки он будет доступен в поиске."></textarea>
+                <label class="document-review" for="documentReviewed"><input type="checkbox" id="documentReviewed">Я сверил(а) название, дату и текст с оригиналом. Особенно названия препаратов и дозировки.</label>
+                <p class="field-hint">Текст сохраняется только по кнопке ниже. Курсы лекарств и напоминания автоматически не создаются.</p>
                 <div class="document-actions"><button type="submit" class="primary-button" id="documentSave">Загрузить документ</button><button type="button" class="secondary-button" data-document-action="cancel">Отмена</button></div>
             </form>
         </details>
         <div id="documentStatus" class="document-status" role="status" aria-live="polite"></div>
         <div class="document-filters">
-            <div><label for="documentSearch">Поиск</label><input id="documentSearch" type="search" placeholder="Название, файл или запись"></div>
+            <div><label for="documentSearch">Поиск</label><input id="documentSearch" type="search" placeholder="Название, текст, файл или запись"></div>
             <div><label for="documentTypeFilter">Тип</label><select id="documentTypeFilter"><option value="">Все документы</option><option value="passport">Ветпаспорт</option><option value="analysis">Результаты анализов</option><option value="conclusion">Заключение врача</option><option value="prescription">Назначения</option><option value="other">Другое</option></select></div>
             <div><label for="documentRecordFilter">Запись</label><select id="documentRecordFilter"><option value="">Все записи</option><option value="unlinked">Без привязки</option></select></div>
         </div>
@@ -461,12 +467,17 @@
             <div class="push-settings-copy">
                 <span class="push-settings-icon" aria-hidden="true">🔔</span>
                 <div>
-                    <h3 id="pushSettingsTitle">Напоминания на телефоне</h3>
+                    <h3 id="pushSettingsTitle">Уведомления PetCare</h3>
                     <p id="pushSettingsStatus" aria-live="polite">Проверяю настройки…</p>
                 </div>
             </div>
             <button class="secondary-button" type="button" id="pushEnableButton" data-pc-click="push-enable">Включить push</button>
-            <button class="secondary-button" type="button" id="pushTestButton" data-pc-click="push-test" hidden>Отправить пробное уведомление</button>
+            <div class="notification-checklist" aria-label="Состояние уведомлений">
+                <dl><div><dt>Доставка по расписанию</dt><dd id="notificationScheduleStatus" role="status">Проверяется…</dd></div><div><dt>Разрешение устройства</dt><dd id="notificationPermissionStatus" role="status">Проверяется…</dd></div><div><dt>Пробное уведомление</dt><dd id="notificationTestStatus" role="status">Ещё не проверяли</dd></div></dl>
+                <div id="notificationTestConfirmation" hidden><p>Проверьте центр уведомлений устройства. Пришло пробное сообщение от PetCare?</p><div class="care-actions"><button type="button" class="secondary-button" id="notificationTestReceived">Уведомление пришло</button><button type="button" class="secondary-button" id="notificationTestMissing">Не пришло</button></div></div>
+                <p id="notificationTestHelp" hidden>Проверьте разрешение PetCare в настройках устройства, интернет и режим «Не беспокоить». На iPhone откройте приложение с главного экрана, на Windows оставьте PetCare запущенным. После проверки настроек нажмите «Проверить уведомления» ещё раз.</p>
+            </div>
+            <button class="secondary-button" type="button" id="pushTestButton" data-pc-click="push-test" hidden>Проверить уведомления</button>
             <button class="push-disable-button" type="button" id="pushDisableButton" data-pc-click="push-disable" hidden>Отключить уведомления</button>
             <small>В назначенное время придёт текст напоминания. Звук зависит от настроек уведомлений телефона.</small>
         </section>
@@ -569,6 +580,15 @@
             <select id="storyPetSwitcher" class="pet-switcher-select" data-pc-change="pet-switch" aria-label="Выбрать питомца для воспоминания"></select>
         </div>
 
+        <section id="memoryLibrary" class="memory-library" aria-labelledby="memoryLibraryTitle">
+            <div class="section-heading"><div><h3 id="memoryLibraryTitle">Фотобиблиотека</h3><p id="memoryLibraryPet" class="field-hint"></p></div><button type="button" class="secondary-button" id="memoryLibraryUpload">＋ Добавить фото</button></div>
+            <p class="field-hint">Храните любимые снимки отдельно от фильмов. До 20 фото за загрузку, до 20 МБ каждое. Фото оптимизируются для хранения.</p>
+            <input id="memoryLibraryInput" class="story-file-input" type="file" multiple accept="image/*,.heic,.heif" aria-label="Добавить фотографии в библиотеку питомца">
+            <div class="memory-library-toolbar"><label for="memoryLibraryMonth">Месяц<select id="memoryLibraryMonth"><option value="">Все фотографии</option></select></label><button type="button" class="secondary-button" id="memoryLibraryMovie" disabled>Создать фильм из выбранных</button><button type="button" class="secondary-button" id="memoryLibraryClear">Снять выбор</button></div>
+            <p id="memoryLibraryStatus" role="status" aria-live="polite"></p>
+            <div id="memoryLibraryGrid" class="memory-library-grid"></div>
+            <button type="button" class="secondary-button" id="memoryLibraryMore" hidden>Показать ещё</button>
+        </section>
         <button class="primary-button" type="button" data-pc-click="story-add">＋ Новое воспоминание</button>
         <p class="stories-storage-note">До 12 фото — целая минута воспоминаний. Загружайте снимки с телефона или компьютера, до 20 МБ каждый. Даты определяют порядок кадров; фото и видео сохраняются в вашем аккаунте.</p>
         <div id="storiesList" class="stories-list" aria-live="polite"></div>
@@ -864,11 +884,11 @@
         <div class="install-help-mark">📸</div>
         <h2 id="storySetupTitle">Новое воспоминание</h2>
         <p>Соберите любимые моменты в видео с музыкой. Добавьте от 2 до 12 фото сейчас или пополняйте подборку постепенно.</p>
-        <label for="storyMonthInput">Месяц подборки</label>
+        <label for="storyMonthInput">Месяц подборки (необязательно)</label>
         <input id="storyMonthInput" type="month">
-        <label for="storyStartDateInput">Начало наблюдения</label>
-        <input id="storyStartDateInput" type="date">
+        <p class="field-hint">Оставьте пустым, чтобы создать воспоминание без даты.</p>
         <label class="story-reminder-choice"><input id="storyRemindersEnabled" type="checkbox"> Напоминать о новом фото раз в неделю</label>
+        <div id="storyReminderStartField" hidden><label for="storyStartDateInput">Дата первого напоминания</label><input id="storyStartDateInput" type="date" disabled></div>
         <label for="storyReminderTimeInput">Время напоминания</label>
         <input id="storyReminderTimeInput" type="time" value="09:00" disabled>
         <button type="button" class="primary-button" data-pc-click="story-create">Создать подборку</button>
@@ -904,6 +924,6 @@
 
 <!-- Same-origin pinned SDK; classic loading also supports opening index.html from disk. -->
 <script src="assets/vendor/supabase/supabase-2.118.0.min.js"></script>
-<script src="app.bundle.js?v=07c62f91e27b"></script>
+<script src="app.bundle.js?v=5955f362d567"></script>
 </body>
 </html>

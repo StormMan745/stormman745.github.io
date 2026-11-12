@@ -54,7 +54,7 @@ export function planNotifications(state, now = new Date(), limit = 60) {
           const at = new Date(due.getTime()-minutes*60000);
           if (at<=now || completed.has(JSON.stringify([petId,dateKey(due),id]))) continue;
           upcoming.push({title:`${String(pet.name || 'PetCare').slice(0,60)}: напоминание`,body:`Скоро: ${String(task.name || 'Ежедневное дело').slice(0,80)}${checks>1?` · ${step} из ${checks}`:''} · ${time}`,
-            schedule:{at,allowWhileIdle:true},extra:{petcare:true,routineId:task.id,petId,page:'home'}});
+            schedule:{at,allowWhileIdle:true},extra:{petcare:true,routineId:task.id,routineStep:step,petId,page:'home'}});
         }
       }
     }

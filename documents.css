@@ -33,3 +33,8 @@
     .document-editor, .document-group { padding: 15px; }
     .document-actions > .primary-button, .document-actions > .secondary-button { flex: 1 1 150px; }
 }
+.document-review { display: flex; align-items: flex-start; gap: 10px; line-height: 1.5; }
+.document-review input { width: 22px; height: 22px; flex: 0 0 22px; margin-top: 3px; }
+#documentText { width: 100%; min-height: 180px; resize: vertical; }
+#documentRecognitionStatus { overflow-wrap: anywhere; }
+#documentRecognizeCancel[hidden] { display: none; }
