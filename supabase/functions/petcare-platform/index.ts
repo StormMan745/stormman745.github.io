@@ -112,6 +112,23 @@ Deno.serve(async request => {
             const account = await profile(); const pet = (account.data.pets || []).find((p: any) => petKey(p) === body.petId);
             if (!pet) throw new Error('pet_not_found'); return { account, pet };
         };
+        if(action==='clinic-list'){
+            await ownPet();return reply(check(await admin.rpc('petcare_clinic_connections',{p_user:uid,p_pet:body.petId})));
+        }
+        if(action==='clinic-create'){
+            await ownPet();
+            if(body.consent!==true||typeof body.clinicName!=='string'||!body.clinicName.trim()||body.clinicName.trim().length>120)return reply({error:'invalid_clinic_consent'},400);
+            const bytes=crypto.getRandomValues(new Uint8Array(32));let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);
+            const writeToken='pc_clinic_'+btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+            const created=check(await admin.rpc('petcare_clinic_connect',{p_user:uid,p_pet:body.petId,p_name:body.clinicName.trim(),p_hash:await hash(writeToken)}));
+            if(created?.error)return reply({error:created.error},created.error==='connection_limit'?429:404);
+            return reply({id:created.id,token:writeToken,endpoint:`${url}/functions/v1/petcare-clinic-sync`});
+        }
+        if(action==='clinic-revoke'){
+            if(typeof body.id!=='string'||!/^[a-f0-9-]{36}$/i.test(body.id))return reply({error:'invalid_connection'},400);
+            const revoked=check(await admin.rpc('petcare_clinic_revoke',{p_user:uid,p_id:body.id}));
+            return revoked?reply({ok:true}):reply({error:'connection_unavailable'},404);
+        }
         if (action === 'collar-get') {
             await ownPet();
             return reply(check(await admin.from('petcare_collar_cards').select('id,card,updated_at').eq('user_id',uid).eq('pet_id',body.petId).is('revoked_at',null).maybeSingle())||{});

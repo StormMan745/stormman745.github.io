@@ -30,6 +30,7 @@ jobs:
       - run: node tools/security-edge-check.cjs
       - run: node tools/check-assistant-records.cjs
       - run: node tools/check-care-edge.cjs
+      - run: node tools/check-clinic-edge.cjs
       - run: node tools/check-push.cjs
       - run: node --test mobile/tests/reminders.test.mjs
       - run: npm audit --prefix tools --audit-level=high

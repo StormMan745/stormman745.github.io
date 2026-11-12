@@ -12,3 +12,7 @@ verify_jwt = true
 # Public expiring-token cards; all account actions verify JWT inside the handler.
 [functions.petcare-platform]
 verify_jwt = false
+
+# Clinic write tokens are verified by the function and a service-only transaction.
+[functions.petcare-clinic-sync]
+verify_jwt = false

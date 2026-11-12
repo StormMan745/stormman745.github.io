@@ -12,6 +12,7 @@
     "test:assistant-records": "node check-assistant-records.cjs && node check-offline-care.cjs --assistant-records",
     "test:memories": "node check-offline-care.cjs --memories",
     "test:map-location": "node check-offline-care.cjs --map-location",
+    "test:clinic-connections": "node check-clinic-edge.cjs && node check-care-edge.cjs && node check-offline-care.cjs --clinic-connections",
     "test:map-mobile": "node check-offline-care.cjs --map-mobile && node check-offline-care.cjs --map-mobile --iphone && node check-offline-care.cjs --map-location",
     "test:extras": "node check-offline-care.cjs --extras",
     "test:site-security": "node check-site-security.cjs && node check-browser-security.cjs",

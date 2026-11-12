@@ -1,0 +1,20 @@
+.clinic-connection-dialog { width:min(640px,calc(100% - 24px));max-height:88dvh;overflow:auto;margin:auto;padding:26px;border:1px solid #d7e1cd;border-radius:25px;background:#fffefa;color:#294c39;box-shadow:0 24px 90px #153c322b; }
+.clinic-connection-dialog::backdrop { background:#163f3659;backdrop-filter:blur(4px); }
+.clinic-connection-close { float:right;min-height:44px; }
+.clinic-connection-dialog h2 { clear:both;margin:14px 0 12px;font-size:26px;line-height:1.2; }
+.clinic-connection-dialog h3 { margin:20px 0 12px;font-size:18px; }
+.clinic-connection-dialog p,.clinic-government { font-size:14px;line-height:1.65;color:#64735a; }
+.clinic-connection-dialog label { display:block;margin:15px 0 7px;font-size:13px;color:#345840; }
+.clinic-connection-dialog input:not([type=checkbox]) { width:100%;min-height:46px;border:1px solid #cbdac3;border-radius:12px;padding:12px;background:#fff;font:inherit;font-size:16px; }
+.clinic-connection-dialog .clinic-connection-consent { display:flex;align-items:flex-start;gap:10px;line-height:1.55;margin:17px 0; }
+.clinic-connection-consent input { flex:0 0 21px;width:21px;height:21px;box-shadow:none;accent-color:#245d40; }
+.clinic-connection-dialog button { white-space:normal;min-height:44px; }
+.clinic-connection-heading { display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:24px; }
+.clinic-connection-card { border:1px solid #d6e3cc;background:#f3f7ed;border-radius:16px;padding:16px;margin:12px 0; }
+.clinic-connection-card small { display:block;margin:5px 0 14px;color:#64735a; }
+#clinicConnectionSecret { border:1px solid #b8cfa9;border-radius:18px;padding:16px;margin:20px 0;background:#f0f6e8; }
+#clinicConnectionSecret[hidden] {display:none;}
+.clinic-government { margin-top:24px;padding-top:18px;border-top:1px solid #e0e6d7; }
+.clinic-government summary { cursor:pointer;font-weight:650;color:#315a40;min-height:44px; }
+.clinic-government a { display:inline-flex;align-items:center;text-decoration:none;min-height:44px; }
+@media(max-width:400px){.clinic-connection-dialog{padding:19px;}.clinic-connection-dialog h2{font-size:23px;}.clinic-connection-dialog .care-actions>*{flex:1 1 100%;}}

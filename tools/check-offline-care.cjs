@@ -74,6 +74,13 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
     if(body.action==='analytics-event'){events.push(body);return reply({ok:true});}
     if(body.action==='care-list')return reply({memberships:sharedMembers.filter(m=>m.owner_id===actor||m.member_id===actor),invites:[]});
     if(body.action==='share-list')return reply([]);
+    if(body.action==='clinic-list')return reply((objects.get('test-clinics')||[]).filter(c=>c.user_id===actor&&c.pet_id===body.petId));
+    if(body.action==='clinic-create'){
+     const rows=objects.get('test-clinics')||[],id='e5000000-0000-4000-8000-'+String(rows.length+1).padStart(12,'0');
+     rows.push({id,user_id:actor,pet_id:body.petId,clinic_name:body.clinicName,created_at:new Date().toISOString(),expires_at:new Date(Date.now()+365*86400000).toISOString(),revoked_at:null,received_count:0});objects.set('test-clinics',rows);
+     return reply({id,token:'pc_clinic_'+'a'.repeat(43),endpoint:'https://qexiyikdmdbdxgusqnee.supabase.co/functions/v1/petcare-clinic-sync'});
+    }
+    if(body.action==='clinic-revoke'){const row=(objects.get('test-clinics')||[]).find(c=>c.id===body.id&&c.user_id===actor);if(!row)return reply({error:'connection_unavailable'},404);row.revoked_at=new Date().toISOString();return reply({ok:true});}
     if(body.action==='support'){reports.push(body);return reply({id:'test-report'});}
     if(body.action==='export-manifest')return reply({format:'petcare-export-v1',profile:profiles.get(actor),documents,files:[...objects.keys()].map(name=>({bucket_id:name.split('/')[0],name:name.split('/').slice(1).join('/')})),backups:[]});
     if(body.action==='export-file'){const bytes=objects.get(body.bucket+'/'+body.path);return route.fulfill({status:200,headers:{'Content-Type':'application/octet-stream','Access-Control-Allow-Origin':'*'},body:bytes});}
@@ -91,6 +98,7 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   await page.goto(base);await page.waitForFunction(()=>window.PetCareCare&&activeUserId&&document.getElementById('homePage').style.display==='block');
   await page.waitForFunction(()=>PetCareSync.state.phase==='saved');
   if(process.argv.includes('--photo-library')){await require('./check-photo-library.cjs')({page,context,profiles,uid,other,objects,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
+  if(process.argv.includes('--clinic-connections')){await require('./check-clinic-connections.cjs')({page,context,profiles,uid,objects,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--indefinite-courses')){await require('./check-indefinite-courses.cjs')({page,profiles,uid,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--document-ocr')){await require('./check-document-ocr.cjs')({page,context,profiles,uid,documents});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--extras')){await require('./check-extras.cjs')({page,context,profiles,uid,other,documents,collars,base,session,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}

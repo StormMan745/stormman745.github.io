@@ -4,8 +4,8 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {transformSync}=require('esbuild');
 const root=path.resolve(__dirname,'..');
 const check=process.argv.includes('--check');
-const scripts=['experience.js','sync.js','notification-status.js','script.js','offline-files.js','document-ocr.js','documents.js','care.js','routine.js','pet-scene.js','extras.js','photo-library.js'];
-const styles=['style.css','documents.css','experience.css','clinics.css','care.css','polish.css','extras.css'];
+const scripts=['experience.js','sync.js','notification-status.js','script.js','offline-files.js','document-ocr.js','documents.js','care.js','routine.js','pet-scene.js','extras.js','photo-library.js','clinic-connections.js'];
+const styles=['style.css','documents.css','experience.css','clinics.css','care.css','polish.css','extras.css','clinic-connections.css'];
 const read=name=>fs.readFileSync(path.join(root,name),'utf8');
 const stats=[];
 for(const [extension,files] of [['js',scripts],['css',styles]]){
@@ -30,7 +30,7 @@ html=html.replace('</head>',`    <link rel="stylesheet" href="app.bundle.css?v=$
 html=html.replace(new RegExp('<script src="(?:'+pattern([...scripts,'app.bundle.js'])+')(?:\\?[^"<>]*)?"></script>\\r?\\n','g'),'');
 html=html.replace('</body>',`<script src="app.bundle.js?v=${stats[0].hash}"></script>\n</body>`);
 fs.writeFileSync(path.join(root,'index.html'),html);
-let sw=read('sw.js').replace(/petcare-shell-v\d+-[\w-]+/,'petcare-shell-v62-optional-memory-dates');
+let sw=read('sw.js').replace(/petcare-shell-v\d+-[\w-]+/,'petcare-shell-v65-clinic-connections');
 for(const file of [...scripts,...styles])sw=sw.replace(new RegExp('    "/'+file.replaceAll('.','\\.')+'",\\r?\\n'),'');
 if(!sw.includes('"/app.bundle.js"'))sw=sw.replace('    "/index.html",','    "/index.html",\n    "/app.bundle.js",\n    "/app.bundle.css",');
 fs.writeFileSync(path.join(root,'sw.js'),sw);

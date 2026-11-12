@@ -22,13 +22,13 @@ function query(table){let op='select',payload,projection='*',single=false,filter
   return {data:single?result[0]||null:result,error:null};}).then(resolve,reject)}
  };return q;}
 const admin={auth:{getUser:async jwt=>{authCalls++;const id=jwt===credential('alice')?uid:jwt===credential('bob')?other:null;return id?{data:{user:{id,email:'test@example.invalid',last_sign_in_at:recent?now():'2020-01-01T00:00:00Z'}},error:null}:{data:{user:null},error:{message:'invalid'}}},admin:{signOut:async(jwt,scope)=>{signouts.push([jwt,scope]);return {data:null,error:null}},deleteUser:async id=>{deletions.push(id);return {data:{user:{id}},error:null}}}},
- from:query,rpc:async(name,args)=>{rpcs.push([name,args]);if(['petcare_consume_vet_share','petcare_consume_collar'].includes(name))return {data:shareUnavailable?{unavailable:true}:{allowed:shareQuota,retryAfter:30},error:null};if(name==='petcare_recent_session')return {data:recent,error:null};if(name==='petcare_get_push_runtime_secrets')return {data:{cronToken:'cron-token-012345678901234567890123456789'},error:null};if(name==='petcare_account_objects')return {data:[{bucket_id:'petcare-documents',name:args.p_user+'/doc-a/original.pdf'}],error:null};if(name==='petcare_account_backups')return {data:[],error:null};if(name==='petcare_accept_care')return {data:true,error:null};throw Error('unexpected rpc '+name)},
+ from:query,rpc:async(name,args)=>{rpcs.push([name,args]);if(name==='petcare_clinic_connect')return {data:{id:'e4000000-0000-4000-8000-000000000001'},error:null};if(name==='petcare_clinic_connections')return {data:[],error:null};if(name==='petcare_clinic_revoke')return {data:args.p_user===uid,error:null};if(['petcare_consume_vet_share','petcare_consume_collar'].includes(name))return {data:shareUnavailable?{unavailable:true}:{allowed:shareQuota,retryAfter:30},error:null};if(name==='petcare_recent_session')return {data:recent,error:null};if(name==='petcare_get_push_runtime_secrets')return {data:{cronToken:'cron-token-012345678901234567890123456789'},error:null};if(name==='petcare_account_objects')return {data:[{bucket_id:'petcare-documents',name:args.p_user+'/doc-a/original.pdf'}],error:null};if(name==='petcare_account_backups')return {data:[],error:null};if(name==='petcare_accept_care')return {data:true,error:null};throw Error('unexpected rpc '+name)},
  storage:{from:bucket=>({
   download:async path=>{downloads.push([bucket,path]);return {data:new Blob(['original bytes']),error:null};},
   remove:async paths=>{removals.push([bucket,paths]);return {data:[],error:null};}
  })}};
 let handler;const logs=[];
-const runtime={Request,Response,Headers,URL,TextEncoder,TextDecoder,Uint8Array,crypto:globalThis.crypto,atob,console:{error:(...args)=>logs.push(args)},exports:{},
+const runtime={Request,Response,Headers,URL,TextEncoder,TextDecoder,Uint8Array,crypto:globalThis.crypto,atob,btoa,console:{error:(...args)=>logs.push(args)},exports:{},
  Deno:{env:{get:name=>({SUPABASE_URL:'https://database.invalid',SUPABASE_SERVICE_ROLE_KEY:'server-test-secret'}[name])},serve:fn=>handler=fn},
  require:name=>{assert.equal(name,'@supabase/supabase-js');return {createClient:(_url,key,options)=>key==='server-test-secret'?admin:{rpc:async name=>({data:name==='petcare_account_active'?active:{allowed:quota,retryAfter:20},error:null})}}}};
 vm.runInNewContext(transformSync(fs.readFileSync('supabase/functions/petcare-platform/index.ts','utf8'),{loader:'ts',format:'cjs'}).code,runtime);
@@ -78,6 +78,15 @@ const request=(data,jwt='',headers={})=>new Request('https://app.invalid',{metho
  recent=false;assert.equal((await handler(request({action:'delete-account',confirm:'УДАЛИТЬ'},'alice'))).status,403);assert.equal(removals.length,0);recent=true;
  assert.equal((await handler(request({action:'delete-account',confirm:'УДАЛИТЬ',userId:other},'alice'))).status,200);assert.deepEqual(deletions,[uid]);assert.deepEqual(signouts,[[credential('alice'),'global']]);assert(removals.every(([,paths])=>paths.every(path=>path.startsWith(uid+'/'))));
  assert.equal((await handler(request({action:'maintenance'}))).status,401);
+ assert.equal((await handler(request({action:'clinic-create',petId:'pet-a',clinicName:'Clinic'},'alice'))).status,400,'Clinic consent is mandatory');
+ const setup=await handler(request({action:'clinic-create',petId:'pet-a',clinicName:'Clinic',consent:true,userId:other},'alice'));assert.equal(setup.status,200);
+ const connection=await setup.json();assert.match(connection.token,/^pc_clinic_[A-Za-z0-9_-]{43}$/);
+ const connectCall=rpcs.find(row=>row[0]==='petcare_clinic_connect')[1];assert.equal(connectCall.p_user,uid);assert.equal(connectCall.p_pet,'pet-a');assert.equal(connectCall.p_hash,digest(connection.token));
+ assert(!JSON.stringify(rpcs).includes(connection.token),'Only hashes are stored');
+ assert.equal((await handler(request({action:'clinic-list',petId:'pet-a'},'alice'))).status,200);
+ assert.equal((await handler(request({action:'clinic-revoke',id:connection.id,userId:uid},'bob'))).status,404,'A different account cannot revoke');
+ assert.equal((await handler(request({action:'clinic-revoke',id:connection.id},'alice'))).status,200);
+ active=false;assert.equal((await handler(request({action:'clinic-create',petId:'pet-a',clinicName:'Clinic',consent:true},'alice'))).status,401);active=true;
  assert(!JSON.stringify(logs).includes('PRIVATE'));
  console.log('PASS: platform authorization, CORS/body bounds, expiring/revoked vet token and file scope, export IDOR prevention, quota, diagnostics whitelist, opt-in analytics, bound invite identity, recent-login deletion and own-only originals. All external APIs mocked.');
 })().catch(e=>{console.error(e.stack);process.exitCode=1});
