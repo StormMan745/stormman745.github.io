@@ -23,7 +23,8 @@
     "build:document-ocr": "node build-document-ocr.cjs",
     "test:document-ocr": "node check-offline-care.cjs --document-ocr",
     "test:indefinite-courses": "node check-offline-care.cjs --indefinite-courses",
-    "test:photo-library": "node check-offline-care.cjs --photo-library"
+    "test:photo-library": "node check-offline-care.cjs --photo-library",
+    "test:map-country": "node check-offline-care.cjs --map-country && node check-offline-care.cjs --map-country --map-mobile && node check-offline-care.cjs --map-country --map-mobile --iphone"
   },
   "devDependencies": {
     "esbuild": "0.25.5",

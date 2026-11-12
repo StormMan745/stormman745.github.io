@@ -9,6 +9,11 @@
 .clinic-search-panel { background: #fffefa; border: 1px solid #e0e6d8; padding: 22px; border-radius: 22px; margin-bottom: 20px; }
 .clinic-search-panel > label { display: block; margin-bottom: 9px; font-size: 12px; font-weight: 650; color: #47603d; }
 #clinicCategory { display: block; width: 100%; max-width: 420px; min-height: 48px; margin: 0 0 18px; padding: 10px 14px; border: 1px solid #d7dfd0; border-radius: 13px; background: #fff; color: #284735; font: inherit; font-size: 15px; }
+.clinic-country-row { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 18px; margin-bottom: 18px; }
+.clinic-country-row label { flex: 1 1 210px; margin: 0; color: #47603d; font-size: 12px; font-weight: 650; }
+#clinicCountry { display: block; width: 100%; min-height: 48px; margin: 8px 0 0; border: 1px solid #d7dfd0; border-radius: 13px; padding: 10px 14px; background: #fff; color: #284735; font: inherit; font-size: 16px; }
+.clinic-country-row p { flex: 1 1 180px; margin: 0 0 5px; color: #64735b; font-size: 12px; line-height: 1.6; }
+.clinic-country-row select:focus-visible { outline: 3px solid #87ad82; outline-offset: 3px; }
 #clinicSearchForm > label { display: block; margin-bottom: 9px; font-size: 12px; font-weight: 650; color: #47603d; }
 .clinic-search-row { display: flex; gap: 9px; }
 #clinicAddress { flex: 1; min-width: 0; width: auto; margin: 0; border: 1px solid #d7dfd0; border-radius: 13px; padding: 13px 15px; background: white; font: inherit; font-size: 16px; color: #284735; box-shadow: none; }
@@ -45,7 +50,7 @@
 .clinic-map-provider small { display: block; margin-top: 3px; font-size: 11px; color: #87917a; }
 .clinic-map-provider a { margin-left: auto; padding: 5px; color: #6c8259; font-size: 21px; text-decoration: none; }
 #clinicMap { height: 495px; overflow: hidden; background: #e9efde; border: 1px solid #dce4d0; border-radius: 20px; isolation: isolate; z-index: 0; }
-.clinic-yandex-map { display: block; width: 100%; height: 100%; border: 0; }
+.clinic-provider-map { display: block; width: 100%; height: 100%; border: 0; }
 .clinic-map-controls { margin-bottom: 10px; }
 .clinic-location-legend { display: flex; align-items: center; gap: 9px; margin: 10px 0 14px; color: #38586a; font-size: 12px; line-height: 1.5; }
 .clinic-location-legend[hidden] { display: none; }

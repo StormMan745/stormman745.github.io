@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://qexiyikdmdbdxgusqnee.supabase.co; media-src 'self' blob: https://qexiyikdmdbdxgusqnee.supabase.co; connect-src 'self' https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; frame-src https://yandex.ru https://api-maps.yandex.ru; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://qexiyikdmdbdxgusqnee.supabase.co; media-src 'self' blob: https://qexiyikdmdbdxgusqnee.supabase.co; connect-src 'self' https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; frame-src https://yandex.ru https://api-maps.yandex.ru https://maps.google.com https://www.google.com; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>PetCare</title>
@@ -15,7 +15,7 @@
     <meta name="apple-mobile-web-app-title" content="PetCare">
     <script src="frameguard.js"></script>
     <script src="install.js?v=20261028-studio"></script>
-    <link rel="stylesheet" href="app.bundle.css?v=6342c36e8a6d">
+    <link rel="stylesheet" href="app.bundle.css?v=1ac6acc83862">
 </head>
 <body>
 <div class="app">
@@ -608,8 +608,9 @@
 
     <section class="page" id="clinicsPage" style="display: none;" aria-labelledby="clinicsTitle">
         <div class="page-header"><button type="button" data-pc-click="clinics-close" aria-label="Назад">←</button><h2 id="clinicsTitle">Места для питомцев</h2></div>
-        <p class="clinic-intro">Выберите тип места и найдите его во встроенном справочнике Яндекс Карт. Укажите адрес или разрешите геопозицию.</p>
+        <p class="clinic-intro">Выберите страну и тип места. Карта переключится автоматически: в России — Яндекс, в других странах — Google.</p>
         <div class="clinic-search-panel" id="clinicSearchPanel">
+            <div class="clinic-country-row"><label for="clinicCountry">Страна<select id="clinicCountry" autocomplete="country-name" aria-describedby="clinicCountryHint"></select></label><p id="clinicCountryHint">Россия — Яндекс Карты.<br>Другие страны — Google Карты.</p></div>
             <label for="clinicCategory">Что ищем</label>
             <select id="clinicCategory"><option value="clinics">Ветеринарные клиники</option><option value="hospital">Круглосуточные стационары</option><option value="vaccination">Пункты бесплатной вакцинации</option><option value="walking">Площадки для выгула собак</option><option value="shelters">Приюты для животных</option><option value="hotels">Зоогостиницы</option></select>
             <form id="clinicSearchForm" role="search">
@@ -619,16 +620,16 @@
             <div class="clinic-search-options"><button type="button" id="clinicLocateButton" class="clinic-button">⌖ Разрешить геопозицию</button><button type="button" id="clinicCancel" class="clinic-button" hidden>Отменить</button></div>
             <p id="clinicLocationStatus" class="clinic-map-note" role="status">Разрешите доступ, чтобы показать ваше местоположение и места рядом.</p>
             <div class="clinic-filters"><label id="clinicOpenOnlyLabel"><input type="checkbox" id="clinicOpenOnly" checked>Искать открытые сейчас</label></div>
-            <p class="clinic-privacy">Для поиска адрес или координаты передаются Яндекс Картам. В профиле местоположение не сохраняется.</p>
+            <p id="clinicPrivacy" class="clinic-privacy">Для поиска адрес или координаты передаются Яндекс Картам. В профиле местоположение не сохраняется.</p>
         </div>
         <div id="clinicStatus" class="clinic-status" role="status" aria-live="polite">Введите город и улицу или нажмите «Разрешить геопозицию».</div>
         <div class="clinic-official-links"><a id="clinicOfficialMap" href="https://www.mos.ru/pgu/ru/app/dvm/mypets/?page=info&map_layer=0" target="_blank" rel="noopener noreferrer">Открыть городскую карту mos.ru ↗</a><a id="clinicOfficialList" href="https://www.mos.ru/moskomvet/function/punkti_vakcinacii/" target="_blank" rel="noopener noreferrer" hidden>График бесплатной вакцинации ↗</a></div>
-        <div class="clinic-results-heading"><div><h3>Справочник Яндекс Карт</h3><p id="clinicAreaLabel"></p><p id="clinicResultSummary"></p></div><button type="button" class="clinic-button" id="clinicRefresh" hidden>Повторить поиск</button></div>
+        <div class="clinic-results-heading"><div><h3 id="clinicDirectoryTitle">Справочник Яндекс Карт</h3><p id="clinicAreaLabel"></p><p id="clinicResultSummary"></p></div><button type="button" class="clinic-button" id="clinicRefresh" hidden>Повторить поиск</button></div>
         <div class="clinic-layout clinic-native-layout">
-            <div class="clinic-map-wrap"><div class="clinic-map-provider"><span aria-hidden="true">Я</span><div><strong>Яндекс Карты</strong><small>Места · телефоны · часы работы</small></div><a href="https://yandex.ru/maps/" target="_blank" rel="noopener noreferrer" aria-label="Открыть Яндекс Карты">↗</a></div><div id="clinicMapControls" class="clinic-map-controls" hidden><label for="clinicMapSelect">Масштаб карты</label><select id="clinicMapSelect" aria-label="Показать места с геопозицией или приблизить свою геопозицию"><option value="__results__">Места и моя геопозиция</option><option value="__location__">Приблизить меня</option></select></div><p id="clinicLocationLegend" class="clinic-location-legend" hidden><span aria-hidden="true"></span>Вы на карте — синяя метка</p><div id="clinicMap" aria-label="Встроенный справочник Яндекс Карт"><div class="clinic-map-empty"><span aria-hidden="true">⌖</span>Справочник Яндекс Карт<br>Разрешите геопозицию или укажите адрес.</div></div><p class="clinic-map-note" id="clinicMapNote">Подробности откроются в карточке выбранного места.</p></div>
+            <div class="clinic-map-wrap"><div class="clinic-map-provider"><span id="clinicProviderIcon" aria-hidden="true">Я</span><div><strong id="clinicProviderName">Яндекс Карты</strong><small>Места · телефоны · часы работы</small></div><a id="clinicProviderLink" href="https://yandex.ru/maps/" target="_blank" rel="noopener noreferrer" aria-label="Открыть Яндекс Карты">↗</a></div><div id="clinicMapControls" class="clinic-map-controls" hidden><label for="clinicMapSelect">Масштаб карты</label><select id="clinicMapSelect" aria-label="Показать места с геопозицией или приблизить свою геопозицию"><option value="__results__">Места и моя геопозиция</option><option value="__location__">Приблизить меня</option></select></div><p id="clinicLocationLegend" class="clinic-location-legend" hidden><span aria-hidden="true"></span>Вы на карте — синяя метка</p><div id="clinicMap" aria-label="Встроенный справочник Яндекс Карт"><div class="clinic-map-empty"><span aria-hidden="true">⌖</span>Справочник Яндекс Карт<br>Разрешите геопозицию или укажите адрес.</div></div><p class="clinic-map-note" id="clinicMapNote">Подробности откроются в карточке выбранного места.</p></div>
         </div>
         <a id="clinicExternalSearch" class="clinic-alternative" href="https://yandex.ru/maps/?text=%D0%B2%D0%B5%D1%82%D0%B5%D1%80%D0%B8%D0%BD%D0%B0%D1%80%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BB%D0%B8%D0%BD%D0%B8%D0%BA%D0%B8" target="_blank" rel="noopener noreferrer">Также посмотреть в Яндекс Картах ↗</a>
-        <p class="clinic-footnote">Источник встроенной карты, адресов, организаций, телефонов и графиков — <a href="https://yandex.ru/maps/" target="_blank" rel="noopener noreferrer">Яндекс Карты</a>. Категории ищутся по названиям и могут содержать неточные результаты. Проверяйте адрес и часы работы перед поездкой; для городских объектов используйте ссылку на карту mos.ru выше.</p>
+        <p class="clinic-footnote">Источник встроенной карты, адресов, организаций, телефонов и графиков — <a id="clinicSource" href="https://yandex.ru/maps/" target="_blank" rel="noopener noreferrer">Яндекс Карты</a>. Категории ищутся по названиям и могут содержать неточные результаты. Проверяйте адрес, доступность услуг и часы работы перед поездкой.</p>
     </section>
 
     <!-- ПРОФИЛЬ -->
@@ -924,6 +925,6 @@
 
 <!-- Same-origin pinned SDK; classic loading also supports opening index.html from disk. -->
 <script src="assets/vendor/supabase/supabase-2.118.0.min.js"></script>
-<script src="app.bundle.js?v=73ee9634162e"></script>
+<script src="app.bundle.js?v=c4dee6552018"></script>
 </body>
 </html>

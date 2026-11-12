@@ -106,6 +106,7 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   if(process.argv.includes('--routine-push')){await require('./check-routine-push.cjs')({page,context,profiles,uid,other,base,session,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--assistant-records')){await require('./check-assistant-records-browser.cjs')({page,uid});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--memories')){await require('./check-memories.cjs')({page,context,profiles,uid,other,objects,base});assert.deepEqual(errors,[]);return;}
+  if(process.argv.includes('--map-country')){await require('./check-map-country.cjs')({page,context,profiles,uid});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--map-location')){await require('./check-map-location.cjs')({page,context});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--map-mobile')){await require('./check-map-mobile.cjs')({page,context});assert.deepEqual(errors,[]);return;}
   // IndexedDB read/compare/write must be atomic across two actual browser tabs.

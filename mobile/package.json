@@ -1,6 +1,6 @@
 {
   "name": "petcare-mobile",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "PetCare for Android and iOS",
   "scripts": {
@@ -30,5 +30,7 @@
     "@capacitor/cli": "8.6.0",
     "esbuild": "0.28.2"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  }
 }
