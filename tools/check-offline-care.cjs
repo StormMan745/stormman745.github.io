@@ -97,6 +97,7 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   const base=`http://127.0.0.1:${server.address().port}`;
   await page.goto(base);await page.waitForFunction(()=>window.PetCareCare&&activeUserId&&document.getElementById('homePage').style.display==='block');
   await page.waitForFunction(()=>PetCareSync.state.phase==='saved');
+  if(process.argv.includes('--storage')){await require('./check-storage.cjs')({page,context,profiles,uid,other});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--photo-library')){await require('./check-photo-library.cjs')({page,context,profiles,uid,other,objects,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--clinic-connections')){await require('./check-clinic-connections.cjs')({page,context,profiles,uid,objects,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--indefinite-courses')){await require('./check-indefinite-courses.cjs')({page,profiles,uid,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
@@ -251,9 +252,10 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   await page.evaluate(async()=>{const row=(await PetCareFiles.documentRows())[0];await PetCareFiles.editDocument(row,{title:'First pending title'});});
   for(let n=0;n<100&&!releaseDocument;n++)await new Promise(resolve=>setTimeout(resolve,10));assert(releaseDocument);
   await page.evaluate(async()=>{const row=(await PetCareFiles.documentRows(activeUserId,false))[0];await PetCareFiles.editDocument(row,{title:'Newer pending title'});});
-  releaseDocument();await page.evaluate(()=>PetCareFiles.flush());
+  const releaseFirstEdit=releaseDocument;releaseDocument=null;holdDocument=true;releaseFirstEdit();
+  for(let n=0;n<100&&!releaseDocument;n++)await new Promise(resolve=>setTimeout(resolve,10));assert(releaseDocument,'A new edit during an upload is sent without a second click');
   assert.equal(await page.evaluate(async()=>(await PetCareSync.all('outbox',activeUserId)).find(j=>j.type==='document-edit')?.fields.title),'Newer pending title');
-  await page.evaluate(()=>PetCareFiles.flush());assert.equal(documents[0].title,'Newer pending title');
+  releaseDocument();await page.evaluate(()=>PetCareFiles.flush());assert.equal(documents[0].title,'Newer pending title');
   assert.equal(await page.evaluate(async()=>{try{const row=(await PetCareFiles.documentRows())[0];await PetCareFiles.editDocument({...row,user_id:'other-account'},{title:'Invalid edit'});return false;}catch{return true;}}),true,'Foreign metadata cannot enter this account queue');
   // Metadata conflicts require an explicit choice; the original stays intact.
   available=false;await context.setOffline(true);

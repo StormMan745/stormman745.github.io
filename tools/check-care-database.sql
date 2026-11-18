@@ -12,7 +12,12 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','a2000000-0000-4000-8000-000000000001',true);
 select set_config('request.jwt.claims','{"sub":"a2000000-0000-4000-8000-000000000001","session_id":"a2000000-0000-4000-8000-000000000009"}',true);
 select public.petcare_sync_profile(0,'{"pets":[{"id":"one","name":"First"},{"id":"two","name":"Private"}],"pet":{"id":"one","name":"First"},"activePetId":"one","healthRecords":[{"id":"h1","petId":"one","name":"Visit"},{"id":"h2","petId":"two","name":"Private visit"}],"reminders":[],"medicationCourses":[],"medicationIntakes":[],"assistantConversation":[{"id":"chat","content":"PRIVATE CHAT"}]}'::jsonb);
-do $$ declare r jsonb; begin
+do $$ declare r jsonb; saved jsonb; version bigint; begin
+ select data,revision into strict saved,version from public.petcare_data where user_id=auth.uid();
+ r:=public.petcare_sync_profile(version,saved);
+ if r is distinct from jsonb_build_object('conflict',false,'revision',version,'data',saved) then raise exception 'Identical save changed the profile revision';end if;
+ r:=public.petcare_sync_profile(version-1,saved);
+ if r->>'conflict' is distinct from 'true' then raise exception 'Duplicate content bypassed the revision check';end if;
  r:=public.petcare_sync_profile(0,'{"pets":[]}'::jsonb);
  if r->>'conflict'<>'true' then raise exception 'Stale write overwrote newer data';end if;
  if not public.petcare_account_active() then raise exception 'Existing account hidden';end if;

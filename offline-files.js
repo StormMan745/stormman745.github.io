@@ -1,6 +1,7 @@
 /* Originals and pending uploads are isolated by the signed-in account in IndexedDB. */
 (() => {
-    const sync=window.PetCareSync, urls=new Set(),handlers=new Map();let running=null;
+    const sync=window.PetCareSync, urls=new Set(),handlers=new Map();
+    let running=null,queueVersion=0,warmDocuments=false;
     const BUCKETS=new Set(['petcare-documents','petcare-stories']);
     const sameJob=(current,job)=>current?.generation===job.generation&&current?.version===job.version&&current?.createdAt===job.createdAt;
     const updateJob=(job,change)=>sync.mutate('outbox',job.key,current=>sameJob(current,job)?change(current):undefined);
@@ -11,39 +12,60 @@
         const session=await sync.session(uid);
         return window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{global:{headers:{Authorization:`Bearer ${session.access_token}`}},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
     }
-    async function cache(uid,bucket,path,blob) {
+    function original(uid,bucket,path,blob) {
         if(!uid||!BUCKETS.has(bucket)||!goodPath(uid,path))throw new Error('invalid_file_path');
-        const key=fileKey(uid,bucket,path);await sync.put('files',key,{key,userId:uid,bucket,path,blob,cachedAt:Date.now()});
+        return {key:fileKey(uid,bucket,path),userId:uid,bucket,path,blob,cachedAt:Date.now()};
+    }
+    async function cache(uid,bucket,path,blob) {
+        const guard=sync.accountGuard(uid),file=original(uid,bucket,path,blob);
+        guard();
+        await sync.put('files',file.key,file,guard);
+        guard();
     }
     async function download(bucket,path,uid=activeUserId) {
         if(!uid||uid!==activeUserId||!BUCKETS.has(bucket)||!goodPath(uid,path))throw new Error('Войдите в аккаунт владельца файла.');
+        const guard=sync.accountGuard(uid);
         const cached=await sync.get('files',fileKey(uid,bucket,path));
+        guard();
         if(cached?.blob)return cached.blob;
         if(!navigator.onLine)throw new Error('Этот файл ещё не сохранён для работы без связи. Подключитесь к интернету и откройте его один раз.');
         const client=await bound(uid),blob=check(await client.storage.from(bucket).download(path));
-        if(activeUserId!==uid)throw new Error('Аккаунт изменился.');
-        await cache(uid,bucket,path,blob);return blob;
+        guard();
+        await cache(uid,bucket,path,blob);
+        guard();
+        return blob;
     }
-    async function enqueue(job) {
-        if(!job.userId || job.userId!==activeUserId)throw new Error('Аккаунт изменился.');
-        const key=job.key||`${job.userId}:${crypto.randomUUID()}`;
-        await sync.put('outbox',key,{...job,key,generation:crypto.randomUUID(),createdAt:Date.now()});
+    function queued() {
+        queueVersion++;
         window.dispatchEvent(new Event('petcare:files-changed'));flush();
+    }
+    async function enqueue(job,file) {
+        const guard=sync.accountGuard(job.userId);
+        guard();
+        const key=job.key||`${job.userId}:${crypto.randomUUID()}`;
+        const entry={...job,key,generation:crypto.randomUUID(),createdAt:Date.now()};
+        if(file)await sync.queueOriginal(file,entry);
+        else await sync.put('outbox',key,entry,guard);
+        guard();
+        queued();
     }
     async function upload(bucket,path,blob,options={}) {
         const uid=activeUserId;
-        await cache(uid,bucket,path,blob);
-        await enqueue({key:`${uid}:upload:${bucket}:${path}`,userId:uid,type:'upload',bucket,path,options});
+        await enqueue({key:`${uid}:upload:${bucket}:${path}`,userId:uid,type:'upload',bucket,path,options},original(uid,bucket,path,blob));
         return {path};
     }
     async function cachedRows(uid) {return (await sync.get('preferences',`documents:${uid}`))?.rows||[];}
     async function documentRows(uid=activeUserId, refresh=true) {
+        const guard=sync.accountGuard(uid);
+        guard();
         let rows=await cachedRows(uid);
+        guard();
         if(refresh&&navigator.onLine) {
             try {const client=await bound(uid);rows=check(await client.from('petcare_documents').select('*').eq('user_id',uid).order('document_date',{ascending:false}));
-                if(activeUserId!==uid)return [];
-                await sync.put('preferences',`documents:${uid}`,{key:`documents:${uid}`,userId:uid,rows});
-            }catch{window.dispatchEvent(new CustomEvent('petcare:files-error',{detail:{code:'file_list_unavailable'}}));}
+                guard();
+                const key=`documents:${uid}`;
+                await sync.put('preferences',key,{key,userId:uid,rows},guard);
+            }catch{guard();window.dispatchEvent(new CustomEvent('petcare:files-error',{detail:{code:'file_list_unavailable'}}));}
         }
         const byId=new Map(rows.map(r=>[r.id,r]));
         for(const job of (await sync.all('outbox',uid)).sort((a,b)=>a.createdAt-b.createdAt)) {
@@ -52,12 +74,12 @@
             if(job.type==='document-delete')byId.delete(job.id);
             if(job.type==='pet-documents-delete')for(const [id,row] of byId)if(row.pet_id===job.petId)byId.delete(id);
         }
+        guard();
         return [...byId.values()].filter(r=>!r.deleted_at);
     }
     async function putDocument(row,blob) {
         const uid=activeUserId;if(uid!==row.user_id)throw new Error('Аккаунт изменился.');
-        await cache(uid,'petcare-documents',row.storage_path,blob);
-        await enqueue({key:`${uid}:document-put:${row.id}`,userId:uid,type:'document-put',row});
+        await enqueue({key:`${uid}:document-put:${row.id}`,userId:uid,type:'document-put',row},original(uid,'petcare-documents',row.storage_path,blob));
     }
     const metadata=row=>Object.fromEntries(['title','category','document_date','record_id','extracted_text'].map(key=>[key,row[key]??(key==='extracted_text'?'':null)]));
     async function editDocument(row,fields) {
@@ -68,7 +90,7 @@
             if(activeUserId!==uid)throw new Error('Аккаунт изменился.');
             return {key,userId:uid,type:'document-edit',id:row.id,petId:row.pet_id,row:old?.row||row,base:old?.base||metadata(row),fields:{...metadata(row),...old?.fields,...patch},conflict:old?.conflict,generation:crypto.randomUUID(),createdAt:Date.now()};
         });
-        window.dispatchEvent(new Event('petcare:files-changed'));flush();
+        queued();
     }
     async function deleteDocument(row) {if(row.user_id!==activeUserId)throw new Error('Аккаунт изменился.');await enqueue({userId:activeUserId,type:'document-delete',id:row.id,petId:row.pet_id});}
     async function removePet(petId,uid) {await enqueue({userId:uid,type:'pet-documents-delete',petId});}
@@ -117,25 +139,41 @@
     }
     async function flush() {
         if(running||!navigator.onLine||!activeUserId)return running;
-        const uid=activeUserId;
+        const uid=activeUserId,guard=sync.accountGuard(uid);
+        let checkedVersion=queueVersion;
         const work=async()=>{
-            if(activeUserId!==uid)return;
-            const client=await bound(uid);
-            for(const job of (await sync.all('outbox',uid)).sort((a,b)=>a.createdAt-b.createdAt)) {
-                if(activeUserId!==uid)break;
-                try{await process(job,client);}catch(error){
-                    if(activeUserId!==uid)break;
-                    if(['document_conflict','document_deleted','care_conflict','care_access_denied'].includes(error.message)){await updateJob(job,current=>({...current,errorCode:error.message}));window.dispatchEvent(new CustomEvent('petcare:files-error',{detail:{code:error.message}}));continue;}
-                    throw error;
+            guard();
+            let hasJobs=false,documentsChanged=false;
+            do {
+                checkedVersion=queueVersion;
+                const jobs=(await sync.all('outbox',uid)).sort((a,b)=>a.createdAt-b.createdAt);
+                guard();
+                if(!jobs.length)break;
+                hasJobs=true;
+                const client=await bound(uid);
+                for(const job of jobs) {
+                    guard();
+                    try{await process(job,client);}catch(error){
+                        guard();
+                        if(['document_conflict','document_deleted','care_conflict','care_access_denied'].includes(error.message)){await updateJob(job,current=>({...current,errorCode:error.message}));window.dispatchEvent(new CustomEvent('petcare:files-error',{detail:{code:error.message}}));continue;}
+                        throw error;
+                    }
+                    await updateJob(job,()=>null);
+                    documentsChanged ||= job.type.startsWith('document-') || job.type==='pet-documents-delete';
                 }
-                await updateJob(job,()=>null);
-            }
-            if(activeUserId===uid) {
+            }while(checkedVersion!==queueVersion);
+            guard();
+            if(documentsChanged || warmDocuments) {
+                warmDocuments=false;
                 await documentRows(uid,true);
-                window.dispatchEvent(new Event('petcare:files-changed'));
+                guard();
+                hasJobs=true;
             }
+            if(hasJobs)window.dispatchEvent(new Event('petcare:files-changed'));
         };
-        running=(navigator.locks?navigator.locks.request('petcare-files-'+uid,work):work()).catch(()=>{if(activeUserId===uid)window.dispatchEvent(new CustomEvent('petcare:files-error',{detail:{code:'file_sync_failed'}}));}).finally(()=>{running=null;if(activeUserId&&activeUserId!==uid)flush();});
+        running=(navigator.locks?navigator.locks.request('petcare-files-'+uid,work):work())
+            .catch(()=>{if(activeUserId===uid)window.dispatchEvent(new CustomEvent('petcare:files-error',{detail:{code:'file_sync_failed'}}));})
+            .finally(()=>{running=null;if(activeUserId && (activeUserId!==uid || checkedVersion!==queueVersion))flush();});
         return running;
     }
     const originalFrom=supabaseClient.storage.from.bind(supabaseClient.storage);
@@ -144,19 +182,23 @@
         return new Proxy(original,{get(target,name){
             if(name==='upload')return async(path,file,options)=>{try{return {data:await upload(bucket,path,file,options),error:null}}catch(error){return {data:null,error}}};
             if(name==='download')return async path=>{try{return {data:await download(bucket,path),error:null}}catch(error){return {data:null,error}}};
-            if(name==='createSignedUrl')return async path=>{try{const blob=await download(bucket,path);const url=URL.createObjectURL(blob);urls.add(url);return {data:{signedUrl:url},error:null}}catch(error){return {data:null,error}}};
+            if(name==='createSignedUrl')return async path=>{try{const uid=activeUserId,guard=sync.accountGuard(uid);const blob=await download(bucket,path,uid);guard();const url=URL.createObjectURL(blob);urls.add(url);return {data:{signedUrl:url},error:null}}catch(error){return {data:null,error}}};
             if(name==='remove')return async paths=>{try{await enqueue({userId:activeUserId,type:'remove',bucket,paths});return {data:paths.map(name=>({name})),error:null}}catch(error){return {data:null,error}}};
             const value=target[name];return typeof value==='function'?value.bind(target):value;
         }});
     };
     window.addEventListener('petcare:flush-files',flush);
-    window.addEventListener('petcare:account-ready',flush);
-    window.addEventListener('petcare:account-reset',()=>{urls.forEach(url=>URL.revokeObjectURL(url));urls.clear()});
-    setInterval(()=>{if(activeUserId&&navigator.onLine)flush()},30000);
+    window.addEventListener('petcare:account-ready',()=>{warmDocuments=true;queueVersion++;flush();});
+    window.addEventListener('petcare:account-reset',()=>{warmDocuments=false;urls.forEach(url=>URL.revokeObjectURL(url));urls.clear()});
+    setInterval(()=>{
+        if(!activeUserId || !navigator.onLine)return;
+        if(!document.hidden && ['documentsPage','assistantPage'].some(id=>document.getElementById(id)?.style.display==='block'))warmDocuments=true;
+        flush();
+    },30000);
     window.PetCareFiles={download,upload,documentRows,putDocument,editDocument,deleteDocument,removePet,flush,platform,cache,
         async resolveDocument(id,choice){const uid=activeUserId;for(const job of await sync.all('outbox',uid))if(job.type==='document-edit'&&job.id===id){if(activeUserId!==uid)throw new Error('Аккаунт изменился.');if(choice==='remote')await updateJob(job,()=>null);else if(choice==='local'&&job.conflict&&!job.conflict.missing){if(job.conflict.deleted)await platform('restore-document',{id},uid);await updateJob(job,current=>({...current,base:job.conflict.remote,conflict:null,errorCode:null,generation:crypto.randomUUID(),createdAt:Date.now()}));}}await flush();window.dispatchEvent(new Event('petcare:files-changed'));},
         register:(type,handler)=>handlers.set(type,handler),
         queue:enqueue,
         legacyDelete:id=>enqueue({userId:activeUserId,type:'legacy-pet-delete',id}),
-        async pending(uid=activeUserId){return (await sync.all('outbox',uid)).length}};
+        async pending(uid=activeUserId){return uid ? sync.count('outbox',uid) : 0;}};
 })();

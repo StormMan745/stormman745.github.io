@@ -6,6 +6,7 @@
     const button=(text,action,data={})=>{const b=E('button',text,'care-button');b.type='button';b.dataset.care=action;Object.assign(b.dataset,data);return b};
     const rpc=(action,body={})=>files.platform(action,body);
     let shared=null,medShared=false,editingCourse=null,reportErrors=[],analyticsEnabled=false,inviteToken=null,fileError=false;
+    let consentVersion=0;
     const root=document.querySelector('.app');
     root.insertAdjacentHTML('afterbegin',`<div class="sync-status-bar" id="syncStatusBar" hidden><span role="status" aria-live="polite">Проверяю сохранение…</span><button type="button" data-care="sync-retry">Повторить</button><small id="fileQueueStatus"></small></div>`);
     const panels=[['medicationPage','Курсы лекарств'],['vetSharePage','Карточка для ветеринара'],['careMembersPage','Совместный уход'],['sharedCarePage','Записи питомца'],['privacyPage','Мои данные'],['supportPage','Сообщить о проблеме']];
@@ -125,7 +126,7 @@
     window.addEventListener('petcare:sync-status',refreshQueue);window.addEventListener('petcare:files-changed',refreshQueue);
     window.addEventListener('petcare:files-error',event=>{fileError=true;reportErrors.push(event.detail?.code||'file_sync_failed');$('fileQueueStatus').textContent='Не удалось отправить файлы или действия. Копия сохранена на устройстве. Нажмите «Повторить» или откройте очередь в разделе «Мои данные».';if(activeUserId){$('syncStatusBar').dataset.phase='error';$('syncStatusBar').querySelector('[role="status"]').textContent='Есть неотправленные изменения';$('syncStatusBar').querySelector('button').hidden=false;}});
     window.addEventListener('error',()=>{reportErrors.push('script_error')});window.addEventListener('unhandledrejection',()=>{reportErrors.push('unhandled_promise')});
-    window.addEventListener('petcare:account-reset',()=>{shared=null;medShared=false;analyticsEnabled=false;reportErrors=[];fileError=false;closeDialog();for(const [id] of panels)$(id+'Content').replaceChildren();$('careOnboarding').hidden=true});
+    window.addEventListener('petcare:account-reset',()=>{consentVersion++;shared=null;medShared=false;analyticsEnabled=false;reportErrors=[];fileError=false;closeDialog();for(const [id] of panels)$(id+'Content').replaceChildren();$('careOnboarding').hidden=true});
     window.addEventListener('petcare:account-ready',async()=>{initialiseCourses(appData);renderOnboarding();refreshQueue();if(navigator.onLine)recordEvent('active');checkInvitation();});
     function recordEvent(event){if(analyticsEnabled&&activeUserId&&['pet_added','reminder_created','active'].includes(event))files.queue({key:`${activeUserId}:analytics:${event}:${today()}`,userId:activeUserId,type:'analytics',event,day:today()}).catch(()=>{});}
     files.register('analytics',async job=>{await files.platform('analytics-event',{event:job.event,day:job.day},job.userId);});
@@ -248,7 +249,28 @@
         const pending=E('section',null,'care-card');pending.id='carePendingOperations';pending.append(E('h3','Очередь изменений'),button('Показать ожидающие операции','show-pending'));content.append(pending);
         const analytics=E('section',null,'care-card');analytics.innerHTML='<h3>Помочь улучшить PetCare</h3><label class="care-check"><input id="careAnalyticsConsent" type="checkbox"><span>Помочь улучшить PetCare: передавать события добавления питомца, создания напоминания, дни возврата и технические коды ошибок с версией приложения. Без содержания записей, чата, документов и точной геопозиции. События хранятся до 90 дней. Разрешение можно отозвать с удалением событий.</span></label>';
         $('privacyPageContent').append(analytics);$('careAnalyticsConsent').checked=analyticsEnabled;
-        $('careAnalyticsConsent').addEventListener('change',async event=>{try{await rpc('analytics-consent',{enabled:event.target.checked});analyticsEnabled=event.target.checked;appData.preferences={...appData.preferences,analyticsEnabled};await saveData();if(analyticsEnabled)recordEvent('active');message('privacyPage',analyticsEnabled?'Аналитика включена.':'Аналитика выключена, ранее собранные события аккаунта удалены.')}catch{event.target.checked=!event.target.checked;message('privacyPage','Не удалось изменить согласие. Повторите при наличии связи.',true)}});
+        $('careAnalyticsConsent').addEventListener('change',async event=>{
+            const control=event.currentTarget,enabled=control.checked,uid=activeUserId,version=++consentVersion;
+            const current=()=>uid===activeUserId && consentVersion===version;
+            control.disabled=true;
+            try {
+                await files.platform('analytics-consent',{enabled},uid);
+                if(!current())return;
+                analyticsEnabled=enabled;
+                appData.preferences={...appData.preferences,analyticsEnabled};
+                await saveData();
+                if(!current())return;
+                if(enabled)recordEvent('active');
+                message('privacyPage',enabled?'Аналитика включена.':'Аналитика выключена, ранее собранные события аккаунта удалены.');
+            }catch{
+                if(current())message('privacyPage','Не удалось сохранить настройку. Повторите при наличии связи.',true);
+            }finally{
+                if(current()){
+                    const visible=$('careAnalyticsConsent');
+                    if(visible){visible.checked=analyticsEnabled;visible.disabled=false;}
+                }
+            }
+        });
         const remove=E('section',null,'care-card');remove.append(E('h3','Управление аккаунтом'),button('Удалить локальную копию с этого устройства','clear-local'),button('Удалить аккаунт и все данные','account-delete'));remove.lastChild.classList.add('care-danger');content.append(remove);
     }
     async function showBackups(){const uid=activeUserId,box=$('careBackupList');box.replaceChildren(E('h3','Резервные копии профиля и корзина'));const backups=await rpc('backups');const deleted=await rpc('deleted-documents');if(activeUserId!==uid)return;
@@ -280,7 +302,19 @@
         'push-health':async()=>{const result=await rpc('push-health');alert(`Подключено устройств: ${result.devices}. За 7 дней push-служба приняла: ${result.accepted}, ошибок: ${result.failed}. Принятие службой не подтверждает показ на телефоне: проверьте разрешение уведомлений, связь, звук и режим «Не беспокоить».`);},
         'show-backups':showBackups,'cache-documents':cacheDocuments,'account-delete':deleteAccountDialog,
         'export-local-archive':exportLocalArchive,'show-pending':showPending,
-        'clear-local':async()=>{if((await files.pending())||sync.state.pending){alert('Сначала отправьте ожидающие изменения или скачайте их копию.');return;}if(confirm('Удалить локальные записи и файлы с этого устройства и выйти? Облачные данные сохранятся.')){const uid=activeUserId;await logoutUser();await sync.purge(uid);}},
+        'clear-local':async()=>{
+            const uid=activeUserId;
+            if(!uid)return;
+            const [queued,profile]=await Promise.all([files.pending(uid),sync.get('profiles',uid)]);
+            if(uid!==activeUserId)return;
+            if(queued || profile?.pending || profile?.conflict || sync.state.pending){
+                alert('Сначала отправьте ожидающие изменения или скачайте их копию.');return;
+            }
+            if(!confirm('Удалить локальные записи и файлы с этого устройства и выйти? Облачные данные сохранятся.'))return;
+            await logoutUser();
+            if(!activeUserId && !await sync.purge(uid,{onlyIfSynced:true}))
+                alert('Во время выхода появились новые изменения. Они сохранены на устройстве до следующего входа.');
+        },
         'download-diagnostics':()=>saveJSON(diagnostics(),'PetCare-support.json')});
     Object.assign(window.PetCareCare,{zip,exportArchive,openPrivacy,openMedications,openVetShare,openMembers,diagnostics});
     window.PetCareCare.resolveDocument=async id=>{
@@ -315,5 +349,17 @@
     $('loginForm').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.isComposing&&event.target.matches('input')){event.preventDefault();loginUser()}});
     $('registerForm').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.isComposing&&event.target.matches('input')){event.preventDefault();registerUser()}});
     const aiStatus=()=>{const send=document.querySelector('[data-pc-click="assistant-send"]');if(send)send.disabled=!navigator.onLine;};window.addEventListener('online',aiStatus);window.addEventListener('offline',aiStatus);aiStatus();
-    window.addEventListener('petcare:account-ready',async()=>{try{const status=await rpc('analytics-status');analyticsEnabled=status.enabled===true;if(analyticsEnabled)recordEvent('active')}catch{analyticsEnabled=appData.preferences?.analyticsEnabled===true}});
+    window.addEventListener('petcare:account-ready',async()=>{
+        const uid=activeUserId,version=++consentVersion;
+        if(!uid)return;
+        try{
+            const result=await files.platform('analytics-status',{},uid);
+            if(uid!==activeUserId || version!==consentVersion)return;
+            analyticsEnabled=result.enabled===true;
+            if(analyticsEnabled)recordEvent('active');
+        }catch{
+            if(uid===activeUserId && version===consentVersion)analyticsEnabled=appData.preferences?.analyticsEnabled===true;
+        }
+        if(uid===activeUserId && version===consentVersion && $('careAnalyticsConsent'))$('careAnalyticsConsent').checked=analyticsEnabled;
+    });
 })();

@@ -136,15 +136,14 @@
         status('');
     }
 
-    async function load() {
+    async function load(refresh=true) {
         const ctx = context;
         if (!current(ctx)) return;
         const sequence = ++loadSequence;
         status('Загружаю документы…');
         try {
-            const data = await PetCareFiles.documentRows(ctx.userId); const error = null;
+            const data = await PetCareFiles.documentRows(ctx.userId,refresh);
             if (!current(ctx) || sequence !== loadSequence) return;
-            if (error) throw error;
             rows = (data || []).filter(row => row.user_id === ctx.userId && row.pet_id === ctx.petId);
             render();
             status('');
@@ -452,7 +451,7 @@
         else if (action === 'open' || action === 'download') readFile(row, action === 'download');
         else if (action === 'delete') remove(row);
     });
-    window.addEventListener('petcare:files-changed',()=>{if(current(context)&&el('documentsPage').style.display==='block'&&!busy)load();});
+    window.addEventListener('petcare:files-changed',()=>{if(current(context)&&el('documentsPage').style.display==='block'&&!busy)load(false);});
     window.addEventListener('petcare:account-reset', () => { resetContext(); context = null; });
     window.PetCareDocuments = {
         open, removePet,

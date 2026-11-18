@@ -6,6 +6,7 @@
     "build:qr": "node build-qr.cjs",
     "check:build": "node build-app.cjs --check",
     "test:auth": "node check-auth-controls.cjs",
+    "test:storage": "node check-offline-care.cjs --storage",
     "test:push": "node check-push.cjs && node check-push-browser.cjs",
     "test:routine-times": "node check-offline-care.cjs --routine-times && node check-routine-day.cjs",
     "test:routine-push": "node check-push.cjs && node check-offline-care.cjs --routine-push && node --test ../mobile/tests/reminders.test.mjs",

@@ -18,9 +18,29 @@ for(const [extension,files] of [['js',scripts],['css',styles]]){
     stats.push({name,files:files.length,sourceBytes:Buffer.byteLength(source),bundleBytes:Buffer.byteLength(result),gzipBytes:zlib.gzipSync(result).length,hash:crypto.createHash('sha256').update(result).digest('hex').slice(0,12)});
 }
 let html=read('index.html');
+function releaseWorker(html) {
+    let worker=read('sw.js');
+    for(const {name,hash} of stats) {
+        const entry=new RegExp('"/'+name.replaceAll('.', '\\.')+'(?:\\?v=[\\w.-]+)?"');
+        if(!entry.test(worker))throw new Error('Missing offline asset: '+name);
+        worker=worker.replace(entry,'"/'+name+'?v='+hash+'"');
+    }
+    const template=worker.replace(/^const CACHE_NAME = "[^"]+";/m,'const CACHE_NAME = "@release@";');
+    if(!template.includes('"@release@"'))throw new Error('Missing service worker release marker');
+    const files=JSON.parse(template.match(/const SHELL_FILES = (\[[\s\S]*?\]);/)[1]);
+    const fingerprint=crypto.createHash('sha256');
+    fingerprint.update(template.replaceAll('\r\n','\n'));
+    for(const key of files) {
+        const name=key.slice(1).split('?')[0];
+        const bytes=name==='index.html' ? html : /\.(?:html|js|css|webmanifest)$/.test(name)
+            ? read(name) : fs.readFileSync(path.join(root,name));
+        fingerprint.update(key+'\0').update(typeof bytes==='string'?bytes.replaceAll('\r\n','\n'):bytes);
+    }
+    return template.replace('"@release@"','"petcare-shell-'+fingerprint.digest('hex').slice(0,16)+'"');
+}
 if(check){
     for(const item of stats)if(!html.includes(item.name+'?v='+item.hash))throw new Error('Stale HTML asset version: '+item.name);
-    for(const item of stats)if(!read('sw.js').includes('"/'+item.name+'"'))throw new Error('Missing offline asset: '+item.name);
+    if(read('sw.js')!==releaseWorker(html))throw new Error('Offline shell is stale; rebuild the app');
     console.log('PASS: generated assets and HTML versions match readable sources; bundles are in the offline shell.');
     process.exit(0);
 }
@@ -30,8 +50,5 @@ html=html.replace('</head>',`    <link rel="stylesheet" href="app.bundle.css?v=$
 html=html.replace(new RegExp('<script src="(?:'+pattern([...scripts,'app.bundle.js'])+')(?:\\?[^"<>]*)?"></script>\\r?\\n','g'),'');
 html=html.replace('</body>',`<script src="app.bundle.js?v=${stats[0].hash}"></script>\n</body>`);
 fs.writeFileSync(path.join(root,'index.html'),html);
-let sw=read('sw.js').replace(/petcare-shell-v\d+-[\w-]+/,'petcare-shell-v67-country-maps');
-for(const file of [...scripts,...styles])sw=sw.replace(new RegExp('    "/'+file.replaceAll('.','\\.')+'",\\r?\\n'),'');
-if(!sw.includes('"/app.bundle.js"'))sw=sw.replace('    "/index.html",','    "/index.html",\n    "/app.bundle.js",\n    "/app.bundle.css",');
-fs.writeFileSync(path.join(root,'sw.js'),sw);
+fs.writeFileSync(path.join(root,'sw.js'),releaseWorker(html));
 console.log(JSON.stringify(stats,null,2));

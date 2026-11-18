@@ -5,10 +5,36 @@
     const queues = new Map(), flushing = new Map(), epochs = new Map(), timers = new Map(),seen=new Map();
     let retryDelay = 1000;
     let displayed = { phase: 'loading', pending: 0 };
-    let realtime=null;
+    let realtime=null, accountGeneration=0;
+    const stores=['profiles','files','outbox','preferences'];
+    function accountGuard(uid) {
+        const generation=accountGeneration;
+        return () => {
+            if (!uid || uid!==activeUserId || generation!==accountGeneration) throw new Error('Аккаунт изменился.');
+        };
+    }
     const accountChannel=typeof BroadcastChannel==='function'?new BroadcastChannel('petcare-account-control'):null;
     window.addEventListener('petcare:local-signout',event=>accountChannel?.postMessage({type:'signed-out',userId:event.detail.userId,all:event.detail.all===true}));
-    if(accountChannel)accountChannel.onmessage=event=>{if(event.data?.type==='signed-out'&&(event.data.all||event.data.userId===activeUserId)){resetActiveAccountData();hideAllPages();document.getElementById('authPage').style.display='flex';document.querySelector('.bottom-menu').style.display='none';showLoginForm();}};
+    // Signal another tab without copying medical records or photos into Web Storage.
+    const noticeKey='petcare-profile-notice';
+    async function peerSaved(uid) {
+        if (!uid || uid!==activeUserId || assistantLive.userId!==uid) return;
+        const generation=accountGeneration, petId=assistantLive.petId;
+        const state=await get('profiles',uid);
+        if (state && generation===accountGeneration && activeUserId===uid && assistantLive.petId===petId
+            && getAssistantLocalProfileKey(state.data,petId)!==assistantLive.cloudKey) scheduleAssistantProfileRefresh();
+    }
+    function signalSave(uid) {
+        try {
+            if (accountChannel) accountChannel.postMessage({type:'profile-saved',userId:uid});
+            else { localStorage.setItem(noticeKey,uid); localStorage.removeItem(noticeKey); }
+        } catch { /* The profile is already durable. */ }
+    }
+    window.addEventListener('storage',event=>{if(event.key===noticeKey && event.newValue)peerSaved(event.newValue).catch(()=>{});});
+    if(accountChannel)accountChannel.onmessage=event=>{
+        if(event.data?.type==='profile-saved')peerSaved(event.data.userId).catch(()=>{});
+        if(event.data?.type==='signed-out'&&(event.data.all||event.data.userId===activeUserId)){resetActiveAccountData();hideAllPages();document.getElementById('authPage').style.display='flex';document.querySelector('.bottom-menu').style.display='none';showLoginForm();}
+    };
     const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
     const same = (a,b) => JSON.stringify(a) === JSON.stringify(b);
     // A checklist entry identifies one task on one day for one pet, not just a task.
@@ -49,7 +75,7 @@
     function openDB() {
         if(!database)database=new Promise((resolve,reject)=>{
             const request=indexedDB.open(DB,2);
-            request.onupgradeneeded=()=>{ for(const name of ['profiles','files','outbox','preferences']) {const store=request.result.objectStoreNames.contains(name)?request.transaction.objectStore(name):request.result.createObjectStore(name);if(!store.indexNames.contains('userId'))store.createIndex('userId','userId');} };
+            request.onupgradeneeded=()=>{ for(const name of stores) {const store=request.result.objectStoreNames.contains(name)?request.transaction.objectStore(name):request.result.createObjectStore(name);if(!store.indexNames.contains('userId'))store.createIndex('userId','userId');} };
             request.onsuccess=()=>{request.result.onversionchange=()=>{request.result.close();database=null};resolve(request.result)};request.onerror=()=>reject(request.error);
         }).catch(error=>{database=null;throw error});
         return database;
@@ -63,8 +89,27 @@
         });
     }
     const get=(name,key)=>store(name,'readonly',s=>s.get(key));
-    const put=(name,key,value)=>store(name,'readwrite',s=>s.put(value,key));
+    const put=(name,key,value,guard)=>store(name,'readwrite',s=>{guard?.();return s.put(value,key);});
     const remove=(name,key)=>store(name,'readwrite',s=>s.delete(key));
+    async function writeStores(names, action) {
+        const db=await openDB();
+        return new Promise((resolve,reject)=>{
+            const tx=db.transaction(names,'readwrite');
+            let failure;
+            tx.oncomplete=()=>resolve();
+            tx.onabort=()=>reject(failure || tx.error || new Error('local_write_failed'));
+            try { action(tx); } catch(error) { failure=error; tx.abort(); }
+        });
+    }
+    async function queueOriginal(file,job) {
+        const guard=accountGuard(job.userId);
+        await writeStores(['files','outbox'],tx=>{
+            guard();
+            if(file.userId!==job.userId)throw new Error('invalid_file_owner');
+            tx.objectStore('files').put(file,file.key);
+            tx.objectStore('outbox').put(job,job.key);
+        });
+    }
     // The comparison and write share one transaction, including across tabs.
     // undefined keeps the row; null deletes it; any other value replaces it.
     async function mutate(name,key,change) {
@@ -78,8 +123,10 @@
         });
     }
     async function all(name,uid) { return store(name,'readonly',s=>s.index('userId').getAll(IDBKeyRange.only(uid))); }
+    const count=(name,uid)=>store(name,'readonly',s=>s.index('userId').count(IDBKeyRange.only(uid)));
     function serial(uid, action) {
-        const result=(queues.get(uid)||Promise.resolve()).catch(()=>{}).then(()=>navigator.locks?navigator.locks.request('petcare-local-'+uid,action):action());
+        const result=(queues.get(uid)||Promise.resolve()).catch(()=>{}).then(()=>navigator.locks?navigator.locks.request('petcare-local-'+uid,action):action())
+            .finally(()=>{if(queues.get(uid)===result)queues.delete(uid);});
         queues.set(uid,result);return result;
     }
     async function session(uid) {
@@ -98,8 +145,9 @@
             return await response.json();
         } finally { clearTimeout(timer); }
     }
-    async function remote(uid) {
-        const rows=await request(uid,`rest/v1/petcare_data?select=data,revision&user_id=eq.${encodeURIComponent(uid)}&limit=1`);
+    async function remote(uid, revisionOnly=false) {
+        const fields=revisionOnly?'revision':'data,revision';
+        const rows=await request(uid,`rest/v1/petcare_data?select=${fields}&user_id=eq.${encodeURIComponent(uid)}&limit=1`);
         return rows[0]||{data:{},revision:0};
     }
     function status(phase,pending=0) {
@@ -118,37 +166,55 @@
         timers.set(uid,setTimeout(()=>flush(uid),retryDelay));retryDelay=Math.min(60000,retryDelay*2);
     }
     async function load(uid,legacy) {
+        const guard=accountGuard(uid);
         let state=await get('profiles',uid);
+        guard();
         if(!state) {
             let cloud=null;
             if(navigator.onLine)try{cloud=await remote(uid)}catch{}
+            guard();
             const local=legacy && typeof legacy==='object'?canonical(legacy):null;
             const hasCloud=cloud && Object.keys(cloud.data||{}).length;
             const data=local||(hasCloud?cloud.data:null);
             if(!data){status('offline');return null;}
             state={userId:uid,data:canonical(data),base:hasCloud?canonical(cloud.data):null,revision:cloud?.revision??null,pending:!hasCloud||!!local&&!same(local,canonical(cloud.data)),savedAt:Date.now()};
             if(local && hasCloud && !same(local,canonical(cloud.data)))state.conflict={remote:canonical(cloud.data),revision:cloud.revision,paths:['migration']};
-            await put('profiles',uid,state);
+            // Another tab may have saved a first edit while the initial network read was in flight.
+            const seeded=await mutate('profiles',uid,current=>{guard();return current?undefined:state;});
+            state=seeded || await get('profiles',uid);
         }
+        guard();
+        if(!state)return null;
+        // Only retire an older version's copy after its IndexedDB replacement has committed.
+        try{localStorage.removeItem(`petcareData:${uid}`);}catch{}
         status(state.conflict?'conflict':navigator.onLine?(state.pending?'pending':'saved'):'offline',Number(state.pending));
         if(!state.conflict)setTimeout(()=>flush(uid),0);
         seen.set(uid,canonical(state.data));
         return clone(state.data);
     }
     async function save(data,uid) {
-        epochs.set(uid,(epochs.get(uid)||0)+1);
-        const previous=seen.get(uid);seen.set(uid,canonical(data));
+        if(!uid || uid!==activeUserId)return false;
+        const generation=accountGeneration, epoch=(epochs.get(uid)||0)+1;
+        epochs.set(uid,epoch);
+        const previous=seen.get(uid),snapshot=canonical(data);seen.set(uid,snapshot);
         try {
-            await serial(uid,async()=>{
-                const old=await get('profiles',uid)||{userId:uid,base:null,revision:null};
-                const conflicts=[];const merged=previous&&old.data?canonical(merge(previous,canonical(data),canonical(old.data),'',conflicts)):canonical(data);
+            await serial(uid,()=>mutate('profiles',uid,current=>{
+                const old=current||{userId:uid,base:null,revision:null};
+                const conflicts=[];const merged=previous&&old.data?canonical(merge(previous,snapshot,old.data,'',conflicts)):snapshot;
                 const conflict=conflicts.length?{remote:old.data,base:old.base,revision:old.revision,peer:true,paths:conflicts}:old.conflict;
-                await put('profiles',uid,{...old,data:merged,conflict,pending:true,savedAt:Date.now()});
-                try{localStorage.setItem(`petcareData:${uid}`,JSON.stringify(merged));}catch{} // Compatibility copy; IndexedDB is authoritative.
-            });
+                return {...old,data:merged,conflict,pending:true,savedAt:Date.now()};
+            }));
+            if(generation!==accountGeneration || uid!==activeUserId)return false;
+            signalSave(uid);
             status(navigator.onLine?'pending':'offline',1);
-            if(activeUserId===uid)window.PetCareNative?.syncReminders();
-        } catch(error){status('storage',1);throw error;}
+            window.PetCareNative?.syncReminders();
+        } catch(error){
+            if(generation===accountGeneration && uid===activeUserId){
+                if(epochs.get(uid)===epoch)seen.set(uid,previous);
+                status('storage',1);
+            }
+            throw error;
+        }
         if(!navigator.onLine)return false;
         const synced=await flush(uid);
         const latest=await get('profiles',uid);
@@ -157,64 +223,127 @@
     }
     async function runFlush(uid) {
         if(activeUserId!==uid || !navigator.onLine)return false;
+        const generation=accountGeneration;
+        const current=()=>activeUserId===uid && accountGeneration===generation;
+        let collision=null;
         try {
             for(let attempt=0;attempt<8;attempt++) {
                 await (queues.get(uid)||Promise.resolve()).catch(()=>{});
-                let state=await get('profiles',uid);if(!state)return false;
+                let state=await get('profiles',uid);if(!state || !current())return false;
                 if(state.conflict){status('conflict',1);return false;}
                 const epoch=epochs.get(uid)||0;
-                const cloud=await remote(uid);if(activeUserId!==uid)return false;
+                if (!state.pending && state.revision!=null) {
+                    const head=await remote(uid,true);
+                    if(!current())return false;
+                    if(head.revision===state.revision){
+                        const latest=await get('profiles',uid);
+                        if(!current() || !latest)return false;
+                        if(latest.pending || latest.conflict || latest.revision!==head.revision || (epochs.get(uid)||0)!==epoch)continue;
+                        // A peer tab can acknowledge a new revision before this tab gets its realtime event.
+                        if(!same(seen.get(uid),latest.data)){
+                            seen.set(uid,canonical(latest.data));
+                            window.dispatchEvent(new CustomEvent('petcare:snapshot',{detail:{userId:uid,data:latest.data}}));
+                        }
+                        retryDelay=1000;status('saved');window.dispatchEvent(new Event('petcare:flush-files'));return true;
+                    }
+                }
+                // Normal writes use the server's revision check. A collision includes the newer profile.
+                const cloud=collision || (state.pending && state.base!=null && state.revision!=null
+                    ? {data:state.base,revision:state.revision} : await remote(uid));
+                collision=null;
+                if(!current())return false;
                 const base=state.base===null?{}:canonical(state.base),local=canonical(state.data),server=canonical(cloud.data);
                 let conflicts=[];
                 let merged=state.pending?canonical(merge(base,local,server,'',conflicts)):server;
                 if(state.pending && state.base===null && Object.keys(server).length && !same(local,server))conflicts=['migration'];
                 if(conflicts.length) {
-                    await serial(uid,async()=>{const latest=await get('profiles',uid);await put('profiles',uid,{...latest,conflict:{remote:server,revision:cloud.revision,paths:conflicts}})});
+                    const recorded=await serial(uid,()=>mutate('profiles',uid,latest=>{
+                        if(!current() || !latest || latest.revision!==state.revision || !same(latest.data,state.data))return;
+                        return {...latest,conflict:{remote:server,revision:cloud.revision,paths:conflicts}};
+                    }));
+                    if(!current())return false;
+                    if(!recorded)continue;
                     status('conflict',1);return false;
                 }
                 let result={data:server,revision:cloud.revision};
                 if(state.pending) {
                     const sent=await request(uid,'rest/v1/rpc/petcare_sync_profile',{p_revision:cloud.revision,p_data:merged});
-                    if(sent.conflict)continue;
+                    if(!current())return false;
+                    if(sent.conflict){collision=sent;continue;}
                     result=sent;
                 }
-                await serial(uid,async()=>{
-                    if(activeUserId!==uid)return;
-                    const latest=await get('profiles',uid);
-                    if(!latest)return;
-                    if((epochs.get(uid)||0)!==epoch||!same(canonical(latest.data),local)){const overlaps=[];const rebased=canonical(merge(local,latest.data,canonical(result.data),'',overlaps));await put('profiles',uid,{...latest,data:rebased,base:canonical(result.data),revision:result.revision,conflict:overlaps.length?{remote:result.data,revision:result.revision,paths:overlaps}:latest.conflict});return;}
-                    await put('profiles',uid,{...latest,data:canonical(result.data),base:canonical(result.data),revision:result.revision,pending:false,conflict:null});
-                    seen.set(uid,canonical(result.data));
-                    if(activeUserId===uid)window.dispatchEvent(new CustomEvent('petcare:snapshot',{detail:{userId:uid,data:canonical(result.data)}}));
-                });
-                state=await get('profiles',uid);
-                if(!state.pending){retryDelay=1000;status('saved');window.dispatchEvent(new Event('petcare:flush-files'));return true;}
+                const accepted=canonical(result.data);
+                const ack=await serial(uid,()=>mutate('profiles',uid,latest=>{
+                    if(!current() || !latest || latest.conflict || latest.revision>result.revision)return;
+                    if((epochs.get(uid)||0)!==epoch || !same(latest.data,local)){
+                        if(!latest.pending)return;
+                        const overlaps=[];
+                        const data=canonical(merge(local,latest.data,accepted,'',overlaps));
+                        return {...latest,data,base:accepted,revision:result.revision,pending:true,
+                            conflict:overlaps.length?{remote:accepted,revision:result.revision,paths:overlaps}:null};
+                    }
+                    return {...latest,data:accepted,base:accepted,revision:result.revision,pending:false,conflict:null};
+                }));
+                if(!current())return false;
+                if(!ack || ack.pending || (epochs.get(uid)||0)!==epoch)continue;
+                seen.set(uid,accepted);
+                window.dispatchEvent(new CustomEvent('petcare:snapshot',{detail:{userId:uid,data:clone(accepted)}}));
+                retryDelay=1000;status('saved');window.dispatchEvent(new Event('petcare:flush-files'));return true;
             }
             throw new Error('sync_busy');
-        }catch(error){if(activeUserId===uid){const auth=error.message==='authentication_required';status(navigator.onLine?(auth?'auth':'error'):'offline',1);if(!auth)schedule(uid);}return false;}
+        }catch(error){if(current()){const auth=error.message==='authentication_required';status(navigator.onLine?(auth?'auth':'error'):'offline',1);if(!auth)schedule(uid);}return false;}
     }
     function flush(uid=activeUserId) {
         if(!uid)return Promise.resolve(false);
         if(!flushing.has(uid)) {
-            const job=()=>runFlush(uid);
-            const result=(navigator.locks?navigator.locks.request(`petcare-sync-${uid}`,job):job()).finally(()=>{flushing.delete(uid)});
+            const generation=accountGeneration;
+            const job=()=>generation===accountGeneration && runFlush(uid);
+            const result=Promise.resolve(navigator.locks?navigator.locks.request(`petcare-sync-${uid}`,job):job())
+                .finally(()=>{if(flushing.get(uid)===result)flushing.delete(uid);});
             flushing.set(uid,result);
         }
         return flushing.get(uid);
     }
     async function resolveConflict(choice) {
-        const uid=activeUserId,state=await get('profiles',uid);if(!state?.conflict)return;
-        if(activeUserId!==uid)return;
-        const data=choice==='remote'?state.conflict.remote:state.data;
-        await put('profiles',uid,{...state,data,base:state.conflict.peer?state.conflict.base:state.conflict.remote,revision:state.conflict.revision,conflict:null,pending:state.conflict.peer||choice!=='remote'});
-        seen.set(uid,canonical(data));
-        window.dispatchEvent(new CustomEvent('petcare:snapshot',{detail:{userId:uid,data}}));
+        const uid=activeUserId,guard=accountGuard(uid);
+        if(!uid || !['local','remote'].includes(choice))return;
+        const saved=await serial(uid,()=>mutate('profiles',uid,state=>{
+            guard();
+            if(!state?.conflict)return;
+            const {remote,base,revision,peer}=state.conflict;
+            return {...state,data:choice==='remote'?remote:state.data,base:peer?base:remote,
+                revision,conflict:null,pending:Boolean(peer)||choice==='local'};
+        }));
+        guard();
+        if(!saved)return;
+        seen.set(uid,canonical(saved.data));
+        window.dispatchEvent(new CustomEvent('petcare:snapshot',{detail:{userId:uid,data:saved.data}}));
         await flush(uid);
     }
-    async function purge(uid) {
-        clearTimeout(timers.get(uid));await (queues.get(uid)||Promise.resolve()).catch(()=>{});await remove('profiles',uid);
-        for(const name of ['files','outbox','preferences'])for(const row of await all(name,uid))await remove(name,row.key);
+    async function purge(uid,{onlyIfSynced=false}={}) {
+        if(!uid)return false;
+        clearTimeout(timers.get(uid));
+        let cleared=false;
+        await serial(uid,()=>writeStores(stores,tx=>{
+            const profiles=tx.objectStore('profiles');
+            const clear=()=>{
+                cleared=true;
+                profiles.delete(uid);
+                for(const name of ['files','outbox','preferences']){
+                    const table=tx.objectStore(name);
+                    const request=table.index('userId').openKeyCursor(IDBKeyRange.only(uid));
+                    request.onsuccess=()=>{const cursor=request.result;if(cursor){table.delete(cursor.primaryKey);cursor.continue();}};
+                }
+            };
+            if(!onlyIfSynced){clear();return;}
+            const profile=profiles.get(uid);
+            const jobs=tx.objectStore('outbox').index('userId').count(uid);
+            jobs.onsuccess=()=>{if(!profile.result?.pending && !profile.result?.conflict && !jobs.result)clear();};
+        }));
+        if(!cleared)return false;
+        seen.delete(uid);epochs.delete(uid);
         localStorage.removeItem(`petcareData:${uid}`);
+        return true;
     }
     window.addEventListener('online',()=>{retryDelay=1000;if(activeUserId)flush();window.dispatchEvent(new Event('petcare:flush-files'))});
     window.addEventListener('offline',()=>status('offline',displayed.pending));
@@ -224,8 +353,8 @@
         const uid=activeUserId;if(!uid)return;
         realtime=supabaseClient.channel('petcare-profile-sync-'+uid).on('postgres_changes',{event:'*',schema:'public',table:'petcare_data',filter:'user_id=eq.'+uid},()=>{if(activeUserId===uid)flush(uid)}).subscribe();
     });
-    window.addEventListener('petcare:account-reset',()=>{if(realtime){supabaseClient.removeChannel(realtime);realtime=null;}for(const timer of timers.values())clearTimeout(timer);timers.clear();document.getElementById('syncStatusBar')?.setAttribute('hidden','')});
-    window.PetCareSync={load,save,flush,resolveConflict,purge,get,put,remove,mutate,all,merge,canonical,request,status,session,
-        async purgeAll(){await Promise.allSettled([...queues.values()]);for(const name of ['profiles','files','outbox','preferences'])await store(name,'readwrite',s=>s.clear());for(const key of Object.keys(localStorage))if(key===STORAGE_KEY||key.startsWith(STORAGE_KEY+':'))localStorage.removeItem(key);},
-        get state(){return displayed},get version(){return '2026.11.05-security.1'}};
+    window.addEventListener('petcare:account-reset',()=>{accountGeneration++;flushing.clear();seen.clear();epochs.clear();retryDelay=1000;displayed={phase:'loading',pending:0};if(realtime){supabaseClient.removeChannel(realtime);realtime=null;}for(const timer of timers.values())clearTimeout(timer);timers.clear();document.getElementById('syncStatusBar')?.setAttribute('hidden','')});
+    window.PetCareSync={load,save,flush,resolveConflict,purge,get,put,remove,mutate,all,count,queueOriginal,accountGuard,merge,canonical,request,status,session,
+        async purgeAll(){await Promise.allSettled([...queues.values()]);await writeStores(stores,tx=>{for(const name of stores)tx.objectStore(name).clear()});seen.clear();epochs.clear();for(const key of Object.keys(localStorage))if(key===STORAGE_KEY||key.startsWith(STORAGE_KEY+':'))localStorage.removeItem(key);},
+        get state(){return displayed},get version(){return '2026.11.18-storage.1'}};
 })();
