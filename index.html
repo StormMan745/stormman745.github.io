@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://qexiyikdmdbdxgusqnee.supabase.co; media-src 'self' blob: https://qexiyikdmdbdxgusqnee.supabase.co; connect-src 'self' https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; frame-src https://yandex.ru https://api-maps.yandex.ru https://maps.google.com https://www.google.com; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://qexiyikdmdbdxgusqnee.supabase.co; media-src 'self' blob: https://qexiyikdmdbdxgusqnee.supabase.co; connect-src 'self' https://qexiyikdmdbdxgusqnee.supabase.co wss://qexiyikdmdbdxgusqnee.supabase.co; frame-src https://yandex.ru https://api-maps.yandex.ru; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>PetCare</title>
@@ -608,9 +608,9 @@
 
     <section class="page" id="clinicsPage" style="display: none;" aria-labelledby="clinicsTitle">
         <div class="page-header"><button type="button" data-pc-click="clinics-close" aria-label="Назад">←</button><h2 id="clinicsTitle">Места для питомцев</h2></div>
-        <p class="clinic-intro">Выберите страну и тип места. Карта переключится автоматически: в России — Яндекс, в других странах — Google.</p>
+        <p class="clinic-intro">Ищите места для питомцев через Яндекс Карты в любой стране. Разрешите геопозицию для поиска рядом или укажите адрес.</p>
         <div class="clinic-search-panel" id="clinicSearchPanel">
-            <div class="clinic-country-row"><label for="clinicCountry">Страна<select id="clinicCountry" autocomplete="country-name" aria-describedby="clinicCountryHint"></select></label><p id="clinicCountryHint">Россия — Яндекс Карты.<br>Другие страны — Google Карты.</p></div>
+            <div class="clinic-country-row"><label for="clinicCountry">Страна<select id="clinicCountry" autocomplete="country-name" aria-describedby="clinicCountryHint"></select></label><p id="clinicCountryHint">Яндекс Карты для всех стран.<br>Страна уточняет адрес; поиск рядом использует вашу геопозицию.</p></div>
             <label for="clinicCategory">Что ищем</label>
             <select id="clinicCategory"><option value="clinics">Ветеринарные клиники</option><option value="hospital">Круглосуточные стационары</option><option value="vaccination">Пункты бесплатной вакцинации</option><option value="walking">Площадки для выгула собак</option><option value="shelters">Приюты для животных</option><option value="hotels">Зоогостиницы</option></select>
             <form id="clinicSearchForm" role="search">
@@ -925,6 +925,6 @@
 
 <!-- Same-origin pinned SDK; classic loading also supports opening index.html from disk. -->
 <script src="assets/vendor/supabase/supabase-2.118.0.min.js"></script>
-<script src="app.bundle.js?v=2a48dce323d0"></script>
+<script src="app.bundle.js?v=c18ee549c011"></script>
 </body>
 </html>

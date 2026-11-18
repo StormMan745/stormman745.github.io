@@ -1,4 +1,4 @@
-// Public embedded directories; business details stay with the selected map provider.
+// Yandex Maps is the directory provider for every country.
 const $ = id => document.getElementById(id);
 let initialized = false, point = null, address = '', mapMode = '__results__';
 let mapFrame = null, permission = null, generation = 0, lastSearch = 0;
@@ -6,9 +6,7 @@ let locationRequest = null, locationAttempted = false;
 let country = 'RU';
 const countryCodes = new Set('AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'.split(' '));
 const countryNames = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['ru'], { type: 'region' }) : null;
-const englishNames = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['en'], { type: 'region' }) : null;
-const googleQueries = Object.freeze({ clinics: 'veterinary clinics', hospital: '24 hour emergency veterinarian', vaccination: 'veterinary vaccination', walking: 'dog parks', shelters: 'animal shelters', hotels: 'pet boarding' });
-const provider = () => country === 'RU' ? 'Яндекс Карты' : 'Google Карты';
+const provider = () => 'Яндекс Карты';
 const savedCountry = () => typeof appData !== 'undefined' && countryCodes.has(appData.mapCountry) ? appData.mapCountry : 'RU';
 function placeholder(message = 'Разрешите геопозицию или укажите адрес.') {
     removeMap();
@@ -21,8 +19,8 @@ function placeholder(message = 'Разрешите геопозицию или �
 function updateProvider() {
     $('clinicCountry').value = country;
     $('clinicProviderName').textContent = provider();
-    $('clinicProviderIcon').textContent = country === 'RU' ? 'Я' : 'G';
-    $('clinicProviderLink').href = country === 'RU' ? 'https://yandex.ru/maps/' : 'https://www.google.com/maps/';
+    $('clinicProviderIcon').textContent = 'Я';
+    $('clinicProviderLink').href = 'https://yandex.ru/maps/';
     $('clinicProviderLink').setAttribute('aria-label', `Открыть ${provider()}`);
     $('clinicDirectoryTitle').textContent = `Справочник: ${provider()}`;
     $('clinicMap').setAttribute('aria-label', `Встроенная карта: ${provider()}`);
@@ -30,7 +28,7 @@ function updateProvider() {
     $('clinicExternalSearch').textContent = `Открыть поиск в ${provider()} ↗`;
     $('clinicSource').textContent = provider(); $('clinicSource').href = $('clinicProviderLink').href;
     $('clinicCategory').querySelector('[value="vaccination"]').textContent = country === 'RU' ? 'Пункты бесплатной вакцинации' : 'Вакцинация животных';
-    $('clinicMapSelect').options[0].textContent = country === 'RU' ? 'Места и моя геопозиция' : 'Места рядом';
+    $('clinicMapSelect').options[0].textContent = 'Места и моя геопозиция';
     $('clinicAddress').placeholder = country === 'RU' ? 'Например: Москва, Тверская 10' : 'Город, улица и номер дома';
     updateCategoryControls();
 }
@@ -51,7 +49,11 @@ const categories = Object.freeze({
     shelters: { query: 'приюты для животных', label: 'приюты для животных', mapLayer: 4, openOnly: false },
     hotels: { query: 'зоогостиницы', label: 'зоогостиницы', mapLayer: 5, openOnly: true }
 });
-function currentCategory() { return categories[$('clinicCategory')?.value] || categories.clinics; }
+function currentCategory() {
+    const key = $('clinicCategory')?.value;
+    const category = categories[key] || categories.clinics;
+    return key === 'vaccination' && country !== 'RU' ? { ...category, query: 'вакцинация животных', label: 'вакцинация животных' } : category;
+}
 
 function status(message, kind = '') {
     $('clinicStatus').textContent = message;
@@ -66,19 +68,12 @@ function busy(value) {
 function isBusy() { return $('clinicSearchPanel').getAttribute('aria-busy') === 'true'; }
 function removeMap() { mapFrame?.remove(); mapFrame = null; }
 function externalUrl() {
-    if (country !== 'RU') {
-        const url = new URL('https://www.google.com/maps/search/'); url.searchParams.set('api', '1');
-        const near = mapMode === '__location__' && point;
-        const category = currentCategory();
-        const query = googleQueries[$('clinicCategory').value] || googleQueries.clinics;
-        const area = address ? `${address}, ${englishNames?.of(country) || country}` : point ? `${point.lat},${point.lon}` : englishNames?.of(country) || country;
-        url.searchParams.set('query', near ? `${point.lat},${point.lon}` : `${query}${category.openOnly && $('clinicOpenOnly').checked ? ' open now' : ''} near ${area}`);
-        return url;
-    }
     const url = new URL('https://yandex.ru/maps/');
     const category = currentCategory();
     const searchAddress = mapMode === '__location__' ? '' : address;
-    const query = `${category.query}${category.openOnly && $('clinicOpenOnly').checked ? ' открыто сейчас' : ''}${searchAddress ? ` рядом с ${searchAddress}` : ''}`;
+    const countryHint = country !== 'RU' && (searchAddress || !point) ? countryNames?.of(country) || country : '';
+    const area = [searchAddress, countryHint].filter(Boolean).join(', ');
+    const query = `${category.query}${category.openOnly && $('clinicOpenOnly').checked ? ' открыто сейчас' : ''}${area ? ` рядом с ${area}` : ''}`;
     url.searchParams.set('text', query);
     if (point) {
         url.searchParams.set('pt', `${point.lon},${point.lat},pm2blm`);
@@ -105,19 +100,11 @@ function renderMap() {
     removeMap();
     const ownLocation = point && mapMode === '__location__';
     const searchUrl = externalUrl();
-    const url = new URL(country === 'RU' ? 'https://yandex.ru/map-widget/v1/' : 'https://maps.google.com/maps');
-    if (country === 'RU') {
-        url.searchParams.set('lang', 'ru_RU'); url.searchParams.set('mode', 'search');
-        for (const key of ['text', 'll', 'z', 'pt', 'spn']) if (searchUrl.searchParams.has(key)) url.searchParams.set(key, searchUrl.searchParams.get(key));
-    } else {
-        // The public widget renders the same query as the full Google Maps link.
-        // Unlike Yandex, it cannot add a separate custom GPS pin over search results.
-        url.searchParams.set('output', 'embed'); url.searchParams.set('hl', 'ru'); url.searchParams.set('gl', country.toLowerCase());
-        url.searchParams.set('q', searchUrl.searchParams.get('query'));
-        if (point && (ownLocation || !address)) { url.searchParams.set('ll', `${point.lat},${point.lon}`); url.searchParams.set('z', ownLocation ? '16' : '13'); }
-    }
+    const url = new URL('https://yandex.ru/map-widget/v1/');
+    url.searchParams.set('lang', 'ru_RU'); url.searchParams.set('mode', 'search');
+    for (const key of ['text', 'll', 'z', 'pt', 'spn']) if (searchUrl.searchParams.has(key)) url.searchParams.set(key, searchUrl.searchParams.get(key));
     const frame = document.createElement('iframe');
-    frame.className = `clinic-provider-map ${country === 'RU' ? 'clinic-yandex-map' : 'clinic-google-map'}`;
+    frame.className = 'clinic-provider-map clinic-yandex-map';
     frame.title = `${provider()} — ${ownLocation ? 'моё местоположение' : currentCategory().label}`;
     frame.referrerPolicy = 'no-referrer';
     frame.allowFullscreen = true;
@@ -126,7 +113,7 @@ function renderMap() {
     frame.addEventListener('load', () => {
         if (mapFrame !== frame) return;
         busy(false);
-        status(ownLocation ? 'На карте — ваше местоположение. Вернитесь к местам через переключатель над картой.' : `На карте: ${currentCategory().label}.${point ? country === 'RU' ? ' Синяя метка — ваше местоположение.' : ' Геопозиция доступна через «Приблизить меня».' : ' Разрешите геопозицию для поиска рядом с вами.'}`);
+        status(ownLocation ? 'На карте — ваше местоположение. Вернитесь к местам через переключатель над картой.' : `На карте: ${currentCategory().label}.${point ? ' Синяя метка — ваше местоположение.' : ' Разрешите геопозицию для поиска рядом с вами.'}`);
     });
     frame.addEventListener('error', () => {
         if (mapFrame !== frame) return;
@@ -137,12 +124,12 @@ function renderMap() {
     $('clinicMap').replaceChildren(frame);
     frame.src = url.href;
     $('clinicMapControls').hidden = !point;
-    $('clinicLocationLegend').hidden = !point || country !== 'RU';
+    $('clinicLocationLegend').hidden = !point;
     $('clinicMapSelect').value = mapMode;
     $('clinicRefresh').hidden = false;
     $('clinicAreaLabel').textContent = address && !ownLocation ? `Поиск по адресу: ${address}` : point ? `Рядом с вами · точность около ${Math.round(point.accuracy)} м` : `Страна поиска: ${countryNames?.of(country) || country}`;
     $('clinicResultSummary').textContent = `Поиск: ${currentCategory().label}. Источник: ${provider()}.`;
-    $('clinicMapNote').textContent = country === 'RU' ? `${point ? 'Синяя метка — вы. ' : ''}Нажмите на метку места, чтобы открыть его карточку и маршрут.` : `${point ? '«Приблизить меня» показывает вашу точку отдельно от мест. ' : ''}Карточки мест, телефоны и маршруты доступны по кнопке «Открыть в Картах» внутри карты или по ссылке ниже.`;
+    $('clinicMapNote').textContent = `${point ? 'Синяя метка — вы. ' : ''}Нажмите на метку места, чтобы открыть его карточку и маршрут.`;
     $('clinicExternalSearch').href = externalUrl().href;
     busy(false);
     $('clinicCancel').hidden = false;
@@ -243,8 +230,8 @@ export function open() {
         $('clinicLocateButton').addEventListener('click', locate);
         $('clinicCancel').addEventListener('click', cancel);
         $('clinicRefresh').addEventListener('click', () => { if (!isBusy()) renderMap(); });
-        $('clinicOpenOnly').addEventListener('change', () => { if (point || address) { mapMode = '__results__'; renderMap(); } });
-        $('clinicCategory').addEventListener('change', () => { updateCategoryControls(); if (point || address) { mapMode = '__results__'; renderMap(); } });
+        $('clinicOpenOnly').addEventListener('change', () => { if (point || address || country !== 'RU') { mapMode = '__results__'; renderMap(); } });
+        $('clinicCategory').addEventListener('change', () => { updateCategoryControls(); if (point || address || country !== 'RU') { mapMode = '__results__'; renderMap(); } });
         $('clinicMapSelect').addEventListener('change', event => { mapMode = event.target.value; renderMap(); });
         window.addEventListener('petcare:clinics-close', close);
         window.addEventListener('petcare:account-reset', reset);

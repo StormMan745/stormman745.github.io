@@ -290,7 +290,7 @@ function loadClinicsRuntime() {
     if (window.PetCareClinics?.open) return Promise.resolve(window.PetCareClinics);
     if (!clinicsRuntimePromise) clinicsRuntimePromise = new Promise((resolve, reject) => {
         const script = document.createElement('script');
-        script.src = 'clinics.bundle.js?v=20261112-country-maps';
+        script.src = 'clinics.bundle.js?v=20261113-yandex-worldwide';
         const fail = () => {
             script.remove();
             clinicsRuntimePromise = null;
