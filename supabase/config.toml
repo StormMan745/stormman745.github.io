@@ -13,6 +13,6 @@ verify_jwt = true
 [functions.petcare-platform]
 verify_jwt = false
 
-# Clinic write tokens are verified by the function and a service-only transaction.
+# The retired clinic receiver reports HTTP 410 to previous integrations.
 [functions.petcare-clinic-sync]
 verify_jwt = false

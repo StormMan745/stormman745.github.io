@@ -10,6 +10,10 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
  const root=path.resolve(__dirname,'..'),profiles=new Map([[uid,{data:initial(),revision:1}],[other,{data:{...initial(),pets:[{id:'pet-other',name:'Other private'}],pet:{id:'pet-other',name:'Other private'},activePetId:'pet-other'},revision:1}]]),documents=[],objects=new Map(),reports=[],events=[];
  let available=true,consent=false,deleted=false,holdSync=false,releaseSync=null,recoveryRequests=0,holdDocument=false,releaseDocument=null,revoked=false;
  const sharedMembers=[{owner_id:other,member_id:uid,pet_id:'pet-other'}],collars=[];
+ if(process.argv.includes('--clinic-connections')){
+  profiles.get(uid).data.healthRecords.push({id:'previous-clinic-visit',petId:'pet-one',type:'Ветеринар',
+   date:'2026-11-12',name:'Ранее полученный приём',clinic:'Тестовая клиника',source:{kind:'clinic-connection'}});
+ }
  profiles.get(other).data.pets.push({id:'pet-b-private',name:'Never shared'});
  profiles.get(other).data.healthRecords=[{id:'b-allowed',petId:'pet-other',name:'Shared visit',date:'2026-11-04'},{id:'b-private',petId:'pet-b-private',name:'Never shared visit',date:'2026-11-04'}];
  const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname;const file=path.resolve(root,'.'+(name==='/'?'/index.html':name));if(!file.startsWith(root+path.sep))return res.writeHead(403).end();fs.readFile(file,(error,bytes)=>{if(error)return res.writeHead(404).end();res.writeHead(200,{'Content-Type':({'.html':'text/html','.js':'text/javascript','.css':'text/css','.wasm':'application/wasm','.webmanifest':'application/manifest+json','.png':'image/png'})[path.extname(file)]||'application/octet-stream'});res.end(bytes)})});
@@ -74,13 +78,7 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
     if(body.action==='analytics-event'){events.push(body);return reply({ok:true});}
     if(body.action==='care-list')return reply({memberships:sharedMembers.filter(m=>m.owner_id===actor||m.member_id===actor),invites:[]});
     if(body.action==='share-list')return reply([]);
-    if(body.action==='clinic-list')return reply((objects.get('test-clinics')||[]).filter(c=>c.user_id===actor&&c.pet_id===body.petId));
-    if(body.action==='clinic-create'){
-     const rows=objects.get('test-clinics')||[],id='e5000000-0000-4000-8000-'+String(rows.length+1).padStart(12,'0');
-     rows.push({id,user_id:actor,pet_id:body.petId,clinic_name:body.clinicName,created_at:new Date().toISOString(),expires_at:new Date(Date.now()+365*86400000).toISOString(),revoked_at:null,received_count:0});objects.set('test-clinics',rows);
-     return reply({id,token:'pc_clinic_'+'a'.repeat(43),endpoint:'https://qexiyikdmdbdxgusqnee.supabase.co/functions/v1/petcare-clinic-sync'});
-    }
-    if(body.action==='clinic-revoke'){const row=(objects.get('test-clinics')||[]).find(c=>c.id===body.id&&c.user_id===actor);if(!row)return reply({error:'connection_unavailable'},404);row.revoked_at=new Date().toISOString();return reply({ok:true});}
+    if(['clinic-list','clinic-create','clinic-revoke'].includes(body.action))return reply({error:'clinic_sync_disabled'},410);
     if(body.action==='support'){reports.push(body);return reply({id:'test-report'});}
     if(body.action==='export-manifest')return reply({format:'petcare-export-v1',profile:profiles.get(actor),documents,files:[...objects.keys()].map(name=>({bucket_id:name.split('/')[0],name:name.split('/').slice(1).join('/')})),backups:[]});
     if(body.action==='export-file'){const bytes=objects.get(body.bucket+'/'+body.path);return route.fulfill({status:200,headers:{'Content-Type':'application/octet-stream','Access-Control-Allow-Origin':'*'},body:bytes});}
@@ -99,7 +97,7 @@ function zipEntries(buffer){const result=[];let cursor=0;while(buffer.readUInt32
   await page.waitForFunction(()=>PetCareSync.state.phase==='saved');
   if(process.argv.includes('--storage')){await require('./check-storage.cjs')({page,context,profiles,uid,other});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--photo-library')){await require('./check-photo-library.cjs')({page,context,profiles,uid,other,objects,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
-  if(process.argv.includes('--clinic-connections')){await require('./check-clinic-connections.cjs')({page,context,profiles,uid,objects,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
+  if(process.argv.includes('--clinic-connections')){await require('./check-clinic-connections.cjs')({page});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--indefinite-courses')){await require('./check-indefinite-courses.cjs')({page,profiles,uid,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--document-ocr')){await require('./check-document-ocr.cjs')({page,context,profiles,uid,documents});assert.deepEqual(errors,[]);return;}
   if(process.argv.includes('--extras')){await require('./check-extras.cjs')({page,context,profiles,uid,other,documents,collars,base,session,setAvailable:value=>{available=value;}});assert.deepEqual(errors,[]);return;}

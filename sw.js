@@ -1,8 +1,8 @@
-const CACHE_NAME = "petcare-shell-692ac35d0dbf5220";
+const CACHE_NAME = "petcare-shell-85ec8b5078be5cbf";
 const SHELL_FILES = [
     "/index.html",
-    "/app.bundle.js?v=c18ee549c011",
-    "/app.bundle.css?v=1ac6acc83862",
+    "/app.bundle.js?v=45497575c147",
+    "/app.bundle.css?v=d98374fc9abb",
     "/memories.bundle.js",
     "/vet.html",
     "/vet.js",

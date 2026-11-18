@@ -4,8 +4,8 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {transformSync}=require('esbuild');
 const root=path.resolve(__dirname,'..');
 const check=process.argv.includes('--check');
-const scripts=['experience.js','sync.js','notification-status.js','script.js','offline-files.js','document-ocr.js','documents.js','care.js','routine.js','pet-scene.js','extras.js','photo-library.js','clinic-connections.js'];
-const styles=['style.css','documents.css','experience.css','clinics.css','care.css','polish.css','extras.css','clinic-connections.css'];
+const scripts=['experience.js','sync.js','notification-status.js','script.js','offline-files.js','document-ocr.js','documents.js','care.js','routine.js','pet-scene.js','extras.js','photo-library.js'];
+const styles=['style.css','documents.css','experience.css','clinics.css','care.css','polish.css','extras.css'];
 const read=name=>fs.readFileSync(path.join(root,name),'utf8');
 const stats=[];
 for(const [extension,files] of [['js',scripts],['css',styles]]){
